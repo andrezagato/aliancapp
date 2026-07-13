@@ -86,3 +86,4 @@ supabase/
 1. Suba o repo no GitHub e importe na Vercel.
 2. Configure as env vars (as mesmas do `.env.example`).
 3. Ajuste o redirect de OAuth do Supabase para o domínio de produção.
+# aliancapp
