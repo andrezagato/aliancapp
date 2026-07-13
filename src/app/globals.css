@@ -1,0 +1,78 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* =============================================================
+   Tema "acolhedor / quente"
+   base creme · primária terracota · acento verde-musgo
+   ============================================================= */
+@layer base {
+  :root {
+    --background: 40 44% 96%;
+    --foreground: 30 10% 15%;
+
+    --card: 40 50% 99%;
+    --card-foreground: 30 10% 15%;
+
+    --primary: 17 54% 51%;
+    --primary-foreground: 30 60% 98%;
+
+    --accent: 92 16% 36%;
+    --accent-foreground: 40 44% 96%;
+
+    --muted: 36 34% 90%;
+    --muted-foreground: 33 12% 42%;
+
+    --success: 122 30% 38%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 39 52% 48%;
+    --warning-foreground: 0 0% 100%;
+
+    --destructive: 4 58% 48%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 38 30% 85%;
+    --input: 38 30% 85%;
+    --ring: 17 54% 51%;
+
+    --radius: 0.9rem;
+  }
+
+  .dark {
+    --background: 28 12% 10%;
+    --foreground: 38 30% 92%;
+    --card: 28 12% 13%;
+    --card-foreground: 38 30% 92%;
+    --primary: 17 62% 56%;
+    --primary-foreground: 28 20% 8%;
+    --accent: 92 18% 52%;
+    --accent-foreground: 28 20% 8%;
+    --muted: 28 10% 20%;
+    --muted-foreground: 36 12% 66%;
+    --border: 28 10% 22%;
+    --input: 28 10% 22%;
+    --ring: 17 62% 56%;
+  }
+
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "ss01", "cv01";
+  }
+  h1, h2, h3 {
+    @apply font-display tracking-tight;
+  }
+}
+
+/* Faixa de segurança pra notch/gestos em PWA fullscreen */
+@layer utilities {
+  .pb-safe {
+    padding-bottom: calc(env(safe-area-inset-bottom) + 0.5rem);
+  }
+  .pt-safe {
+    padding-top: env(safe-area-inset-top);
+  }
+}

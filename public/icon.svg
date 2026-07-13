@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Servir">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#D07347"/>
+      <stop offset="1" stop-color="#B0562F"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#g)"/>
+  <!-- mãos em concha (servir) -->
+  <path d="M256 150c-46 0-84 30-84 76 0 8 6 14 14 14s14-6 14-14c0-28 24-48 56-48s56 20 56 48c0 8 6 14 14 14s14-6 14-14c0-46-38-76-84-76z" fill="#FBEFE3" opacity="0.9"/>
+  <path d="M150 300c0-13 11-24 24-24 22 0 34 14 58 24l0 0c14 6 30 9 46 9s32-3 46-9c24-10 36-24 58-24 13 0 24 11 24 24 0 60-58 96-128 96s-128-36-128-96z" fill="#FBEFE3"/>
+  <!-- coração acolhido -->
+  <path d="M256 214c-8-16-34-18-46-4-12 14-6 32 8 44l38 34 38-34c14-12 20-30 8-44-12-14-38-12-46 4z" fill="#C4633E"/>
+</svg>
