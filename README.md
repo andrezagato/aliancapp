@@ -6,7 +6,7 @@ mídia, recepção, kids…), avisos compartimentados por equipe, disponibilidad
 voluntário, check-in e interesse em servir.
 
 > Projeto pessoal. Alternativa mais bonita e ampla ao Timbragem Plan.
-> Visão completa do produto: veja o plano de referência (`gleaming-forging-tide.md`).
+> Visão completa do produto e decisões: veja [`PLAN.md`](PLAN.md).
 
 ## Stack
 
@@ -25,54 +25,66 @@ cp .env.example .env.local     # preencha as chaves do Supabase
 npm run dev                    # http://localhost:3000
 ```
 
-Sem preencher o `.env.local`, o app abre em **modo demonstração** (dados de exemplo,
-sem login). A tela `/entrar` tem o link "Ver demonstração".
+O app **exige** o `.env.local` preenchido (URL + anon key do Supabase) — sem isso o
+login não funciona e as rotas logadas redirecionam para `/entrar`.
 
 ### Banco de dados
 
-**Opção A — Supabase Cloud (recomendado):**
+O projeto Supabase **já está provisionado** (`project_ref = acwpsnfvliidyxtjevfv`).
+O schema (`0001_init.sql`) e as migrações de hardening (`0002`–`0004`) já foram aplicados.
+
+Para clonar do zero em outro projeto:
 1. Crie um projeto em [supabase.com](https://supabase.com).
-2. Em *SQL Editor*, rode o conteúdo de `supabase/migrations/0001_init.sql`.
-   (Opcional: rode `supabase/seed.sql` para dados de demonstração.)
-3. Copie `Project URL` e `anon key` (Settings → API) para o `.env.local`.
+2. Aplique as migrações em ordem: `supabase/migrations/0001_init.sql` … `0004_lock_functions.sql`
+   (via *SQL Editor* ou `supabase db push`).
+3. Rode `supabase/seed_cloud.sql` para criar igreja + convite de admin + equipes + culto inicial.
+4. Copie `Project URL` e `anon key` (Settings → API) para o `.env.local`.
 
-**Opção B — Supabase local (Docker):**
-```bash
-npx supabase start          # sobe Postgres + Studio local
-npx supabase db reset       # aplica migrations + seed.sql
-npm run db:types            # regenera os tipos TypeScript
-```
+> `supabase/seed.sql` (com `auth.users` fake) é só para o **dev local com Docker**, não para o cloud.
 
-### Login social (Google / Apple)
+### Login (Google) — passo manual pendente
 
-No Supabase: *Authentication → Providers* → habilite **Google** e **Apple**,
-colando os Client ID/Secret dos respectivos consoles. Em *URL Configuration*,
-adicione o redirect `http://localhost:3000/auth/callback` (e o domínio de produção).
+No Supabase: *Authentication → Providers* → **Google**, colando Client ID/Secret do
+Google Cloud Console. Em *URL Configuration*: Site URL `http://localhost:3000` e
+Redirect `http://localhost:3000/**` (+ o domínio de produção). Apple ficou fora do MVP.
 
 ## Estrutura
 
 ```
 src/
   app/
-    (auth)/entrar/        # login Google/Apple
-    (app)/                # área logada (bottom nav): inicio, escalas, disponibilidade, perfil, notificacoes
-    cadastro/             # auto-cadastro público (join_requests)
+    (auth)/entrar/        # login com Google
+    (app)/                # área logada (bottom nav): inicio, escalas[/id][/novo], disponibilidade, pessoas, perfil, notificacoes
+    aguardando/           # fila de aprovação (profile pendente)
+    cadastro/             # auto-cadastro público -> RPC solicitar_entrada
     auth/callback/        # troca o code OAuth por sessão
     manifest.ts           # PWA manifest
   components/ui/          # Button, Card, Badge, Avatar
-  components/app-shell/   # TopBar, BottomNav
-  lib/supabase/           # clients browser/server + tipos do banco
-  lib/demo.ts             # dados de demonstração (Fase 0)
+  components/app-shell/   # TopBar, BottomNav (role-aware)
+  components/             # coverage-badge, assignment-response, leader-controls, people-controls, novo-evento-form…
+  lib/auth.ts             # getSession (user + profile + equipes + papel efetivo)
+  lib/data.ts             # queries de leitura (home, escalas, pessoas) — server-only
+  lib/actions.ts          # server actions (escalar/confirmar/recusar/criar evento/convites/aprovações)
+  lib/coverage.ts         # cálculo de cobertura (denominador)
+  lib/format.ts           # datas pt-BR no fuso da igreja
+  lib/supabase/           # clients browser/server + tipos gerados do banco
 supabase/
-  migrations/0001_init.sql  # schema + RLS + triggers + view de histórico
-  seed.sql                  # dados de demonstração
+  migrations/0001_init.sql        # schema + RLS + triggers + view de histórico
+  migrations/0002_hardening.sql   # search_path + revoke em funções de trigger
+  migrations/0003_public_join.sql # RPC solicitar_entrada (auto-cadastro anon)
+  migrations/0004_lock_functions.sql # least-privilege (helpers/RPCs só authenticated)
+  seed_cloud.sql                  # igreja + convite admin + equipes + culto (cloud)
+  seed.sql                        # dados fake p/ dev local (Docker)
 ```
 
 ## Roadmap (fases)
 
 - **Fase 0 — Fundação** ✅ scaffold, tema, PWA, schema+RLS+seed, login, shell navegável.
-- **Fase 1** — núcleo escalar→confirmar/cancelar ligado ao Supabase (substituir `lib/demo.ts`).
-- **Fase 2** — disponibilidade, troca/substituto, check-in, auto-cadastro+aprovação, histórico, interesses.
+- **Fase 1 — Núcleo escalar→confirmar** ✅ queries reais, auth gate + fila de aprovação,
+  home por papel, escalas (lista + detalhe), server actions (escalar/confirmar/recusar),
+  criar evento avulso, convites + aprovações. Login só Google. Sem `lib/demo.ts`.
+- **Fase 2** — calendário mensal, disponibilidade, troca/substituto, check-in, histórico,
+  interesses, templates de série, edição de ocorrência, responsável do evento, aniversários.
 - **Fase 3** — avisos: sino realtime + Web Push (VAPID/Edge Function) + email (Resend), compartimentados por equipe.
 
 ## Convenções

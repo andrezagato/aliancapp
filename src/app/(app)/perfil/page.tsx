@@ -1,64 +1,76 @@
-"use client";
-
-import { useRouter } from "next/navigation";
-import { LogOut, Music, Sliders } from "lucide-react";
+import { Mail, Phone, Cake } from "lucide-react";
 import { TopBar } from "@/components/app-shell/top-bar";
 import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { createClient, supabaseConfigured } from "@/lib/supabase/client";
-import { demoUser } from "@/lib/demo";
+import { Avatar } from "@/components/ui/avatar";
+import { TeamDot } from "@/components/coverage-badge";
+import { SignOutButton } from "@/components/sign-out-button";
+import { getSession } from "@/lib/auth";
+import { fmtBirthday } from "@/lib/format";
 
-export default function PerfilPage() {
-  const router = useRouter();
+export default async function PerfilPage() {
+  const session = await getSession();
+  if (!session) return null;
+  const p = session.profile;
 
-  async function sair() {
-    if (supabaseConfigured) {
-      await createClient().auth.signOut();
-    }
-    router.push("/entrar");
-  }
+  const roleLabel =
+    session.role === "admin" ? "Administrador" : session.role === "leader" ? "Líder" : "Voluntário";
 
   return (
     <>
-      <TopBar title="Perfil" userName={demoUser.fullName} />
+      <TopBar title="Perfil" userName={p.full_name || "?"} />
       <div className="animate-fade-in space-y-5 py-4">
         <Card>
           <CardContent className="flex flex-col items-center gap-3 p-6 text-center">
-            <Avatar name={demoUser.fullName} className="size-20 text-xl" />
+            <Avatar name={p.full_name || "?"} src={p.avatar_url} className="size-20 text-xl" />
             <div>
-              <h2 className="text-xl font-semibold">{demoUser.fullName}</h2>
-              <p className="text-sm text-muted-foreground">{demoUser.roleLabel}</p>
+              <h2 className="text-xl font-semibold">{p.full_name || "Sem nome"}</h2>
+              <p className="text-sm text-muted-foreground">{roleLabel}</p>
+            </div>
+            <div className="flex flex-col items-center gap-1 text-sm text-muted-foreground">
+              {p.email ? (
+                <span className="inline-flex items-center gap-1.5">
+                  <Mail className="size-4" /> {p.email}
+                </span>
+              ) : null}
+              {p.phone ? (
+                <span className="inline-flex items-center gap-1.5">
+                  <Phone className="size-4" /> {p.phone}
+                </span>
+              ) : null}
+              {p.birth_date ? (
+                <span className="inline-flex items-center gap-1.5">
+                  <Cake className="size-4" /> {fmtBirthday(p.birth_date)}
+                </span>
+              ) : null}
             </div>
           </CardContent>
         </Card>
 
         <section>
           <h3 className="mb-2 px-1 text-base font-semibold">Minhas equipes</h3>
-          <Card>
-            <ul className="divide-y divide-border">
-              <li className="flex items-center gap-3 p-4">
-                <span className="inline-flex size-10 items-center justify-center rounded-full bg-primary/12 text-primary">
-                  <Music className="size-5" />
-                </span>
-                <span className="flex-1 font-medium">Louvor</span>
-                <Badge variant="primary">Líder</Badge>
-              </li>
-              <li className="flex items-center gap-3 p-4">
-                <span className="inline-flex size-10 items-center justify-center rounded-full bg-accent/12 text-accent">
-                  <Sliders className="size-5" />
-                </span>
-                <span className="flex-1 font-medium">Som</span>
-                <Badge>Voluntário</Badge>
-              </li>
-            </ul>
-          </Card>
+          {p.teams.length === 0 ? (
+            <Card className="border-dashed">
+              <CardContent className="px-6 py-8 text-center text-sm text-muted-foreground">
+                Você ainda não está em nenhuma equipe.
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
+              <ul className="divide-y divide-border">
+                {p.teams.map((t) => (
+                  <li key={t.id} className="flex items-center gap-3 p-4">
+                    <TeamDot color={t.color} className="size-3" />
+                    <span className="flex-1 font-medium">{t.name}</span>
+                    {t.role === "leader" ? <Badge variant="primary">Líder</Badge> : <Badge>Voluntário</Badge>}
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
         </section>
 
-        <Button variant="outline" className="w-full" onClick={sair}>
-          <LogOut className="size-4" /> Sair
-        </Button>
+        <SignOutButton className="w-full" />
       </div>
     </>
   );

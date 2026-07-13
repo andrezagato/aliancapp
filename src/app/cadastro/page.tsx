@@ -17,16 +17,15 @@ export default function CadastroPage() {
     setLoading(true);
     setError(null);
     const form = new FormData(e.currentTarget);
-    const payload = {
-      full_name: String(form.get("full_name") ?? ""),
-      email: String(form.get("email") ?? ""),
-      phone: String(form.get("phone") ?? ""),
-      message: String(form.get("message") ?? ""),
-    };
 
     if (supabaseConfigured) {
       const supabase = createClient();
-      const { error } = await supabase.from("join_requests").insert(payload);
+      const { error } = await supabase.rpc("solicitar_entrada", {
+        p_full_name: String(form.get("full_name") ?? ""),
+        p_email: String(form.get("email") ?? ""),
+        p_phone: String(form.get("phone") ?? ""),
+        p_message: String(form.get("message") ?? ""),
+      });
       if (error) {
         setError(error.message);
         setLoading(false);

@@ -2,23 +2,38 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { MailCheck } from "lucide-react";
 import { createClient, supabaseConfigured } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 
-export default function EntrarPage() {
-  const [loading, setLoading] = useState<null | "google" | "apple">(null);
-  const [error, setError] = useState<string | null>(null);
+const isDev = process.env.NODE_ENV === "development";
 
-  async function signIn(provider: "google" | "apple") {
+const inputClass =
+  "w-full rounded-2xl border border-input bg-card px-4 py-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring";
+
+export default function EntrarPage() {
+  const router = useRouter();
+  const [loading, setLoading] = useState<null | "google" | "magic" | "dev">(null);
+  const [error, setError] = useState<string | null>(null);
+  const [email, setEmail] = useState("");
+  const [magicSent, setMagicSent] = useState(false);
+  const [devPassword, setDevPassword] = useState("");
+
+  function ensureConfigured() {
     if (!supabaseConfigured) {
       setError("Configure o Supabase (.env.local) para ativar o login.");
-      return;
+      return false;
     }
-    setLoading(provider);
+    return true;
+  }
+
+  async function signInWithGoogle() {
+    if (!ensureConfigured()) return;
+    setLoading("google");
     setError(null);
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider,
+    const { error } = await createClient().auth.signInWithOAuth({
+      provider: "google",
       options: { redirectTo: `${window.location.origin}/auth/callback` },
     });
     if (error) {
@@ -27,12 +42,74 @@ export default function EntrarPage() {
     }
   }
 
+  async function sendMagicLink(e: React.FormEvent) {
+    e.preventDefault();
+    if (!ensureConfigured()) return;
+    if (!email.includes("@")) {
+      setError("Informe um email válido.");
+      return;
+    }
+    setLoading("magic");
+    setError(null);
+    const { error } = await createClient().auth.signInWithOtp({
+      email: email.trim(),
+      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+    });
+    setLoading(null);
+    if (error) setError(error.message);
+    else setMagicSent(true);
+  }
+
+  async function devSignIn(e: React.FormEvent) {
+    e.preventDefault();
+    if (!ensureConfigured()) return;
+    setLoading("dev");
+    setError(null);
+    const { error } = await createClient().auth.signInWithPassword({
+      email: email.trim(),
+      password: devPassword,
+    });
+    if (error) {
+      setError(error.message);
+      setLoading(null);
+      return;
+    }
+    router.push("/inicio");
+    router.refresh();
+  }
+
+  if (magicSent) {
+    return (
+      <main className="mx-auto flex min-h-dvh max-w-[480px] flex-col justify-center px-6 py-10">
+        <div className="animate-fade-in flex flex-col items-center gap-4 text-center">
+          <span className="inline-flex size-16 items-center justify-center rounded-full bg-success/12 text-success">
+            <MailCheck className="size-8" />
+          </span>
+          <h1 className="text-2xl font-semibold">Confira seu email</h1>
+          <p className="text-balance text-muted-foreground">
+            Enviamos um link de acesso para <span className="font-medium text-foreground">{email}</span>.
+            Abra no seu celular ou computador para entrar — o link vale por 1 hora.
+          </p>
+          <button
+            onClick={() => {
+              setMagicSent(false);
+              setError(null);
+            }}
+            className="text-sm text-muted-foreground underline-offset-4 hover:underline"
+          >
+            Usar outro email
+          </button>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="mx-auto flex min-h-dvh max-w-[480px] flex-col justify-center px-6 py-10">
       <div className="animate-fade-in flex flex-col items-center text-center">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/icon.svg" alt="Servir" width={84} height={84} className="rounded-3xl shadow-lift" />
-        <h1 className="mt-6 text-4xl font-semibold">Servir</h1>
+        <img src="/icon.svg" alt="Aliança" width={84} height={84} className="rounded-3xl shadow-lift" />
+        <h1 className="mt-6 text-4xl font-semibold">Aliança</h1>
         <p className="mt-2 text-balance text-muted-foreground">
           As escalas da sua igreja, organizadas com carinho. Cada equipe no seu lugar,
           cada voluntário no seu tempo.
@@ -40,31 +117,32 @@ export default function EntrarPage() {
       </div>
 
       <div className="mt-10 space-y-3">
-        <Button
-          variant="outline"
-          size="lg"
-          className="w-full"
-          disabled={loading !== null}
-          onClick={() => signIn("google")}
-        >
+        <Button variant="outline" size="lg" className="w-full" disabled={loading !== null} onClick={signInWithGoogle}>
           <GoogleMark />
           {loading === "google" ? "Entrando…" : "Entrar com Google"}
         </Button>
-        <Button
-          variant="outline"
-          size="lg"
-          className="w-full"
-          disabled={loading !== null}
-          onClick={() => signIn("apple")}
-        >
-          <AppleMark />
-          {loading === "apple" ? "Entrando…" : "Entrar com Apple"}
-        </Button>
+
+        <div className="flex items-center gap-3 py-1 text-xs text-muted-foreground">
+          <span className="h-px flex-1 bg-border" /> ou pelo email <span className="h-px flex-1 bg-border" />
+        </div>
+
+        <form onSubmit={sendMagicLink} className="space-y-2">
+          <input
+            type="email"
+            inputMode="email"
+            autoComplete="email"
+            placeholder="seu@email.com"
+            className={inputClass}
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+          <Button type="submit" size="lg" className="w-full" disabled={loading !== null}>
+            {loading === "magic" ? "Enviando…" : "Receber link de acesso"}
+          </Button>
+        </form>
 
         {error ? (
-          <p className="rounded-xl bg-destructive/10 px-4 py-3 text-center text-sm text-destructive">
-            {error}
-          </p>
+          <p className="rounded-xl bg-destructive/10 px-4 py-3 text-center text-sm text-destructive">{error}</p>
         ) : null}
       </div>
 
@@ -75,11 +153,21 @@ export default function EntrarPage() {
         </Link>
       </p>
 
-      <div className="mt-10 text-center">
-        <Link href="/inicio" className="text-sm text-muted-foreground underline-offset-4 hover:underline">
-          Ver demonstração →
-        </Link>
-      </div>
+      {isDev ? (
+        <details className="mt-10 rounded-2xl border border-dashed border-border p-4 text-sm">
+          <summary className="cursor-pointer font-medium text-muted-foreground">Login de teste (dev)</summary>
+          <form onSubmit={devSignIn} className="mt-3 space-y-2">
+            <input type="email" placeholder="joana@teste.local" className={inputClass} value={email} onChange={(e) => setEmail(e.target.value)} />
+            <input type="password" placeholder="senha (teste123)" className={inputClass} value={devPassword} onChange={(e) => setDevPassword(e.target.value)} />
+            <Button type="submit" variant="ghost" className="w-full" disabled={loading !== null}>
+              {loading === "dev" ? "Entrando…" : "Entrar (dev)"}
+            </Button>
+          </form>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Personas: joana@ (líder Louvor), ana@ (líder Som), tiago@ (líder Kids), pedro@/rafael@/bia@/lucas@/clara@ (voluntários). Senha: teste123.
+          </p>
+        </details>
+      ) : null}
     </main>
   );
 }
@@ -87,15 +175,10 @@ export default function EntrarPage() {
 function GoogleMark() {
   return (
     <svg viewBox="0 0 24 24" className="size-5" aria-hidden>
-      <path fill="#EA4335" d="M12 10.2v3.9h5.5c-.24 1.4-1.7 4.1-5.5 4.1-3.3 0-6-2.7-6-6.1s2.7-6.1 6-6.1c1.9 0 3.1.8 3.8 1.5l2.6-2.5C16.9 1.9 14.7 1 12 1 6.9 1 2.8 5.1 2.8 10.1S6.9 21 12 21c5.9 0 9-4.1 9-8.4 0-.6-.1-1-.2-1.4z" />
-    </svg>
-  );
-}
-
-function AppleMark() {
-  return (
-    <svg viewBox="0 0 24 24" className="size-5 fill-current" aria-hidden>
-      <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.53 4.09l.01-.01zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z" />
+      <path
+        fill="#EA4335"
+        d="M12 10.2v3.9h5.5c-.24 1.4-1.7 4.1-5.5 4.1-3.3 0-6-2.7-6-6.1s2.7-6.1 6-6.1c1.9 0 3.1.8 3.8 1.5l2.6-2.5C16.9 1.9 14.7 1 12 1 6.9 1 2.8 5.1 2.8 10.1S6.9 21 12 21c5.9 0 9-4.1 9-8.4 0-.6-.1-1-.2-1.4z"
+      />
     </svg>
   );
 }

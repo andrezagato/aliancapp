@@ -5,10 +5,22 @@ const configured =
   !!process.env.NEXT_PUBLIC_SUPABASE_URL &&
   !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
+// Rotas públicas (não exigem login). O resto exige sessão.
+function isPublic(pathname: string): boolean {
+  return (
+    pathname === "/" ||
+    pathname.startsWith("/entrar") ||
+    pathname.startsWith("/cadastro") ||
+    pathname.startsWith("/auth")
+  );
+}
+
 /**
- * Renova a sessão do Supabase a cada request (padrão @supabase/ssr).
- * NOTE (Fase 1): aqui entrará o gate de autenticação por rota. No MVP inicial
- * as rotas do app renderizam em "modo demonstração" quando não há sessão.
+ * Renova a sessão do Supabase (padrão @supabase/ssr) E aplica o gate de auth:
+ * - sem sessão + rota protegida  -> /entrar
+ * - com sessão + tela de login   -> /inicio
+ * A separação ativo/pendente (fila de aprovação) é feita no layout de (app),
+ * que já carrega o profile — evita uma query de profile aqui no edge.
  */
 export async function middleware(request: NextRequest) {
   const response = NextResponse.next({ request });
@@ -31,7 +43,24 @@ export async function middleware(request: NextRequest) {
     },
   );
 
-  await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const { pathname } = request.nextUrl;
+
+  if (!user && !isPublic(pathname)) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/entrar";
+    return NextResponse.redirect(url);
+  }
+
+  if (user && (pathname.startsWith("/entrar") || pathname.startsWith("/cadastro"))) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/inicio";
+    return NextResponse.redirect(url);
+  }
+
   return response;
 }
 

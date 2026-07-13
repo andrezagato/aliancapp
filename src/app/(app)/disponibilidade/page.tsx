@@ -1,16 +1,18 @@
 import { CalendarX2 } from "lucide-react";
 import { TopBar } from "@/components/app-shell/top-bar";
 import { EmptyState } from "@/components/empty-state";
-import { demoUser } from "@/lib/demo";
+import { getSession } from "@/lib/auth";
 
-export default function DisponibilidadePage() {
+export default async function DisponibilidadePage() {
+  const session = await getSession();
+  if (!session) return null;
+
   return (
     <>
       <TopBar
         title="Quando não posso"
         subtitle="Marque os dias que você não está disponível"
-        userName={demoUser.fullName}
-        unread={3}
+        userName={session.profile.full_name || "?"}
       />
       <div className="animate-fade-in py-4">
         <EmptyState

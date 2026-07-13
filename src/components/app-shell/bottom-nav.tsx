@@ -2,18 +2,25 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, CalendarDays, CalendarX2, User } from "lucide-react";
+import { Home, CalendarDays, CalendarX2, User, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { EffectiveRole } from "@/lib/auth";
 
-const items = [
+const base = [
   { href: "/inicio", label: "Início", icon: Home },
   { href: "/escalas", label: "Escalas", icon: CalendarDays },
-  { href: "/disponibilidade", label: "Livre?", icon: CalendarX2 },
-  { href: "/perfil", label: "Perfil", icon: User },
 ];
 
-export function BottomNav() {
+export function BottomNav({ role }: { role: EffectiveRole }) {
   const pathname = usePathname();
+
+  const contextual =
+    role === "admin"
+      ? { href: "/pessoas", label: "Pessoas", icon: Users }
+      : { href: "/disponibilidade", label: "Livre?", icon: CalendarX2 };
+
+  const items = [...base, contextual, { href: "/perfil", label: "Perfil", icon: User }];
+
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/90 backdrop-blur pb-safe">
       <div className="mx-auto flex max-w-[520px] items-stretch justify-around px-2">

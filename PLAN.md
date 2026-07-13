@@ -216,9 +216,10 @@ Enum `notification_kind` estende: `evento_alterado`, `aniversario`, `responsavel
   schema + RLS + auth Google; manifest instalável.
 - **Fase 0.5 — Rework do schema** (esta): migração com as correções da §6 + `invites` +
   requisitos + campos da Fase 2.
-- **Fase 1 — Núcleo escalar→confirmar** (em andamento): queries reais, auth gate, home por
-  papel, escalas, server actions (escalar/confirmar/cancelar), criar evento **avulso**,
-  onboarding de duas portas. Só Google. Supabase cloud.
+- **Fase 1 — Núcleo escalar→confirmar** ✅: queries reais, auth gate + fila de aprovação,
+  home por papel, escalas (lista + detalhe), server actions (escalar/confirmar/cancelar),
+  criar evento **avulso**, onboarding de duas portas (convite + auto-cadastro/aprovação).
+  Só Google. Supabase cloud. Falta só o Google OAuth (passo manual) pra testar logado.
 - **Fase 2 — Diferenciais + gestão de evento:** calendário mensal; disponibilidade + flag;
   histórico exposto; troca/substituto; check-in; auto-cadastro (link/QR); interesses;
   templates de série; edição de ocorrência única; "não se aplica"; responsável do evento;

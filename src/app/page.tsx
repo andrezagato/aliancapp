@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
-import { getOptionalUser } from "@/lib/supabase/server";
+import { getSession, isActive } from "@/lib/auth";
 
 export default async function RootPage() {
-  const user = await getOptionalUser();
-  redirect(user ? "/inicio" : "/entrar");
+  const session = await getSession();
+  if (!session) redirect("/entrar");
+  redirect(isActive(session.profile) ? "/inicio" : "/aguardando");
 }
