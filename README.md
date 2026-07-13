@@ -87,3 +87,4 @@ supabase/
 2. Configure as env vars (as mesmas do `.env.example`).
 3. Ajuste o redirect de OAuth do Supabase para o domínio de produção.
 # aliancapp
+# aliancapp
