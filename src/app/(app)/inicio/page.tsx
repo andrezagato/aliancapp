@@ -26,10 +26,13 @@ import {
   getLeaderHome,
   getAdminHome,
   getBirthdaysThisMonth,
+  getSwapsAwaitingMe,
   type MyAssignment,
   type EventListItem,
 } from "@/lib/data";
-import { fmtEventWhen, fmtWeekdayShort, fmtDayMonthShort, fmtTime, fmtBirthday } from "@/lib/format";
+import { fmtEventWhen, fmtWeekdayShort, fmtDayMonthShort, fmtTime, fmtBirthday, churchDateISO } from "@/lib/format";
+import { CheckinButton } from "@/components/slot-controls";
+import { SwapInbox } from "@/components/swap-inbox";
 
 function greeting() {
   const h = Number(new Intl.DateTimeFormat("pt-BR", { hour: "numeric", hour12: false, timeZone: "America/Sao_Paulo" }).format(new Date()));
@@ -42,6 +45,7 @@ export default async function InicioPage() {
   const session = await getSession();
   if (!session) return null;
 
+  const swaps = await getSwapsAwaitingMe(session);
   const first = session.profile.full_name?.split(/\s+/)[0] || "Olá";
   const lead = session.profile.teams.filter((t) => t.role === "leader").map((t) => t.name);
   const roleLabel =
@@ -55,6 +59,7 @@ export default async function InicioPage() {
     <>
       <TopBar title={`${greeting()}, ${first}`} subtitle={roleLabel} userName={session.profile.full_name || "?"} />
       <div className="animate-fade-in space-y-5 py-3">
+        <SwapInbox items={swaps} />
         {session.role === "admin" && <AdminSection />}
         {session.role === "leader" && <LeaderSection />}
         {session.role === "volunteer" && <VolunteerSection />}
@@ -74,6 +79,7 @@ async function VolunteerSection() {
 }
 
 function MyScheduleList({ mine, title }: { mine: MyAssignment[]; title: string }) {
+  const todaySP = churchDateISO(new Date().toISOString());
   if (mine.length === 0) {
     return (
       <Card className="border-dashed">
@@ -124,9 +130,20 @@ function MyScheduleList({ mine, title }: { mine: MyAssignment[]; title: string }
                   </div>
                   <Badge variant={meta.variant}>{meta.label}</Badge>
                 </div>
-                {a.status === "convidado" || a.status === "confirmado" ? (
+                {churchDateISO(a.startsAt) === todaySP && (a.status === "confirmado" || a.checkedIn) ? (
+                  <div className="mt-3 border-t border-border/70 pt-3">
+                    <CheckinButton
+                      assignmentId={a.assignmentId}
+                      teamId={a.teamId}
+                      eventId={a.eventId}
+                      checkedIn={a.checkedIn}
+                      canMark
+                      prominent
+                    />
+                  </div>
+                ) : a.status === "convidado" || a.status === "confirmado" ? (
                   <div className="mt-3 flex justify-end border-t border-border/70 pt-3">
-                    <AssignmentResponse assignmentId={a.assignmentId} status={a.status} />
+                    <AssignmentResponse assignmentId={a.assignmentId} status={a.status} teamId={a.teamId} />
                   </div>
                 ) : null}
               </CardContent>

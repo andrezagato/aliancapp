@@ -6,6 +6,7 @@ import { Plus, Minus, Trash2, CircleSlash, RotateCcw, Check, CalendarOff } from 
 import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
 import { Modal } from "@/components/modal";
+import { TeamDot } from "@/components/coverage-badge";
 import { cn } from "@/lib/utils";
 import {
   buscarElegiveis,
@@ -13,6 +14,7 @@ import {
   removerEscalacao,
   marcarNaoSeAplica,
   ajustarNecessario,
+  adicionarEquipeAoEvento,
 } from "@/lib/actions";
 import type { EligibleMember } from "@/lib/data";
 
@@ -166,6 +168,50 @@ export function EscalarDialog({
 // -----------------------------------------------------------------------------
 // Ajustar quantas pessoas a posição precisa (líder define no evento)
 // -----------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// Adicionar equipe a um evento (admin)
+// -----------------------------------------------------------------------------
+export function AdicionarEquipe({
+  eventId,
+  teams,
+}: {
+  eventId: string;
+  teams: { id: string; name: string; color: string }[];
+}) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  function add(teamId: string) {
+    setError(null);
+    start(async () => {
+      const r = await adicionarEquipeAoEvento(eventId, teamId);
+      if (!r.ok) setError(r.error);
+      else router.refresh();
+    });
+  }
+
+  return (
+    <div>
+      <p className="mb-2 px-1 text-sm font-semibold">Adicionar equipe ao evento</p>
+      <div className="flex flex-wrap gap-2">
+        {teams.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => add(t.id)}
+            disabled={pending}
+            className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-border bg-card px-3 py-1.5 text-sm hover:border-primary/50 disabled:opacity-50"
+          >
+            <Plus className="size-3.5" /> <TeamDot color={t.color} /> {t.name}
+          </button>
+        ))}
+      </div>
+      {error ? <p className="mt-2 text-sm text-destructive">{error}</p> : null}
+    </div>
+  );
+}
+
 export function NecessarioStepper({
   requirementId,
   eventId,

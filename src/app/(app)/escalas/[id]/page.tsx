@@ -11,11 +11,13 @@ import {
   RemoveAssignmentButton,
   NaoSeAplicaToggle,
   NecessarioStepper,
+  AdicionarEquipe,
 } from "@/components/leader-controls";
 import { STATUS_META } from "@/lib/status";
 import { getSession } from "@/lib/auth";
 import { getEventDetail, type DetailPosition, type DetailTeam } from "@/lib/data";
-import { fmtEventDate, fmtTime } from "@/lib/format";
+import { CheckinButton, SwapPending } from "@/components/slot-controls";
+import { fmtEventDate, fmtTime, churchDateISO } from "@/lib/format";
 
 export default async function EventoPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -23,6 +25,9 @@ export default async function EventoPage({ params }: { params: Promise<{ id: str
   if (!session) return null;
   const ev = await getEventDetail(session, id);
   if (!ev) notFound();
+
+  // Check-in liberado no dia do evento (ou depois).
+  const canCheckin = churchDateISO(ev.starts_at) <= churchDateISO(new Date().toISOString());
 
   return (
     <div className="animate-fade-in space-y-4 py-3">
@@ -67,8 +72,18 @@ export default async function EventoPage({ params }: { params: Promise<{ id: str
           </CardContent>
         </Card>
       ) : (
-        ev.teams.map((team) => <TeamBlock key={team.teamId} eventId={ev.id} team={team} />)
+        ev.teams.map((team) => (
+          <TeamBlock key={team.teamId} eventId={ev.id} team={team} canCheckin={canCheckin} />
+        ))
       )}
+
+      {session.role === "admin" && ev.addableTeams.length > 0 ? (
+        <Card className="border-dashed">
+          <div className="p-4">
+            <AdicionarEquipe eventId={ev.id} teams={ev.addableTeams} />
+          </div>
+        </Card>
+      ) : null}
     </div>
   );
 }
@@ -76,9 +91,11 @@ export default async function EventoPage({ params }: { params: Promise<{ id: str
 function TeamBlock({
   eventId,
   team,
+  canCheckin,
 }: {
   eventId: string;
   team: DetailTeam;
+  canCheckin: boolean;
 }) {
   return (
     <Card>
@@ -92,7 +109,7 @@ function TeamBlock({
       <ul className="divide-y divide-border">
         {team.positions.map((pos) => (
           <li key={pos.positionId} className="p-4">
-            <PositionRow eventId={eventId} team={team} pos={pos} />
+            <PositionRow eventId={eventId} team={team} pos={pos} canCheckin={canCheckin} />
           </li>
         ))}
       </ul>
@@ -104,10 +121,12 @@ function PositionRow({
   eventId,
   team,
   pos,
+  canCheckin,
 }: {
   eventId: string;
   team: DetailTeam;
   pos: DetailPosition;
+  canCheckin: boolean;
 }) {
   const notApplicable = pos.status === "not_applicable";
 
@@ -149,26 +168,54 @@ function PositionRow({
         <div className="space-y-2">
           {pos.filled.map((person) => {
             const meta = STATUS_META[person.status];
-            const showResponse = person.isMe && (person.status === "convidado" || person.status === "confirmado");
+            const showResponse =
+              person.isMe && !person.swap && (person.status === "convidado" || person.status === "confirmado");
             return (
-              <div key={person.assignmentId} className="flex items-center gap-3">
-                <Avatar name={person.name} src={person.avatarUrl} className="size-9" />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">
-                    {person.name}
-                    {person.isMe ? <span className="text-muted-foreground"> (você)</span> : null}
-                  </p>
-                  {person.status === "recusado" && person.declineReason ? (
-                    <p className="truncate text-xs text-muted-foreground">Recusou: {person.declineReason}</p>
+              <div key={person.assignmentId} className="space-y-2">
+                <div className="flex items-center gap-3">
+                  <Avatar name={person.name} src={person.avatarUrl} className="size-9" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">
+                      {person.name}
+                      {person.isMe ? <span className="text-muted-foreground"> (você)</span> : null}
+                    </p>
+                    {person.status === "recusado" && person.declineReason ? (
+                      <p className="truncate text-xs text-muted-foreground">Recusou: {person.declineReason}</p>
+                    ) : null}
+                  </div>
+                  {showResponse ? (
+                    <AssignmentResponse assignmentId={person.assignmentId} status={person.status} teamId={team.teamId} />
+                  ) : (
+                    <Badge variant={meta.variant}>{meta.label}</Badge>
+                  )}
+                  {team.canManage ? (
+                    <RemoveAssignmentButton assignmentId={person.assignmentId} eventId={eventId} teamId={team.teamId} />
                   ) : null}
                 </div>
-                {showResponse ? (
-                  <AssignmentResponse assignmentId={person.assignmentId} status={person.status} />
-                ) : (
-                  <Badge variant={meta.variant}>{meta.label}</Badge>
-                )}
-                {team.canManage ? (
-                  <RemoveAssignmentButton assignmentId={person.assignmentId} eventId={eventId} teamId={team.teamId} />
+
+                {canCheckin && person.status !== "recusado" ? (
+                  <div className="pl-12">
+                    <CheckinButton
+                      assignmentId={person.assignmentId}
+                      teamId={team.teamId}
+                      eventId={eventId}
+                      checkedIn={person.checkedIn}
+                      canMark={person.isMe || team.canManage}
+                    />
+                  </div>
+                ) : null}
+
+                {person.swap ? (
+                  <div className="pl-12">
+                    <SwapPending
+                      swapId={person.swap.id}
+                      eventId={eventId}
+                      reason={person.swap.reason}
+                      suggestedName={person.swap.suggestedName}
+                      acceptedBySub={person.swap.acceptedBySub}
+                      canManage={team.canManage}
+                    />
+                  </div>
                 ) : null}
               </div>
             );

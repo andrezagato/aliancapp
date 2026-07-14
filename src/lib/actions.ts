@@ -242,6 +242,43 @@ export async function criarEventoAvulso(input: CriarEventoInput): Promise<Action
   return { ok: true, eventId: ev.id };
 }
 
+/** Admin adiciona outra equipe a um evento já criado (copia as posições da equipe). */
+export async function adicionarEquipeAoEvento(eventId: string, teamId: string): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  if (session.role !== "admin") return fail("Só o administrador adiciona equipes ao evento.");
+  const supabase = await createClient();
+
+  const { data: exists } = await supabase
+    .from("event_requirements")
+    .select("id")
+    .eq("event_id", eventId)
+    .eq("team_id", teamId)
+    .limit(1)
+    .maybeSingle();
+  if (exists) return fail("Essa equipe já está no evento.");
+
+  const { data: positions } = await supabase
+    .from("positions")
+    .select("id, team_id")
+    .eq("team_id", teamId)
+    .is("archived_at", null);
+  const rows = (positions ?? []).map((p) => ({
+    event_id: eventId,
+    team_id: p.team_id,
+    position_id: p.id,
+    needed_count: 1,
+    status: "needed" as const,
+  }));
+  if (rows.length === 0) return fail("Essa equipe não tem posições cadastradas.");
+
+  const { error } = await supabase.from("event_requirements").insert(rows);
+  if (error) return fail(error.message);
+  revalidatePath(`/escalas/${eventId}`);
+  revalidatePath("/escalas");
+  return ok;
+}
+
 // =============================================================================
 // ADMIN: convites e aprovações (onboarding de 2 portas)
 // =============================================================================
@@ -601,5 +638,210 @@ export async function removerIndisponibilidade(id: string): Promise<ActionResult
     .eq("profile_id", session.userId);
   if (error) return fail(error.message);
   revalidatePath("/disponibilidade");
+  return ok;
+}
+
+// =============================================================================
+// CHECK-IN (presença no dia — auto-declarada)
+// =============================================================================
+export async function fazerCheckin(assignmentId: string, teamId: string, eventId: string): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  const supabase = await createClient();
+  const { data: a } = await supabase.from("assignments").select("profile_id").eq("id", assignmentId).maybeSingle();
+  const isSelf = a?.profile_id === session.userId;
+  if (!isSelf && !canManageTeam(session, teamId)) return fail("Sem permissão.");
+  const { error } = await supabase
+    .from("checkins")
+    .insert({ assignment_id: assignmentId, checked_by: session.userId });
+  if (error && !error.message.includes("duplicate")) return fail(error.message);
+  revalidatePath(`/escalas/${eventId}`);
+  return ok;
+}
+
+export async function desfazerCheckin(assignmentId: string, teamId: string, eventId: string): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  const supabase = await createClient();
+  const { data: a } = await supabase.from("assignments").select("profile_id").eq("id", assignmentId).maybeSingle();
+  const isSelf = a?.profile_id === session.userId;
+  if (!isSelf && !canManageTeam(session, teamId)) return fail("Sem permissão.");
+  const { error } = await supabase.from("checkins").delete().eq("assignment_id", assignmentId);
+  if (error) return fail(error.message);
+  revalidatePath(`/escalas/${eventId}`);
+  return ok;
+}
+
+// =============================================================================
+// TROCA / SUBSTITUTO (swap_requests)
+// =============================================================================
+export async function listMembrosParaTroca(
+  teamId: string,
+): Promise<{ profileId: string; name: string; avatarUrl: string | null }[]> {
+  const session = await getSession();
+  if (!session) return [];
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("memberships")
+    .select("profile:profiles ( id, full_name, avatar_url, status )")
+    .eq("team_id", teamId);
+  return ((data ?? []) as { profile: { id: string; full_name: string; avatar_url: string | null; status: string } | null }[])
+    .filter((m) => m.profile && m.profile.status === "ativo" && m.profile.id !== session.userId)
+    .map((m) => ({ profileId: m.profile!.id, name: m.profile!.full_name || "Sem nome", avatarUrl: m.profile!.avatar_url }))
+    .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+}
+
+export async function pedirTroca(
+  assignmentId: string,
+  reason: string,
+  suggestedProfileId: string | null,
+): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  const motivo = reason.trim();
+  if (motivo.length < 3) return fail("Conte rapidinho o motivo da troca.");
+  const supabase = await createClient();
+
+  const { data: a } = await supabase
+    .from("assignments")
+    .select("profile_id, event_id")
+    .eq("id", assignmentId)
+    .maybeSingle();
+  if (!a) return fail("Escalação não encontrada.");
+  if (a.profile_id !== session.userId) return fail("Você só pode pedir troca da sua própria escala.");
+
+  const { data: existing } = await supabase
+    .from("swap_requests")
+    .select("id")
+    .eq("assignment_id", assignmentId)
+    .eq("status", "pendente")
+    .maybeSingle();
+  if (existing) return fail("Você já tem um pedido de troca em aberto para esta escala.");
+
+  const { error } = await supabase.from("swap_requests").insert({
+    assignment_id: assignmentId,
+    requested_by: session.userId,
+    suggested_profile_id: suggestedProfileId,
+    reason: motivo,
+  });
+  if (error) return fail(error.message);
+  revalidatePath(`/escalas/${a.event_id}`);
+  revalidatePath("/inicio");
+  return ok;
+}
+
+export async function resolverTroca(swapId: string, aprovar: boolean, eventId: string): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  const supabase = await createClient();
+
+  const { data: swap } = await supabase
+    .from("swap_requests")
+    .select("id, assignment_id, suggested_profile_id, status, substitute_accepted_at")
+    .eq("id", swapId)
+    .maybeSingle();
+  if (!swap) return fail("Pedido de troca não encontrado.");
+  if (swap.status !== "pendente") return fail("Esse pedido já foi resolvido.");
+
+  const { data: a } = await supabase
+    .from("assignments")
+    .select("id, team_id")
+    .eq("id", swap.assignment_id)
+    .maybeSingle();
+  if (!a) return fail("Escalação não encontrada.");
+  if (!canManageTeam(session, a.team_id)) return fail("Você não gerencia esta equipe.");
+
+  if (aprovar && swap.suggested_profile_id && !swap.substitute_accepted_at) {
+    return fail("O substituto sugerido ainda não aceitou a troca.");
+  }
+
+  if (aprovar) {
+    if (swap.suggested_profile_id) {
+      // Passa a vaga para o substituto sugerido (convidado).
+      const { error } = await supabase
+        .from("assignments")
+        .update({
+          profile_id: swap.suggested_profile_id,
+          status: "convidado",
+          decline_reason: null,
+          responded_at: null,
+          assigned_by: session.userId,
+        })
+        .eq("id", a.id);
+      if (error) return fail(error.message);
+    } else {
+      // Sem substituto: abre a vaga.
+      const { error } = await supabase
+        .from("assignments")
+        .update({ profile_id: null, status: "vaga_aberta", decline_reason: null, responded_at: null })
+        .eq("id", a.id);
+      if (error) return fail(error.message);
+    }
+  }
+
+  const { error: sErr } = await supabase
+    .from("swap_requests")
+    .update({ status: aprovar ? "aprovada" : "recusada", resolved_by: session.userId })
+    .eq("id", swapId);
+  if (sErr) return fail(sErr.message);
+
+  revalidatePath(`/escalas/${eventId}`);
+  revalidatePath("/inicio");
+  return ok;
+}
+
+/** O substituto sugerido aceita a indicação (falta só o líder aprovar). */
+export async function aceitarSubstituicao(swapId: string): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  const supabase = await createClient();
+  const { data: swap } = await supabase
+    .from("swap_requests")
+    .select(
+      "id, suggested_profile_id, status, assignment:assignments!swap_requests_assignment_id_fkey ( event_id )",
+    )
+    .eq("id", swapId)
+    .maybeSingle();
+  if (!swap) return fail("Pedido não encontrado.");
+  if (swap.suggested_profile_id !== session.userId) return fail("Esse pedido não é pra você.");
+  if (swap.status !== "pendente") return fail("Esse pedido já foi resolvido.");
+
+  const { error } = await supabase
+    .from("swap_requests")
+    .update({ substitute_accepted_at: new Date().toISOString() })
+    .eq("id", swapId);
+  if (error) return fail(error.message);
+
+  const eventId = (swap.assignment as { event_id: string } | null)?.event_id;
+  revalidatePath("/inicio");
+  if (eventId) revalidatePath(`/escalas/${eventId}`);
+  return ok;
+}
+
+/** O substituto sugerido recusa a indicação (o pedido morre). */
+export async function recusarSubstituicao(swapId: string): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  const supabase = await createClient();
+  const { data: swap } = await supabase
+    .from("swap_requests")
+    .select(
+      "id, suggested_profile_id, status, assignment:assignments!swap_requests_assignment_id_fkey ( event_id )",
+    )
+    .eq("id", swapId)
+    .maybeSingle();
+  if (!swap) return fail("Pedido não encontrado.");
+  if (swap.suggested_profile_id !== session.userId) return fail("Esse pedido não é pra você.");
+  if (swap.status !== "pendente") return fail("Esse pedido já foi resolvido.");
+
+  const { error } = await supabase
+    .from("swap_requests")
+    .update({ status: "recusada", resolved_by: session.userId })
+    .eq("id", swapId);
+  if (error) return fail(error.message);
+
+  const eventId = (swap.assignment as { event_id: string } | null)?.event_id;
+  revalidatePath("/inicio");
+  if (eventId) revalidatePath(`/escalas/${eventId}`);
   return ok;
 }

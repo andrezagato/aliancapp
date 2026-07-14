@@ -1043,6 +1043,7 @@ export type Database = {
           requested_by: string
           resolved_by: string | null
           status: Database["public"]["Enums"]["swap_status"]
+          substitute_accepted_at: string | null
           suggested_profile_id: string | null
         }
         Insert: {
@@ -1053,6 +1054,7 @@ export type Database = {
           requested_by: string
           resolved_by?: string | null
           status?: Database["public"]["Enums"]["swap_status"]
+          substitute_accepted_at?: string | null
           suggested_profile_id?: string | null
         }
         Update: {
@@ -1063,6 +1065,7 @@ export type Database = {
           requested_by?: string
           resolved_by?: string | null
           status?: Database["public"]["Enums"]["swap_status"]
+          substitute_accepted_at?: string | null
           suggested_profile_id?: string | null
         }
         Relationships: [

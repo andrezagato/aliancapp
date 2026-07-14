@@ -317,6 +317,8 @@ export type SlotPerson = {
   status: AssignmentStatus;
   declineReason: string | null;
   isMe: boolean;
+  checkedIn: boolean;
+  swap: { id: string; reason: string | null; suggestedName: string | null; acceptedBySub: boolean } | null;
 };
 
 export type DetailPosition = {
@@ -355,6 +357,7 @@ export type EventDetail = {
   responsibleName: string | null;
   confirmedAt: string | null;
   teams: DetailTeam[];
+  addableTeams: { id: string; name: string; color: string }[];
 };
 
 export async function getEventDetail(session: Session, eventId: string): Promise<EventDetail | null> {
@@ -407,6 +410,41 @@ export async function getEventDetail(session: Session, eventId: string): Promise
     profile: { full_name: string; avatar_url: string | null } | null;
   }[];
 
+  // Check-ins e trocas pendentes por escalação.
+  const assignmentIds = assignRows.map((a) => a.id);
+  const checkedInSet = new Set<string>();
+  const swapByAssignment = new Map<
+    string,
+    { id: string; reason: string | null; suggestedName: string | null; acceptedBySub: boolean }
+  >();
+  if (assignmentIds.length > 0) {
+    const [{ data: checkins }, { data: swaps }] = await Promise.all([
+      supabase.from("checkins").select("assignment_id").in("assignment_id", assignmentIds),
+      supabase
+        .from("swap_requests")
+        .select(
+          "id, assignment_id, reason, status, substitute_accepted_at, suggested:profiles!swap_requests_suggested_profile_id_fkey ( full_name )",
+        )
+        .in("assignment_id", assignmentIds)
+        .eq("status", "pendente"),
+    ]);
+    for (const c of (checkins ?? []) as { assignment_id: string }[]) checkedInSet.add(c.assignment_id);
+    for (const s of (swaps ?? []) as {
+      id: string;
+      assignment_id: string;
+      reason: string | null;
+      substitute_accepted_at: string | null;
+      suggested: { full_name: string } | null;
+    }[]) {
+      swapByAssignment.set(s.assignment_id, {
+        id: s.id,
+        reason: s.reason,
+        suggestedName: s.suggested?.full_name ?? null,
+        acceptedBySub: !!s.substitute_accepted_at,
+      });
+    }
+  }
+
   // Agrupa requisitos por equipe (só equipes visíveis).
   const teamIds = Array.from(new Set(reqRows.map((r) => r.team_id))).filter(canSee);
 
@@ -435,6 +473,8 @@ export async function getEventDetail(session: Session, eventId: string): Promise
           status: a.status,
           declineReason: a.decline_reason,
           isMe: a.profile_id === session.userId,
+          checkedIn: checkedInSet.has(a.id),
+          swap: swapByAssignment.get(a.id) ?? null,
         }));
         const occ = posAssigns.filter((a) => occupies(a.status)).length;
         if (req.status === "needed") {
@@ -496,6 +536,12 @@ export async function getEventDetail(session: Session, eventId: string): Promise
     responsibleName: responsible?.full_name ?? null,
     confirmedAt: ev.confirmed_at,
     teams: detailTeams,
+    addableTeams:
+      session.role === "admin"
+        ? teams
+            .filter((t) => !reqRows.some((r) => r.team_id === t.id))
+            .map((t) => ({ id: t.id, name: t.name, color: t.color }))
+        : [],
   };
 }
 
@@ -598,8 +644,10 @@ export type MyAssignment = {
   startsAt: string;
   location: string | null;
   positionName: string;
+  teamId: string;
   teamName: string;
   teamColor: string;
+  checkedIn: boolean;
 };
 
 export async function getMyUpcomingAssignments(session: Session): Promise<MyAssignment[]> {
@@ -607,7 +655,7 @@ export async function getMyUpcomingAssignments(session: Session): Promise<MyAssi
   const { data } = await supabase
     .from("assignments")
     .select(
-      `id, status, decline_reason,
+      `id, status, decline_reason, team_id,
        events!inner ( id, title, starts_at, location ),
        positions ( name ),
        teams ( name, color )`,
@@ -620,13 +668,22 @@ export async function getMyUpcomingAssignments(session: Session): Promise<MyAssi
     id: string;
     status: AssignmentStatus;
     decline_reason: string | null;
+    team_id: string;
     events: { id: string; title: string; starts_at: string; location: string | null } | null;
     positions: { name: string } | null;
     teams: { name: string; color: string } | null;
   }[];
 
-  return rows
-    .filter((r) => r.events && r.events.starts_at >= cutoff && r.status !== "recusado")
+  const upcoming = rows.filter((r) => r.events && r.events.starts_at >= cutoff && r.status !== "recusado");
+
+  const ids = upcoming.map((r) => r.id);
+  const checkedIn = new Set<string>();
+  if (ids.length > 0) {
+    const { data: c } = await supabase.from("checkins").select("assignment_id").in("assignment_id", ids);
+    for (const row of (c ?? []) as { assignment_id: string }[]) checkedIn.add(row.assignment_id);
+  }
+
+  return upcoming
     .map((r) => ({
       assignmentId: r.id,
       status: r.status,
@@ -636,8 +693,64 @@ export async function getMyUpcomingAssignments(session: Session): Promise<MyAssi
       startsAt: r.events!.starts_at,
       location: r.events!.location,
       positionName: r.positions?.name || "Posição",
+      teamId: r.team_id,
       teamName: r.teams?.name || "Equipe",
       teamColor: r.teams?.color || "#C4633E",
+      checkedIn: checkedIn.has(r.id),
+    }))
+    .sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+}
+
+// Pedidos de troca aguardando MINHA resposta (fui sugerido como substituto).
+export type SwapInboxItem = {
+  swapId: string;
+  eventId: string;
+  eventTitle: string;
+  startsAt: string;
+  positionName: string;
+  teamName: string;
+  requesterName: string;
+  reason: string | null;
+};
+
+export async function getSwapsAwaitingMe(session: Session): Promise<SwapInboxItem[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("swap_requests")
+    .select(
+      `id, reason,
+       requester:profiles!swap_requests_requested_by_fkey ( full_name ),
+       assignment:assignments!swap_requests_assignment_id_fkey (
+         event:events ( id, title, starts_at ),
+         position:positions ( name ),
+         team:teams ( name )
+       )`,
+    )
+    .eq("suggested_profile_id", session.userId)
+    .eq("status", "pendente")
+    .is("substitute_accepted_at", null);
+
+  const cutoff = upcomingCutoffIso();
+  return ((data ?? []) as {
+    id: string;
+    reason: string | null;
+    requester: { full_name: string } | null;
+    assignment: {
+      event: { id: string; title: string; starts_at: string } | null;
+      position: { name: string } | null;
+      team: { name: string } | null;
+    } | null;
+  }[])
+    .filter((s) => s.assignment?.event && s.assignment.event.starts_at >= cutoff)
+    .map((s) => ({
+      swapId: s.id,
+      eventId: s.assignment!.event!.id,
+      eventTitle: s.assignment!.event!.title,
+      startsAt: s.assignment!.event!.starts_at,
+      positionName: s.assignment!.position?.name || "Posição",
+      teamName: s.assignment!.team?.name || "Equipe",
+      requesterName: s.requester?.full_name || "Alguém",
+      reason: s.reason,
     }))
     .sort((a, b) => a.startsAt.localeCompare(b.startsAt));
 }
