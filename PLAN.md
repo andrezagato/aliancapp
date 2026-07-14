@@ -220,10 +220,12 @@ Enum `notification_kind` estende: `evento_alterado`, `aniversario`, `responsavel
   home por papel, escalas (lista + detalhe), server actions (escalar/confirmar/cancelar),
   criar evento **avulso**, onboarding de duas portas (convite + auto-cadastro/aprovação).
   Só Google. Supabase cloud. Falta só o Google OAuth (passo manual) pra testar logado.
-- **Fase 2 — Diferenciais + gestão de evento:** calendário mensal; disponibilidade + flag;
-  histórico exposto; troca/substituto; check-in; auto-cadastro (link/QR); interesses;
-  templates de série; edição de ocorrência única; "não se aplica"; responsável do evento;
-  aniversários; líder solicita evento → admin aprova.
+- **Fase 2 — Diferenciais + gestão de evento** ✅ (branch `feat/fase-2`): gestão de
+  equipes/posições/membros; diretório de pessoas; modelos de evento; calendário mensal;
+  disponibilidade + flag/trava no escalar; troca/substituto (substituto aceita → líder aprova);
+  check-in; interesses; "não se aplica"; responsável do evento confirma; histórico + "última
+  vez que serviu"; aniversários. Migrações 0002–0007. (Pendências p/ depois: auto-cadastro por
+  QR, edição de ocorrência única, líder solicita evento → admin aprova.)
 - **Fase 3 — Avisos compartimentados:** sino Realtime; Web Push (VAPID + Edge Function) +
   email (Resend), roteados por escopo; preferências de canal; máquina de recorrência
   (gerar ocorrências da série) + jobs agendados (lembrete D-1, alerta de cobertura).
