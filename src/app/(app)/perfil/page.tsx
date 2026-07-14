@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Mail, Phone, Cake, Users } from "lucide-react";
+import { Mail, Phone, Cake, Users, History } from "lucide-react";
 import { TopBar } from "@/components/app-shell/top-bar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -72,6 +72,10 @@ export default async function PerfilPage() {
             </Card>
           )}
         </section>
+
+        <Link href="/historico" className={cn(buttonVariants({ variant: "outline" }), "w-full")}>
+          <History className="size-4" /> Histórico de escalas
+        </Link>
 
         {session.role !== "volunteer" ? (
           <Link href="/equipes" className={cn(buttonVariants({ variant: "outline" }), "w-full")}>

@@ -27,12 +27,19 @@ import {
   getAdminHome,
   getBirthdaysThisMonth,
   getSwapsAwaitingMe,
+  getEventsAwaitingMyConfirmation,
+  getMyOpenInterests,
+  listTeamsWithPositions,
   type MyAssignment,
   type EventListItem,
+  type MyResponsibleEvent,
+  type MyInterest,
+  type TeamWithPositions,
 } from "@/lib/data";
 import { fmtEventWhen, fmtWeekdayShort, fmtDayMonthShort, fmtTime, fmtBirthday, churchDateISO } from "@/lib/format";
 import { CheckinButton } from "@/components/slot-controls";
 import { SwapInbox } from "@/components/swap-inbox";
+import { InteresseButton, InteresseResolveButtons } from "@/components/interesse-controls";
 
 function greeting() {
   const h = Number(new Intl.DateTimeFormat("pt-BR", { hour: "numeric", hour12: false, timeZone: "America/Sao_Paulo" }).format(new Date()));
@@ -45,7 +52,12 @@ export default async function InicioPage() {
   const session = await getSession();
   if (!session) return null;
 
-  const swaps = await getSwapsAwaitingMe(session);
+  const [swaps, respEvents, myInterests, teamsWithPos] = await Promise.all([
+    getSwapsAwaitingMe(session),
+    getEventsAwaitingMyConfirmation(session),
+    getMyOpenInterests(session),
+    listTeamsWithPositions(),
+  ]);
   const first = session.profile.full_name?.split(/\s+/)[0] || "Olá";
   const lead = session.profile.teams.filter((t) => t.role === "leader").map((t) => t.name);
   const roleLabel =
@@ -60,9 +72,11 @@ export default async function InicioPage() {
       <TopBar title={`${greeting()}, ${first}`} subtitle={roleLabel} userName={session.profile.full_name || "?"} />
       <div className="animate-fade-in space-y-5 py-3">
         <SwapInbox items={swaps} />
+        <ResponsibleConfirm events={respEvents} />
         {session.role === "admin" && <AdminSection />}
         {session.role === "leader" && <LeaderSection />}
         {session.role === "volunteer" && <VolunteerSection />}
+        <Servir teams={teamsWithPos} interests={myInterests} />
         <Birthdays />
       </div>
     </>
@@ -189,6 +203,9 @@ async function LeaderSection() {
                       {i.positionName ? ` (${i.positionName})` : ""}
                     </p>
                     {i.note ? <p className="truncate text-sm text-muted-foreground">{i.note}</p> : null}
+                    <div className="mt-1.5">
+                      <InteresseResolveButtons id={i.id} teamId={i.teamId} />
+                    </div>
                   </div>
                 </li>
               ))}
@@ -358,6 +375,56 @@ function EventsWithCoverage({
           </Card>
         ))}
       </div>
+    </section>
+  );
+}
+
+function ResponsibleConfirm({ events }: { events: MyResponsibleEvent[] }) {
+  if (events.length === 0) return null;
+  return (
+    <section>
+      <h3 className="mb-2 px-1 text-base font-semibold">Confirme como responsável</h3>
+      <Card>
+        <ul className="divide-y divide-border">
+          {events.map((e) => (
+            <li key={e.eventId}>
+              <Link href={`/escalas/${e.eventId}`} className="flex items-center gap-3 p-4 hover:bg-muted/50">
+                <span className="inline-flex size-10 items-center justify-center rounded-full bg-warning/12 text-warning">
+                  <Clock className="size-5" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium">{e.title}</p>
+                  <p className="text-sm text-muted-foreground">{fmtEventWhen(e.startsAt)} · confirme que vai acontecer</p>
+                </div>
+                <ChevronRight className="size-5 shrink-0 text-muted-foreground" />
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </Card>
+    </section>
+  );
+}
+
+function Servir({ teams, interests }: { teams: TeamWithPositions[]; interests: MyInterest[] }) {
+  return (
+    <section className="space-y-2">
+      <InteresseButton teams={teams} />
+      {interests.length > 0 ? (
+        <Card>
+          <ul className="divide-y divide-border">
+            {interests.map((i) => (
+              <li key={i.id} className="flex items-center gap-2 p-3 pl-4 text-sm">
+                <Sparkles className="size-4 shrink-0 text-accent" />
+                <span>
+                  Interesse enviado: <span className="font-medium">{i.teamName}</span>
+                  {i.positionName ? ` · ${i.positionName}` : ""}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
     </section>
   );
 }

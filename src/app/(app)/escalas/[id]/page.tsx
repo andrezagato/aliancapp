@@ -15,8 +15,9 @@ import {
 } from "@/components/leader-controls";
 import { STATUS_META } from "@/lib/status";
 import { getSession } from "@/lib/auth";
-import { getEventDetail, type DetailPosition, type DetailTeam } from "@/lib/data";
+import { getEventDetail, listChurchProfiles, type DetailPosition, type DetailTeam } from "@/lib/data";
 import { CheckinButton, SwapPending } from "@/components/slot-controls";
+import { ResponsavelControls } from "@/components/responsavel-controls";
 import { fmtEventDate, fmtTime, churchDateISO } from "@/lib/format";
 
 export default async function EventoPage({ params }: { params: Promise<{ id: string }> }) {
@@ -28,6 +29,7 @@ export default async function EventoPage({ params }: { params: Promise<{ id: str
 
   // Check-in liberado no dia do evento (ou depois).
   const canCheckin = churchDateISO(ev.starts_at) <= churchDateISO(new Date().toISOString());
+  const profiles = session.role === "admin" ? await listChurchProfiles() : [];
 
   return (
     <div className="animate-fade-in space-y-4 py-3">
@@ -51,15 +53,15 @@ export default async function EventoPage({ params }: { params: Promise<{ id: str
               </span>
             ) : null}
           </div>
-          {ev.responsibleName ? (
-            <p className="mt-2 text-sm text-muted-foreground">
-              Responsável: <span className="font-medium text-foreground">{ev.responsibleName}</span>
-              {ev.confirmedAt ? (
-                <Badge variant="success" className="ml-2">Confirmado</Badge>
-              ) : (
-                <Badge variant="warning" className="ml-2">A confirmar</Badge>
-              )}
-            </p>
+          {ev.responsibleName || session.role === "admin" ? (
+            <ResponsavelControls
+              eventId={ev.id}
+              isAdmin={session.role === "admin"}
+              isResponsible={ev.isResponsible}
+              responsibleName={ev.responsibleName}
+              confirmedAt={ev.confirmedAt}
+              profiles={profiles}
+            />
           ) : null}
           {ev.notes ? <p className="mt-2 text-sm text-muted-foreground">{ev.notes}</p> : null}
         </CardContent>

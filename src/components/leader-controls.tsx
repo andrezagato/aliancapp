@@ -8,6 +8,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { Modal } from "@/components/modal";
 import { TeamDot } from "@/components/coverage-badge";
 import { cn } from "@/lib/utils";
+import { fmtDayMonthShort } from "@/lib/format";
 import {
   buscarElegiveis,
   escalarVoluntario,
@@ -121,6 +122,9 @@ export function EscalarDialog({
                               : m.knowsPosition
                                 ? "Faz esta função"
                                 : "Da equipe"}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground">
+                          {m.lastServedISO ? `Serviu por último em ${fmtDayMonthShort(m.lastServedISO)}` : "Nunca serviu nesta função"}
                         </p>
                       </div>
                       {m.unavailable && !m.alreadyInEvent ? (

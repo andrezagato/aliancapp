@@ -280,6 +280,76 @@ export async function adicionarEquipeAoEvento(eventId: string, teamId: string): 
 }
 
 // =============================================================================
+// RESPONSÁVEL DO EVENTO
+// =============================================================================
+export async function definirResponsavel(eventId: string, profileId: string | null): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  if (session.role !== "admin") return fail("Só o administrador define o responsável.");
+  const supabase = await createClient();
+  // Trocar o responsável zera a confirmação anterior.
+  const { error } = await supabase
+    .from("events")
+    .update({ responsible_id: profileId, confirmed_at: null, confirmed_by: null })
+    .eq("id", eventId);
+  if (error) return fail(error.message);
+  revalidatePath(`/escalas/${eventId}`);
+  revalidatePath("/inicio");
+  return ok;
+}
+
+export async function confirmarEvento(eventId: string, confirmar: boolean): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("confirmar_evento", { p_event: eventId, p_confirmar: confirmar });
+  if (error) return fail(error.message);
+  revalidatePath(`/escalas/${eventId}`);
+  revalidatePath("/inicio");
+  return ok;
+}
+
+// =============================================================================
+// INTERESSES DE SERVIR
+// =============================================================================
+export async function criarInteresse(
+  teamId: string,
+  positionId: string | null,
+  note?: string,
+): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  if (!teamId) return fail("Escolha uma equipe.");
+  const supabase = await createClient();
+  const { error } = await supabase.from("service_interests").insert({
+    profile_id: session.userId,
+    team_id: teamId,
+    position_id: positionId,
+    note: note?.trim() || null,
+  });
+  if (error) {
+    return fail(error.message.includes("duplicate") ? "Você já sinalizou interesse aí." : error.message);
+  }
+  revalidatePath("/inicio");
+  return ok;
+}
+
+export async function resolverInteresse(
+  id: string,
+  status: "atendido" | "arquivado",
+  teamId: string,
+): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  if (!canManageTeam(session, teamId)) return fail("Sem permissão.");
+  const supabase = await createClient();
+  const { error } = await supabase.from("service_interests").update({ status }).eq("id", id);
+  if (error) return fail(error.message);
+  revalidatePath("/inicio");
+  return ok;
+}
+
+// =============================================================================
 // ADMIN: convites e aprovações (onboarding de 2 portas)
 // =============================================================================
 export async function criarConvite(input: CriarConviteInput): Promise<ActionResult> {

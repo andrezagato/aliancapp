@@ -355,7 +355,9 @@ export type EventDetail = {
   seriesId: string | null;
   responsibleId: string | null;
   responsibleName: string | null;
+  isResponsible: boolean;
   confirmedAt: string | null;
+  confirmedByName: string | null;
   teams: DetailTeam[];
   addableTeams: { id: string; name: string; color: string }[];
 };
@@ -365,7 +367,7 @@ export async function getEventDetail(session: Session, eventId: string): Promise
   const { data: ev } = await supabase
     .from("events")
     .select(
-      "id, title, starts_at, ends_at, location, notes, series_id, responsible_id, confirmed_at, responsible:profiles!events_responsible_id_fkey ( full_name )",
+      "id, title, starts_at, ends_at, location, notes, series_id, responsible_id, confirmed_at, responsible:profiles!events_responsible_id_fkey ( full_name ), confirmer:profiles!events_confirmed_by_fkey ( full_name )",
     )
     .eq("id", eventId)
     .maybeSingle();
@@ -523,6 +525,7 @@ export async function getEventDetail(session: Session, eventId: string): Promise
     .sort((a, b) => (teamMeta.get(a.teamId)?.sort_order ?? 0) - (teamMeta.get(b.teamId)?.sort_order ?? 0));
 
   const responsible = (ev as { responsible?: { full_name: string } | null }).responsible;
+  const confirmer = (ev as { confirmer?: { full_name: string } | null }).confirmer;
 
   return {
     id: ev.id,
@@ -534,7 +537,9 @@ export async function getEventDetail(session: Session, eventId: string): Promise
     seriesId: ev.series_id,
     responsibleId: ev.responsible_id,
     responsibleName: responsible?.full_name ?? null,
+    isResponsible: ev.responsible_id === session.userId,
     confirmedAt: ev.confirmed_at,
+    confirmedByName: confirmer?.full_name ?? null,
     teams: detailTeams,
     addableTeams:
       session.role === "admin"
@@ -555,6 +560,7 @@ export type EligibleMember = {
   knowsPosition: boolean;
   alreadyInEvent: boolean;
   unavailable: boolean;
+  lastServedISO: string | null;
 };
 
 export async function getEligibleMembers(
@@ -595,6 +601,23 @@ export async function getEligibleMembers(
     for (const b of blocks ?? []) unavailableIds.add(b.profile_id);
   }
 
+  // Última vez que cada um serviu NESTA posição (rodízio justo).
+  const lastServed = new Map<string, string>();
+  if (memberIds.length > 0) {
+    const { data: hist } = await supabase
+      .from("assignments")
+      .select("profile_id, events!inner ( starts_at )")
+      .eq("position_id", positionId)
+      .in("profile_id", memberIds)
+      .in("status", ["confirmado", "presente"])
+      .lt("events.starts_at", new Date().toISOString());
+    for (const h of (hist ?? []) as { profile_id: string; events: { starts_at: string } | null }[]) {
+      if (!h.events || !h.profile_id) continue;
+      const cur = lastServed.get(h.profile_id);
+      if (!cur || h.events.starts_at > cur) lastServed.set(h.profile_id, h.events.starts_at);
+    }
+  }
+
   return activeRows
     .map((m) => ({
       profileId: m.profile!.id,
@@ -603,6 +626,7 @@ export async function getEligibleMembers(
       knowsPosition: m.member_positions.some((mp) => mp.position_id === positionId),
       alreadyInEvent: assignedIds.has(m.profile!.id),
       unavailable: unavailableIds.has(m.profile!.id),
+      lastServedISO: lastServed.get(m.profile!.id) ?? null,
     }))
     .sort((a, b) => {
       if (a.unavailable !== b.unavailable) return a.unavailable ? 1 : -1;
@@ -764,6 +788,7 @@ export type LeaderHome = {
   awaitingConfirmation: number;
   interests: {
     id: string;
+    teamId: string;
     personName: string;
     teamName: string;
     positionName: string | null;
@@ -803,19 +828,21 @@ export async function getLeaderHome(session: Session): Promise<LeaderHome> {
     const { data } = await supabase
       .from("service_interests")
       .select(
-        "id, note, status, profile:profiles ( full_name ), team:teams ( name ), position:positions ( name )",
+        "id, team_id, note, status, profile:profiles ( full_name ), team:teams ( name ), position:positions ( name )",
       )
       .in("team_id", leadIds)
       .eq("status", "aberto")
       .limit(10);
     interests = ((data ?? []) as {
       id: string;
+      team_id: string;
       note: string | null;
       profile: { full_name: string } | null;
       team: { name: string } | null;
       position: { name: string } | null;
     }[]).map((i) => ({
       id: i.id,
+      teamId: i.team_id,
       personName: i.profile?.full_name || "Alguém",
       teamName: i.team?.name || "Equipe",
       positionName: i.position?.name ?? null,
@@ -1038,4 +1065,105 @@ export async function getBirthdaysThisMonth(): Promise<{ name: string; birthDate
     .filter((p) => Number(p.birth_date.split("-")[1]) === month)
     .map((p) => ({ name: p.full_name, birthDate: p.birth_date }))
     .sort((a, b) => Number(a.birthDate.split("-")[2]) - Number(b.birthDate.split("-")[2]));
+}
+
+// =============================================================================
+// RESPONSÁVEL / INTERESSES / HISTÓRICO
+// =============================================================================
+export type MyResponsibleEvent = { eventId: string; title: string; startsAt: string; location: string | null };
+
+export async function getEventsAwaitingMyConfirmation(session: Session): Promise<MyResponsibleEvent[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("events")
+    .select("id, title, starts_at, location")
+    .eq("responsible_id", session.userId)
+    .is("confirmed_at", null)
+    .gte("starts_at", upcomingCutoffIso())
+    .order("starts_at");
+  return ((data ?? []) as { id: string; title: string; starts_at: string; location: string | null }[]).map((e) => ({
+    eventId: e.id,
+    title: e.title,
+    startsAt: e.starts_at,
+    location: e.location,
+  }));
+}
+
+export type MyInterest = {
+  id: string;
+  teamId: string;
+  teamName: string;
+  teamColor: string;
+  positionName: string | null;
+};
+
+export async function getMyOpenInterests(session: Session): Promise<MyInterest[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("service_interests")
+    .select("id, team:teams ( id, name, color ), position:positions ( name )")
+    .eq("profile_id", session.userId)
+    .eq("status", "aberto");
+  return ((data ?? []) as {
+    id: string;
+    team: { id: string; name: string; color: string } | null;
+    position: { name: string } | null;
+  }[])
+    .filter((i) => i.team)
+    .map((i) => ({
+      id: i.id,
+      teamId: i.team!.id,
+      teamName: i.team!.name,
+      teamColor: i.team!.color,
+      positionName: i.position?.name ?? null,
+    }));
+}
+
+export type HistoryEvent = {
+  eventId: string;
+  title: string;
+  startsAt: string;
+  people: { name: string; positionName: string; teamName: string; teamColor: string; status: AssignmentStatus }[];
+};
+
+/** Histórico recente: eventos passados com quem serviu (visível conforme RLS). */
+export async function listRecentHistory(): Promise<HistoryEvent[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("v_assignment_history")
+    .select("full_name, position_name, team_id, event_id, event_title, starts_at, status")
+    .lt("starts_at", new Date().toISOString())
+    .order("starts_at", { ascending: false })
+    .limit(150);
+
+  const teams = await listTeams();
+  const teamMeta = new Map(teams.map((t) => [t.id, t]));
+  const rows = (data ?? []) as {
+    full_name: string | null;
+    position_name: string | null;
+    team_id: string | null;
+    event_id: string | null;
+    event_title: string | null;
+    starts_at: string | null;
+    status: AssignmentStatus | null;
+  }[];
+
+  const map = new Map<string, HistoryEvent>();
+  for (const r of rows) {
+    if (!r.event_id || !r.full_name || !(r.status === "confirmado" || r.status === "presente")) continue;
+    let ev = map.get(r.event_id);
+    if (!ev) {
+      ev = { eventId: r.event_id, title: r.event_title || "Evento", startsAt: r.starts_at || "", people: [] };
+      map.set(r.event_id, ev);
+    }
+    const meta = r.team_id ? teamMeta.get(r.team_id) : undefined;
+    ev.people.push({
+      name: r.full_name,
+      positionName: r.position_name || "Posição",
+      teamName: meta?.name || "Equipe",
+      teamColor: meta?.color || "#C4633E",
+      status: r.status!,
+    });
+  }
+  return Array.from(map.values()).slice(0, 15);
 }

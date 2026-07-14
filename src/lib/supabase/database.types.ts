@@ -1192,6 +1192,10 @@ export type Database = {
         Args: { p_assignment: string }
         Returns: undefined
       }
+      confirmar_evento: {
+        Args: { p_event: string; p_confirmar: boolean }
+        Returns: undefined
+      }
       is_active: { Args: never; Returns: boolean }
       is_admin: { Args: never; Returns: boolean }
       is_any_leader: { Args: never; Returns: boolean }
