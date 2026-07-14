@@ -13,6 +13,7 @@ import {
   type Session,
   memberTeamIds,
 } from "@/lib/auth";
+import { churchDateISO } from "@/lib/format";
 import type { AssignmentStatus, RequirementStatus } from "@/lib/supabase/database.types";
 
 // Eventos a partir de ~12h atrás (mantém culto do dia visível).
@@ -210,16 +211,17 @@ export type EventListItem = {
   assignedTotal: number;
 };
 
-export async function listUpcomingEvents(session: Session, limit = 50): Promise<EventListItem[]> {
-  const supabase = await createClient();
-  const { data: events } = await supabase
-    .from("events")
-    .select("id, title, starts_at, location, series_id")
-    .gte("starts_at", upcomingCutoffIso())
-    .order("starts_at", { ascending: true })
-    .limit(limit);
+type EventRowLite = {
+  id: string;
+  title: string;
+  starts_at: string;
+  location: string | null;
+  series_id: string | null;
+};
 
-  if (!events || events.length === 0) return [];
+async function assembleEventList(session: Session, events: EventRowLite[]): Promise<EventListItem[]> {
+  if (events.length === 0) return [];
+  const supabase = await createClient();
   const eventIds = events.map((e) => e.id);
 
   const [{ data: reqs }, { data: assigns }, teams] = await Promise.all([
@@ -276,6 +278,32 @@ export async function listUpcomingEvents(session: Session, limit = 50): Promise<
       assignedTotal,
     };
   });
+}
+
+export async function listUpcomingEvents(session: Session, limit = 50): Promise<EventListItem[]> {
+  const supabase = await createClient();
+  const { data: events } = await supabase
+    .from("events")
+    .select("id, title, starts_at, location, series_id")
+    .gte("starts_at", upcomingCutoffIso())
+    .order("starts_at", { ascending: true })
+    .limit(limit);
+  return assembleEventList(session, (events ?? []) as EventRowLite[]);
+}
+
+export async function listEventsInRange(
+  session: Session,
+  fromIso: string,
+  toIso: string,
+): Promise<EventListItem[]> {
+  const supabase = await createClient();
+  const { data: events } = await supabase
+    .from("events")
+    .select("id, title, starts_at, location, series_id")
+    .gte("starts_at", fromIso)
+    .lt("starts_at", toIso)
+    .order("starts_at", { ascending: true });
+  return assembleEventList(session, (events ?? []) as EventRowLite[]);
 }
 
 // =============================================================================
@@ -480,6 +508,7 @@ export type EligibleMember = {
   avatarUrl: string | null;
   knowsPosition: boolean;
   alreadyInEvent: boolean;
+  unavailable: boolean;
 };
 
 export async function getEligibleMembers(
@@ -488,17 +517,15 @@ export async function getEligibleMembers(
   positionId: string,
 ): Promise<EligibleMember[]> {
   const supabase = await createClient();
-  const { data: members } = await supabase
-    .from("memberships")
-    .select(
-      "id, profile:profiles ( id, full_name, avatar_url, status ), member_positions ( position_id )",
-    )
-    .eq("team_id", teamId);
+  const [{ data: members }, { data: eventAssigns }, { data: ev }] = await Promise.all([
+    supabase
+      .from("memberships")
+      .select("id, profile:profiles ( id, full_name, avatar_url, status ), member_positions ( position_id )")
+      .eq("team_id", teamId),
+    supabase.from("assignments").select("profile_id").eq("event_id", eventId),
+    supabase.from("events").select("starts_at").eq("id", eventId).maybeSingle(),
+  ]);
 
-  const { data: eventAssigns } = await supabase
-    .from("assignments")
-    .select("profile_id")
-    .eq("event_id", eventId);
   const assignedIds = new Set((eventAssigns ?? []).map((a) => a.profile_id).filter(Boolean));
 
   const rows = (members ?? []) as {
@@ -506,20 +533,57 @@ export async function getEligibleMembers(
     profile: { id: string; full_name: string; avatar_url: string | null; status: string } | null;
     member_positions: { position_id: string }[];
   }[];
+  const activeRows = rows.filter((m) => m.profile && m.profile.status === "ativo");
 
-  return rows
-    .filter((m) => m.profile && m.profile.status === "ativo")
+  // Indisponíveis: bloqueio de disponibilidade cobrindo a data do evento.
+  const unavailableIds = new Set<string>();
+  const eventDate = ev?.starts_at ? churchDateISO(ev.starts_at) : "";
+  const memberIds = activeRows.map((m) => m.profile!.id);
+  if (eventDate && memberIds.length > 0) {
+    const { data: blocks } = await supabase
+      .from("availability_blocks")
+      .select("profile_id")
+      .in("profile_id", memberIds)
+      .lte("start_date", eventDate)
+      .gte("end_date", eventDate);
+    for (const b of blocks ?? []) unavailableIds.add(b.profile_id);
+  }
+
+  return activeRows
     .map((m) => ({
       profileId: m.profile!.id,
       name: m.profile!.full_name || "Sem nome",
       avatarUrl: m.profile!.avatar_url,
       knowsPosition: m.member_positions.some((mp) => mp.position_id === positionId),
       alreadyInEvent: assignedIds.has(m.profile!.id),
+      unavailable: unavailableIds.has(m.profile!.id),
     }))
     .sort((a, b) => {
+      if (a.unavailable !== b.unavailable) return a.unavailable ? 1 : -1;
       if (a.knowsPosition !== b.knowsPosition) return a.knowsPosition ? -1 : 1;
       return a.name.localeCompare(b.name, "pt-BR");
     });
+}
+
+export type AvailabilityBlock = {
+  id: string;
+  startDate: string;
+  endDate: string;
+  reason: string | null;
+};
+
+export async function getMyAvailabilityBlocks(session: Session): Promise<AvailabilityBlock[]> {
+  const supabase = await createClient();
+  const today = new Date().toISOString().slice(0, 10);
+  const { data } = await supabase
+    .from("availability_blocks")
+    .select("id, start_date, end_date, reason")
+    .eq("profile_id", session.userId)
+    .gte("end_date", today)
+    .order("start_date");
+  return ((data ?? []) as { id: string; start_date: string; end_date: string; reason: string | null }[]).map(
+    (b) => ({ id: b.id, startDate: b.start_date, endDate: b.end_date, reason: b.reason }),
+  );
 }
 
 // =============================================================================

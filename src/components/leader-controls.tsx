@@ -2,10 +2,11 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Minus, Trash2, CircleSlash, RotateCcw, Check } from "lucide-react";
+import { Plus, Minus, Trash2, CircleSlash, RotateCcw, Check, CalendarOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
 import { Modal } from "@/components/modal";
+import { cn } from "@/lib/utils";
 import {
   buscarElegiveis,
   escalarVoluntario,
@@ -39,27 +40,37 @@ export function EscalarDialog({
   const [loadingList, setLoadingList] = useState(false);
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [confirmId, setConfirmId] = useState<string | null>(null);
 
   async function openDialog() {
     setOpen(true);
     setError(null);
+    setConfirmId(null);
     setLoadingList(true);
     const list = await buscarElegiveis(eventId, teamId, positionId);
     setMembers(list);
     setLoadingList(false);
   }
 
-  function escalar(profileId: string) {
+  function escalar(profileId: string, override = false) {
     setError(null);
     start(async () => {
-      const r = await escalarVoluntario({ eventId, teamId, positionId, requirementId, profileId });
-      if (!r.ok) setError(r.error);
-      else {
-        setOpen(false);
-        setMembers(null);
-        router.refresh();
+      const r = await escalarVoluntario({ eventId, teamId, positionId, requirementId, profileId }, override);
+      if (!r.ok) {
+        if (r.code === "unavailable") setConfirmId(profileId);
+        else setError(r.error);
+        return;
       }
+      setConfirmId(null);
+      setOpen(false);
+      setMembers(null);
+      router.refresh();
     });
+  }
+
+  function onPick(m: EligibleMember) {
+    if (m.unavailable) setConfirmId(m.profileId);
+    else escalar(m.profileId, false);
   }
 
   return (
@@ -94,24 +105,43 @@ export function EscalarDialog({
                     <button
                       type="button"
                       disabled={pending || m.alreadyInEvent}
-                      onClick={() => escalar(m.profileId)}
+                      onClick={() => onPick(m)}
                       className="flex w-full items-center gap-3 rounded-xl p-2.5 text-left hover:bg-muted disabled:opacity-50"
                     >
                       <Avatar name={m.name} src={m.avatarUrl} />
                       <div className="min-w-0 flex-1">
                         <p className="truncate font-medium">{m.name}</p>
-                        <p className="text-xs text-muted-foreground">
+                        <p className={cn("text-xs", m.unavailable ? "font-medium text-warning" : "text-muted-foreground")}>
                           {m.alreadyInEvent
                             ? "Já escalado neste evento"
-                            : m.knowsPosition
-                              ? "Faz esta função"
-                              : "Da equipe"}
+                            : m.unavailable
+                              ? "Indisponível nesse dia"
+                              : m.knowsPosition
+                                ? "Faz esta função"
+                                : "Da equipe"}
                         </p>
                       </div>
-                      {m.knowsPosition && !m.alreadyInEvent ? (
+                      {m.unavailable && !m.alreadyInEvent ? (
+                        <CalendarOff className="size-4 text-warning" />
+                      ) : m.knowsPosition && !m.alreadyInEvent ? (
                         <Check className="size-4 text-success" />
                       ) : null}
                     </button>
+                    {confirmId === m.profileId ? (
+                      <div className="mx-1 mb-1 rounded-xl bg-warning/10 p-2.5">
+                        <p className="mb-2 text-xs font-medium text-warning">
+                          {m.name} marcou indisponível nesse dia. Escalar mesmo assim?
+                        </p>
+                        <div className="flex gap-2">
+                          <Button size="sm" variant="destructive" onClick={() => escalar(m.profileId, true)} disabled={pending}>
+                            {pending ? "…" : "Escalar assim mesmo"}
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => setConfirmId(null)} disabled={pending}>
+                            Cancelar
+                          </Button>
+                        </div>
+                      </div>
+                    ) : null}
                   </li>
                 ))}
               </ul>

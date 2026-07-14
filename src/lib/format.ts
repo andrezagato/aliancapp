@@ -16,6 +16,25 @@ export function fmtEventDate(iso: string | null | undefined): string {
   return fmt(iso, { weekday: "long", day: "numeric", month: "long" });
 }
 
+/** Data (YYYY-MM-DD) do instante no fuso da igreja — casa com colunas DATE. */
+export function churchDateISO(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: CHURCH_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(d);
+}
+
+/** "19/07" a partir de uma data YYYY-MM-DD (sem escorregar de fuso). */
+export function fmtRangeDate(dateStr: string): string {
+  const [, m, d] = dateStr.split("-");
+  return d && m ? `${d}/${m}` : dateStr;
+}
+
 /** "19 de julho de 2026" */
 export function fmtDateFull(iso: string | null | undefined): string {
   return fmt(iso, { day: "numeric", month: "long", year: "numeric" });

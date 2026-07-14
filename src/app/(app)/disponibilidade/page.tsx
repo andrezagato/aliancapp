@@ -1,11 +1,16 @@
-import { CalendarX2 } from "lucide-react";
 import { TopBar } from "@/components/app-shell/top-bar";
-import { EmptyState } from "@/components/empty-state";
+import { DisponibilidadeManager } from "@/components/disponibilidade-manager";
 import { getSession } from "@/lib/auth";
+import { getMyAvailabilityBlocks, getMyUpcomingAssignments } from "@/lib/data";
 
 export default async function DisponibilidadePage() {
   const session = await getSession();
   if (!session) return null;
+  const [blocks, mine] = await Promise.all([
+    getMyAvailabilityBlocks(session),
+    getMyUpcomingAssignments(session),
+  ]);
+  const scheduled = mine.map((a) => ({ eventTitle: a.eventTitle, startsAt: a.startsAt }));
 
   return (
     <>
@@ -15,12 +20,7 @@ export default async function DisponibilidadePage() {
         userName={session.profile.full_name || "?"}
       />
       <div className="animate-fade-in py-4">
-        <EmptyState
-          icon={<CalendarX2 className="size-7" />}
-          title="Sua disponibilidade"
-          description="Bloqueie datas de viagem ou compromissos. O líder vê isso na hora de escalar e evita te colocar num dia que você não pode."
-          phase="Chega na Fase 2"
-        />
+        <DisponibilidadeManager blocks={blocks} scheduled={scheduled} />
       </div>
     </>
   );

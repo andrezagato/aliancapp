@@ -20,6 +20,9 @@ export default async function EscalasPage() {
     <>
       <TopBar title="Escalas" subtitle="Próximos eventos" userName={session.profile.full_name || "?"} />
       <div className="animate-fade-in space-y-4 py-3">
+        <Link href="/calendario" className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline">
+          <CalendarDays className="size-4" /> Ver por mês
+        </Link>
         {isAdmin ? (
           <Link href="/escalas/novo" className={cn(buttonVariants(), "w-full")}>
             <Plus className="size-4" /> Criar evento

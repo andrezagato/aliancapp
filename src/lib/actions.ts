@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getSession, canManageTeam } from "@/lib/auth";
 import { getEligibleMembers, type EligibleMember } from "@/lib/data";
+import { churchDateISO } from "@/lib/format";
 import type {
   ActionResult,
   CriarConviteInput,
@@ -68,7 +69,10 @@ export async function buscarElegiveis(
   return getEligibleMembers(eventId, teamId, positionId);
 }
 
-export async function escalarVoluntario(input: EscalarInput): Promise<ActionResult> {
+export async function escalarVoluntario(
+  input: EscalarInput,
+  override = false,
+): Promise<ActionResult & { code?: string }> {
   const session = await getSession();
   if (!session) return fail("Sessão expirada.");
   if (!canManageTeam(session, input.teamId)) return fail("Você não gerencia esta equipe.");
@@ -84,6 +88,26 @@ export async function escalarVoluntario(input: EscalarInput): Promise<ActionResu
     .eq("profile_id", input.profileId);
   if ((dupes ?? []).some((d) => d.status !== "recusado")) {
     return fail("Essa pessoa já está escalada nesta posição.");
+  }
+
+  // Trava: pessoa indisponível na data (a menos que o líder confirme override).
+  if (!override) {
+    const { data: ev } = await supabase
+      .from("events")
+      .select("starts_at")
+      .eq("id", input.eventId)
+      .maybeSingle();
+    const d = ev?.starts_at ? churchDateISO(ev.starts_at) : "";
+    if (d) {
+      const { data: blk } = await supabase
+        .from("availability_blocks")
+        .select("id")
+        .eq("profile_id", input.profileId)
+        .lte("start_date", d)
+        .gte("end_date", d)
+        .maybeSingle();
+      if (blk) return { ok: false, error: "Essa pessoa marcou indisponível nesse dia.", code: "unavailable" };
+    }
   }
 
   const { error } = await supabase.from("assignments").insert({
@@ -537,5 +561,45 @@ export async function excluirModelo(seriesId: string): Promise<ActionResult> {
   if (error) return fail(error.message);
   revalidatePath("/modelos");
   revalidatePath("/escalas/novo");
+  return ok;
+}
+
+// =============================================================================
+// DISPONIBILIDADE (voluntário marca quando NÃO pode)
+// =============================================================================
+export async function adicionarIndisponibilidade(
+  startDate: string,
+  endDate: string,
+  reason?: string,
+): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  const start = startDate;
+  const end = endDate || startDate;
+  if (!start) return fail("Escolha ao menos uma data.");
+  if (end < start) return fail("A data final não pode ser antes da inicial.");
+  const supabase = await createClient();
+  const { error } = await supabase.from("availability_blocks").insert({
+    profile_id: session.userId,
+    start_date: start,
+    end_date: end,
+    reason: reason?.trim() || null,
+  });
+  if (error) return fail(error.message);
+  revalidatePath("/disponibilidade");
+  return ok;
+}
+
+export async function removerIndisponibilidade(id: string): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("availability_blocks")
+    .delete()
+    .eq("id", id)
+    .eq("profile_id", session.userId);
+  if (error) return fail(error.message);
+  revalidatePath("/disponibilidade");
   return ok;
 }
