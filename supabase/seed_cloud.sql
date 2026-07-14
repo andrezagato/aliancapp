@@ -59,6 +59,14 @@ insert into event_series (id, church_id, title, weekday, start_time, location) v
   ('44444444-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111', 'Culto de Domingo', 0, '18:00', 'Templo')
 on conflict (id) do nothing;
 
+-- ---- Modelo: equipes que servem nesse culto (series_teams) ----
+insert into series_teams (series_id, team_id) values
+  ('44444444-0000-0000-0000-000000000001','22222222-0000-0000-0000-000000000001'),
+  ('44444444-0000-0000-0000-000000000001','22222222-0000-0000-0000-000000000002'),
+  ('44444444-0000-0000-0000-000000000001','22222222-0000-0000-0000-000000000003'),
+  ('44444444-0000-0000-0000-000000000001','22222222-0000-0000-0000-000000000004')
+on conflict do nothing;
+
 -- ---- Template da série (series_requirements) ----
 insert into series_requirements (series_id, team_id, position_id, needed_count) values
   ('44444444-0000-0000-0000-000000000001', '22222222-0000-0000-0000-000000000001', '33333333-0000-0001-0000-000000000001', 2),

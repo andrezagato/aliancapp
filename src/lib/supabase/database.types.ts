@@ -952,6 +952,36 @@ export type Database = {
           },
         ]
       }
+      series_teams: {
+        Row: {
+          series_id: string
+          team_id: string
+        }
+        Insert: {
+          series_id: string
+          team_id: string
+        }
+        Update: {
+          series_id?: string
+          team_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "series_teams_series_id_fkey"
+            columns: ["series_id"]
+            isOneToOne: false
+            referencedRelation: "event_series"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "series_teams_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       service_interests: {
         Row: {
           created_at: string

@@ -39,3 +39,10 @@ export type AprovarProfileInput = {
   profileId: string;
   teams: InviteTeamInput[];
 };
+
+export type CriarModeloInput = {
+  name: string;
+  time?: string; // HH:mm
+  location?: string;
+  teamIds: string[];
+};

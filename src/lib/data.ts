@@ -76,6 +76,115 @@ export async function listTeamsWithPositions(): Promise<TeamWithPositions[]> {
   }));
 }
 
+export type TeamMember = {
+  membershipId: string;
+  profileId: string;
+  name: string;
+  avatarUrl: string | null;
+  role: "leader" | "volunteer";
+};
+
+export type ManageableTeam = TeamWithPositions & { members: TeamMember[] };
+
+/** Equipes que o usuário pode gerenciar (admin: todas; líder: as que lidera) + membros. */
+export async function getManageableTeams(session: Session): Promise<ManageableTeam[]> {
+  const withPos = await listTeamsWithPositions();
+  const manageable =
+    session.role === "admin"
+      ? withPos
+      : (() => {
+          const lead = new Set(
+            session.profile.teams.filter((t) => t.role === "leader").map((t) => t.id),
+          );
+          return withPos.filter((t) => lead.has(t.id));
+        })();
+
+  const teamIds = manageable.map((t) => t.id);
+  if (teamIds.length === 0) return manageable.map((t) => ({ ...t, members: [] }));
+
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("memberships")
+    .select("id, team_id, role, profile:profiles ( id, full_name, avatar_url, status )")
+    .in("team_id", teamIds);
+
+  const rows = (data ?? []) as {
+    id: string;
+    team_id: string;
+    role: "leader" | "volunteer";
+    profile: { id: string; full_name: string; avatar_url: string | null; status: string } | null;
+  }[];
+
+  return manageable.map((t) => ({
+    ...t,
+    members: rows
+      .filter((m) => m.team_id === t.id && m.profile)
+      .map((m) => ({
+        membershipId: m.id,
+        profileId: m.profile!.id,
+        name: m.profile!.full_name || "Sem nome",
+        avatarUrl: m.profile!.avatar_url,
+        role: m.role,
+      }))
+      .sort((a, b) => {
+        if (a.role !== b.role) return a.role === "leader" ? -1 : 1;
+        return a.name.localeCompare(b.name, "pt-BR");
+      }),
+  }));
+}
+
+// =============================================================================
+// MODELOS DE EVENTO (event_series + series_teams)
+// =============================================================================
+export type EventTemplate = {
+  id: string;
+  title: string;
+  startTime: string; // HH:mm:ss
+  location: string | null;
+  teams: { id: string; name: string; color: string }[];
+};
+
+export async function listTemplates(): Promise<EventTemplate[]> {
+  const supabase = await createClient();
+  const [{ data: series }, { data: links }, teams] = await Promise.all([
+    supabase.from("event_series").select("id, title, start_time, location").order("title"),
+    supabase.from("series_teams").select("series_id, team_id"),
+    listTeams(),
+  ]);
+  const teamMeta = new Map(teams.map((t) => [t.id, t]));
+  const linkRows = (links ?? []) as { series_id: string; team_id: string }[];
+
+  return ((series ?? []) as { id: string; title: string; start_time: string; location: string | null }[]).map(
+    (s) => ({
+      id: s.id,
+      title: s.title,
+      startTime: s.start_time,
+      location: s.location,
+      teams: linkRows
+        .filter((l) => l.series_id === s.id)
+        .map((l) => teamMeta.get(l.team_id))
+        .filter((t): t is TeamMeta => !!t)
+        .sort((a, b) => a.sort_order - b.sort_order)
+        .map((t) => ({ id: t.id, name: t.name, color: t.color })),
+    }),
+  );
+}
+
+/** Pessoas ativas da igreja (para o seletor de "adicionar membro"). */
+export async function listChurchProfiles(): Promise<{ id: string; name: string; avatarUrl: string | null }[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("profiles")
+    .select("id, full_name, avatar_url")
+    .eq("status", "ativo")
+    .order("full_name");
+  return ((data ?? []) as { id: string; full_name: string; avatar_url: string | null }[]).map((p) => ({
+    id: p.id,
+    name: p.full_name || "Sem nome",
+    avatarUrl: p.avatar_url,
+  }));
+}
+
 // =============================================================================
 // LISTA DE EVENTOS (com cobertura por equipe)
 // =============================================================================
@@ -604,6 +713,14 @@ export async function getAdminHome(session: Session): Promise<AdminHome> {
 // =============================================================================
 // PESSOAS / ONBOARDING (admin)
 // =============================================================================
+export type MemberTeamRef = {
+  membershipId: string;
+  teamId: string;
+  name: string;
+  color: string;
+  role: "leader" | "volunteer";
+};
+
 export type MemberRow = {
   id: string;
   fullName: string;
@@ -612,7 +729,8 @@ export type MemberRow = {
   avatarUrl: string | null;
   systemRole: string;
   status: string;
-  teams: { name: string; color: string; role: string }[];
+  createdAt: string;
+  teams: MemberTeamRef[];
 };
 
 export async function listMembers(): Promise<MemberRow[]> {
@@ -620,7 +738,7 @@ export async function listMembers(): Promise<MemberRow[]> {
   const { data } = await supabase
     .from("profiles")
     .select(
-      "id, full_name, email, phone, avatar_url, system_role, status, memberships ( role, team:teams ( name, color ) )",
+      "id, full_name, email, phone, avatar_url, system_role, status, created_at, memberships ( id, role, team:teams ( id, name, color, archived_at ) )",
     )
     .order("full_name");
   return ((data ?? []) as {
@@ -631,7 +749,12 @@ export async function listMembers(): Promise<MemberRow[]> {
     avatar_url: string | null;
     system_role: string;
     status: string;
-    memberships: { role: string; team: { name: string; color: string } | null }[];
+    created_at: string;
+    memberships: {
+      id: string;
+      role: "leader" | "volunteer";
+      team: { id: string; name: string; color: string; archived_at: string | null } | null;
+    }[];
   }[]).map((p) => ({
     id: p.id,
     fullName: p.full_name || "Sem nome",
@@ -640,9 +763,16 @@ export async function listMembers(): Promise<MemberRow[]> {
     avatarUrl: p.avatar_url,
     systemRole: p.system_role,
     status: p.status,
+    createdAt: p.created_at,
     teams: (p.memberships ?? [])
-      .filter((m) => m.team)
-      .map((m) => ({ name: m.team!.name, color: m.team!.color, role: m.role })),
+      .filter((m) => m.team && !m.team.archived_at)
+      .map((m) => ({
+        membershipId: m.id,
+        teamId: m.team!.id,
+        name: m.team!.name,
+        color: m.team!.color,
+        role: m.role,
+      })),
   }));
 }
 

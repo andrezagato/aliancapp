@@ -8,7 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { TeamDot } from "@/components/coverage-badge";
 import { cn } from "@/lib/utils";
 import { criarEventoAvulso } from "@/lib/actions";
-import type { TeamWithPositions } from "@/lib/data";
+import type { TeamWithPositions, EventTemplate } from "@/lib/data";
 
 const inputClass =
   "w-full rounded-2xl border border-input bg-card px-4 py-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring";
@@ -29,16 +29,29 @@ function nextSundayISO(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-export function NovoEventoForm({ teams }: { teams: TeamWithPositions[] }) {
+export function NovoEventoForm({
+  teams,
+  templates,
+}: {
+  teams: TeamWithPositions[];
+  templates: EventTemplate[];
+}) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
-  const [title, setTitle] = useState("Culto de Domingo");
+  const [title, setTitle] = useState("");
   const [date, setDate] = useState(nextSundayISO());
   const [time, setTime] = useState("18:00");
-  const [location, setLocation] = useState("Templo");
+  const [location, setLocation] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  function applyTemplate(t: EventTemplate) {
+    setTitle(t.title);
+    if (t.startTime) setTime(t.startTime.slice(0, 5));
+    setLocation(t.location ?? "");
+    setSelected(new Set(t.teams.map((x) => x.id)));
+  }
 
   function toggle(teamId: string) {
     setSelected((prev) => {
@@ -70,6 +83,25 @@ export function NovoEventoForm({ teams }: { teams: TeamWithPositions[] }) {
 
   return (
     <div className="space-y-5">
+      {templates.length > 0 ? (
+        <div>
+          <p className="mb-2 px-1 text-sm font-medium">Começar de um modelo</p>
+          <div className="flex flex-wrap gap-2">
+            {templates.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => applyTemplate(t)}
+                className="rounded-full border border-border bg-card px-3 py-1.5 text-sm hover:border-primary/50"
+              >
+                {t.title}{" "}
+                <span className="text-muted-foreground">· {t.teams.length} equipe{t.teams.length === 1 ? "" : "s"}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       <Card>
         <CardContent className="space-y-4 p-5">
           <Field label="Título">

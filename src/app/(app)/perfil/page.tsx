@@ -1,10 +1,13 @@
-import { Mail, Phone, Cake } from "lucide-react";
+import Link from "next/link";
+import { Mail, Phone, Cake, Users } from "lucide-react";
 import { TopBar } from "@/components/app-shell/top-bar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
+import { buttonVariants } from "@/components/ui/button";
 import { TeamDot } from "@/components/coverage-badge";
 import { SignOutButton } from "@/components/sign-out-button";
+import { cn } from "@/lib/utils";
 import { getSession } from "@/lib/auth";
 import { fmtBirthday } from "@/lib/format";
 
@@ -69,6 +72,12 @@ export default async function PerfilPage() {
             </Card>
           )}
         </section>
+
+        {session.role !== "volunteer" ? (
+          <Link href="/equipes" className={cn(buttonVariants({ variant: "outline" }), "w-full")}>
+            <Users className="size-4" /> Gerenciar equipes e posições
+          </Link>
+        ) : null}
 
         <SignOutButton className="w-full" />
       </div>

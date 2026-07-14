@@ -8,6 +8,7 @@ import type {
   ActionResult,
   CriarConviteInput,
   CriarEventoInput,
+  CriarModeloInput,
   EscalarInput,
   AprovarProfileInput,
 } from "@/lib/types";
@@ -350,5 +351,191 @@ export async function aprovarProfilePendente(input: AprovarProfileInput): Promis
 
   revalidatePath("/pessoas");
   revalidatePath("/inicio");
+  return ok;
+}
+
+// =============================================================================
+// EQUIPES / POSIÇÕES (admin cria equipe; admin ou líder gerencia posições)
+// =============================================================================
+export async function criarEquipe(name: string, color?: string): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  if (session.role !== "admin") return fail("Só o administrador cria equipes.");
+  if (!session.profile.church_id) return fail("Sua conta não está ligada a uma igreja.");
+  const nome = name.trim();
+  if (!nome) return fail("Dê um nome à equipe.");
+
+  const supabase = await createClient();
+  const { data: last } = await supabase
+    .from("teams")
+    .select("sort_order")
+    .eq("church_id", session.profile.church_id)
+    .order("sort_order", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const { error } = await supabase.from("teams").insert({
+    church_id: session.profile.church_id,
+    name: nome,
+    color: color?.trim() || "#5B6B4E",
+    sort_order: (last?.sort_order ?? 0) + 1,
+  });
+  if (error) return fail(error.message);
+  revalidatePath("/equipes");
+  return ok;
+}
+
+export async function criarPosicao(teamId: string, name: string): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  if (!canManageTeam(session, teamId)) return fail("Você não gerencia esta equipe.");
+  const nome = name.trim();
+  if (!nome) return fail("Dê um nome à posição.");
+
+  const supabase = await createClient();
+  const { data: last } = await supabase
+    .from("positions")
+    .select("sort_order")
+    .eq("team_id", teamId)
+    .order("sort_order", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const { error } = await supabase.from("positions").insert({
+    team_id: teamId,
+    name: nome,
+    sort_order: (last?.sort_order ?? 0) + 1,
+  });
+  if (error) return fail(error.message);
+  revalidatePath("/equipes");
+  return ok;
+}
+
+export async function renomearPosicao(positionId: string, name: string, teamId: string): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  if (!canManageTeam(session, teamId)) return fail("Você não gerencia esta equipe.");
+  const nome = name.trim();
+  if (!nome) return fail("O nome não pode ficar vazio.");
+  const supabase = await createClient();
+  const { error } = await supabase.from("positions").update({ name: nome }).eq("id", positionId);
+  if (error) return fail(error.message);
+  revalidatePath("/equipes");
+  return ok;
+}
+
+/** Arquiva (soft-delete) ou reativa uma posição — preserva histórico. */
+export async function arquivarPosicao(positionId: string, teamId: string, arquivar: boolean): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  if (!canManageTeam(session, teamId)) return fail("Você não gerencia esta equipe.");
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("positions")
+    .update({ archived_at: arquivar ? new Date().toISOString() : null })
+    .eq("id", positionId);
+  if (error) return fail(error.message);
+  revalidatePath("/equipes");
+  return ok;
+}
+
+// =============================================================================
+// MEMBROS DA EQUIPE (admin ou líder da equipe)
+// =============================================================================
+export async function adicionarMembro(
+  teamId: string,
+  profileId: string,
+  role: "leader" | "volunteer" = "volunteer",
+): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  if (!canManageTeam(session, teamId)) return fail("Você não gerencia esta equipe.");
+  const supabase = await createClient();
+
+  const { data: exists } = await supabase
+    .from("memberships")
+    .select("id")
+    .eq("team_id", teamId)
+    .eq("profile_id", profileId)
+    .maybeSingle();
+  if (exists) return fail("Essa pessoa já está na equipe.");
+
+  const { error } = await supabase.from("memberships").insert({ team_id: teamId, profile_id: profileId, role });
+  if (error) return fail(error.message);
+  revalidatePath("/equipes");
+  return ok;
+}
+
+export async function definirPapelMembro(
+  membershipId: string,
+  teamId: string,
+  role: "leader" | "volunteer",
+): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  if (!canManageTeam(session, teamId)) return fail("Você não gerencia esta equipe.");
+  const supabase = await createClient();
+  const { error } = await supabase.from("memberships").update({ role }).eq("id", membershipId);
+  if (error) return fail(error.message);
+  revalidatePath("/equipes");
+  revalidatePath("/inicio");
+  return ok;
+}
+
+export async function removerMembro(membershipId: string, teamId: string): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  if (!canManageTeam(session, teamId)) return fail("Você não gerencia esta equipe.");
+  const supabase = await createClient();
+  const { error } = await supabase.from("memberships").delete().eq("id", membershipId);
+  if (error) return fail(error.message);
+  revalidatePath("/equipes");
+  return ok;
+}
+
+// =============================================================================
+// MODELOS DE EVENTO (admin) — event_series + series_teams
+// =============================================================================
+export async function criarModelo(input: CriarModeloInput): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  if (session.role !== "admin") return fail("Só o administrador cria modelos.");
+  if (!session.profile.church_id) return fail("Sua conta não está ligada a uma igreja.");
+  const nome = input.name.trim();
+  if (!nome) return fail("Dê um nome ao modelo.");
+  const teamIds = (input.teamIds ?? []).filter(Boolean);
+  if (teamIds.length === 0) return fail("Escolha pelo menos uma equipe.");
+
+  const supabase = await createClient();
+  const { data: series, error } = await supabase
+    .from("event_series")
+    .insert({
+      church_id: session.profile.church_id,
+      title: nome,
+      start_time: input.time || "18:00",
+      location: input.location?.trim() || null,
+    })
+    .select("id")
+    .single();
+  if (error || !series) return fail(error?.message || "Não consegui criar o modelo.");
+
+  const { error: stErr } = await supabase
+    .from("series_teams")
+    .insert(teamIds.map((teamId) => ({ series_id: series.id, team_id: teamId })));
+  if (stErr) return fail(stErr.message);
+
+  revalidatePath("/modelos");
+  revalidatePath("/escalas/novo");
+  return ok;
+}
+
+export async function excluirModelo(seriesId: string): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session || session.role !== "admin") return fail("Sem permissão.");
+  const supabase = await createClient();
+  const { error } = await supabase.from("event_series").delete().eq("id", seriesId);
+  if (error) return fail(error.message);
+  revalidatePath("/modelos");
+  revalidatePath("/escalas/novo");
   return ok;
 }

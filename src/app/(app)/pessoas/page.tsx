@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { UserPlus, Clock, Mail } from "lucide-react";
+import { Clock, Mail } from "lucide-react";
 import { TopBar } from "@/components/app-shell/top-bar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -12,6 +12,7 @@ import {
   CancelInviteButton,
   type TeamOpt,
 } from "@/components/people-controls";
+import { PeopleDirectory } from "@/components/people-directory";
 import { getSession } from "@/lib/auth";
 import { listMembers, listPendingJoinRequests, listInvites, listTeams } from "@/lib/data";
 
@@ -122,50 +123,8 @@ export default async function PessoasPage() {
           </section>
         ) : null}
 
-        {/* Membros ativos */}
-        <section>
-          <h3 className="mb-2 px-1 text-base font-semibold">
-            Membros {active.length > 0 ? `· ${active.length}` : ""}
-          </h3>
-          {active.length === 0 ? (
-            <Card className="border-dashed">
-              <CardContent className="flex flex-col items-center gap-2 px-6 py-8 text-center">
-                <UserPlus className="size-8 text-primary" />
-                <p className="max-w-xs text-balance text-sm text-muted-foreground">
-                  Ninguém ativo ainda. Convide as primeiras pessoas para montar as equipes.
-                </p>
-              </CardContent>
-            </Card>
-          ) : (
-            <Card>
-              <ul className="divide-y divide-border">
-                {active.map((m) => (
-                  <li key={m.id} className="flex items-center gap-3 p-4">
-                    <Avatar name={m.fullName} src={m.avatarUrl} />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate font-medium">
-                        {m.fullName}
-                        {m.systemRole === "admin" ? <Badge variant="primary" className="ml-2">Admin</Badge> : null}
-                      </p>
-                      <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5">
-                        {m.teams.length === 0 ? (
-                          <span className="text-sm text-muted-foreground">Sem equipe</span>
-                        ) : (
-                          m.teams.map((t, idx) => (
-                            <span key={idx} className="inline-flex items-center gap-1 text-sm text-muted-foreground">
-                              <TeamDot color={t.color} /> {t.name}
-                              {t.role === "leader" ? " (líder)" : ""}
-                            </span>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </Card>
-          )}
-        </section>
+        {/* Diretório de pessoas — buscar, ordenar e atribuir a equipes */}
+        <PeopleDirectory members={active} teams={teamOpts} />
       </div>
     </>
   );
