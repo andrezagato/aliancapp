@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400;0,700;0,800;1,400&family=Alegreya+Sans:wght@0,400;0,500;0,700;0,800&display=swap" rel="stylesheet">
+<style>*{box-sizing:border-box;} a{color:#6E1122;} a:hover{color:#8A1730;}</style>
+</helmet>
+
+<div style="min-height:100dvh;background:radial-gradient(1400px 700px at 78% -12%,#FBEBC4 0%,transparent 52%),radial-gradient(1000px 600px at -8% 108%,#F1DCDA 0%,transparent 50%),#EFE3C6;font-family:'Alegreya Sans',system-ui,sans-serif;color:#3A2A28;padding:48px clamp(20px,4vw,64px) 96px;">
+
+  <!-- TURN 2 — Aconchego, focado + estendido -->
+  <section style="max-width:1180px;margin:0 auto;">
+    <div style="display:flex;align-items:flex-start;gap:22px;flex-wrap:wrap;">
+      <div style="min-width:0;flex:1;">
+        <div style="display:inline-flex;align-items:center;gap:8px;font-weight:800;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#6E1122;">
+          <span style="width:9px;height:9px;border-radius:999px;background:#E7B84E;"></span>Sirvo · linha Aconchego
+        </div>
+        <h1 style="font-family:'Alegreya';font-weight:800;font-size:clamp(30px,5vw,46px);line-height:1.02;letter-spacing:-.015em;margin:10px 0 0;">O app inteiro, no mesmo tato.</h1>
+        <p style="margin:12px 0 0;max-width:680px;font-size:16.5px;line-height:1.55;color:#6E5F55;">A linha Aconchego aplicada ao projeto todo. Três papéis, cada um com sua navegação: <b>voluntário</b> (confirmar, check-in, disponibilidade), <b>líder</b> (cobertura e escalar alguém) e <b>admin</b> (visão da igreja, criar culto, aprovar entradas). Toque na barra de baixo para trocar de tela; tudo é navegável — arraste, puxe para atualizar, abra a escala, veja as notificações.</p>
+        <div style="margin-top:16px;display:flex;flex-wrap:wrap;gap:9px;">
+          <span style="background:#FFFDF8;border:1px solid #EADFC7;padding:8px 13px;border-radius:999px;font-size:13.5px;font-weight:600;">Navegação inferior ao vivo</span>
+          <span style="background:#FFFDF8;border:1px solid #EADFC7;padding:8px 13px;border-radius:999px;font-size:13.5px;font-weight:600;">Confirmar / arrastar</span>
+          <span style="background:#FFFDF8;border:1px solid #EADFC7;padding:8px 13px;border-radius:999px;font-size:13.5px;font-weight:600;">Escalar alguém</span>
+          <span style="background:#FFFDF8;border:1px solid #EADFC7;padding:8px 13px;border-radius:999px;font-size:13.5px;font-weight:600;">Sino → notificações</span>
+        </div>
+      </div>
+      <div style="width:70px;height:70px;border-radius:20px;background:#6E1122;box-shadow:0 14px 34px rgba(85,16,30,.28);display:grid;place-items:center;overflow:hidden;flex:none;">
+        <img src="assets/creme_logo.png" alt="Sirvo" style="width:80%;height:80%;object-fit:contain;">
+      </div>
+    </div>
+
+    <div style="display:flex;flex-wrap:wrap;gap:clamp(28px,5vw,64px);margin-top:44px;align-items:flex-start;">
+      <div id="2a" style="flex:1;min-width:360px;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+          <span style="font-family:'Alegreya';font-weight:800;font-size:15px;background:#6E1122;color:#FDF3E4;width:38px;height:30px;border-radius:9px;display:grid;place-items:center;">2a</span>
+          <div><div style="font-family:'Alegreya';font-weight:800;font-size:20px;line-height:1;">Voluntário</div><div style="font-size:13.5px;color:#8A7A6B;margin-top:3px;">Receber → confirmar num toque → check-in no dia.</div></div>
+        </div>
+        <dc-import name="SirvoApp" role="volunteer" hint-size="460px,930px"></dc-import>
+      </div>
+      <div id="2b" style="flex:1;min-width:360px;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+          <span style="font-family:'Alegreya';font-weight:800;font-size:15px;background:#E7B84E;color:#4a350a;width:38px;height:30px;border-radius:9px;display:grid;place-items:center;">2b</span>
+          <div><div style="font-family:'Alegreya';font-weight:800;font-size:20px;line-height:1;">Líder</div><div style="font-size:13.5px;color:#8A7A6B;margin-top:3px;">Cobertura num anel → abrir escala → escalar alguém apto.</div></div>
+        </div>
+        <dc-import name="SirvoApp" role="leader" hint-size="460px,930px"></dc-import>
+      </div>
+      <div id="2c" style="flex:1;min-width:360px;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+          <span style="font-family:'Alegreya';font-weight:800;font-size:15px;background:#3A2A28;color:#FBF1DE;width:38px;height:30px;border-radius:9px;display:grid;place-items:center;">2c</span>
+          <div><div style="font-family:'Alegreya';font-weight:800;font-size:20px;line-height:1;">Admin</div><div style="font-size:13.5px;color:#8A7A6B;margin-top:3px;">Visão da igreja → criar culto → aprovar quem entra.</div></div>
+        </div>
+        <dc-import name="SirvoApp" role="admin" hint-size="460px,930px"></dc-import>
+      </div>
+    </div>
+  </section>
+</div>
+</x-dc>
+</body>
+</html>

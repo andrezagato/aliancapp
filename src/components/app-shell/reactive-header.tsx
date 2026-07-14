@@ -6,12 +6,12 @@ import { Bell } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 
 /**
- * Cabeçalho reativo (variante sticky, para as abas internas). Entre 0–70px de
- * scroll o título grande encolhe/some e um título condensado central faz
- * fade-in, com o fundo blur ganhando opacidade — mesmo comportamento do
- * ReactiveHeader da home, mas em fluxo (sticky), sem precisar de espaçador.
+ * Cabeçalho reativo à rolagem: entre 0–70px de scroll o título grande encolhe
+ * e some, um título condensado central faz fade-in, e um fundo com blur/borda
+ * ganha opacidade. Lê `window.scrollY` (a página inteira rola). Fixo no topo;
+ * o conteúdo abaixo precisa de um respiro no topo pra não sumir sob ele.
  */
-export function TopBar({
+export function ReactiveHeader({
   title,
   subtitle,
   userName,
@@ -42,7 +42,7 @@ export function TopBar({
   }, []);
 
   return (
-    <header className="sticky top-0 z-30 -mx-5 pt-safe">
+    <header className="fixed inset-x-0 top-0 z-40 pt-safe">
       <div
         ref={bg}
         aria-hidden

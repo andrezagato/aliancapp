@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, MapPin, Clock, CircleDashed, CircleSlash } from "lucide-react";
+import { ChevronLeft, MapPin, Clock, CircleDashed, CircleSlash } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
@@ -28,44 +28,63 @@ export default async function EventoPage({ params }: { params: Promise<{ id: str
   if (!ev) notFound();
 
   // Check-in liberado no dia do evento (ou depois).
-  const canCheckin = churchDateISO(ev.starts_at) <= churchDateISO(new Date().toISOString());
+  const nowISO = new Date().toISOString();
+  const canCheckin = churchDateISO(ev.starts_at) <= churchDateISO(nowISO);
+  const kicker = churchDateISO(ev.starts_at) === churchDateISO(nowISO) ? "Acontece hoje" : "Próximo culto";
+  const hasMeta = !!(ev.responsibleName || session.role === "admin" || ev.notes);
   const profiles = session.role === "admin" ? await listChurchProfiles() : [];
 
   return (
-    <div className="animate-fade-in space-y-4 py-3">
-      <Link href="/escalas" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-        <ArrowLeft className="size-4" /> Escalas
+    <div className="space-y-3.5 pb-4">
+      <Link
+        href="/escalas"
+        className="press -ml-1 inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-[15px] font-bold text-primary"
+      >
+        <ChevronLeft className="size-5" /> Escalas
       </Link>
 
-      {/* Cabeçalho do evento */}
-      <Card className="border-primary/20 bg-gradient-to-br from-primary/10 to-card">
-        <CardContent className="p-5">
-          <h1 className="text-2xl font-semibold">{ev.title}</h1>
-          <p className="mt-1 capitalize text-muted-foreground">{fmtEventDate(ev.starts_at)}</p>
-          <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
+      {/* Cabeçalho vinho do evento */}
+      <div className="relative overflow-hidden rounded-[24px] bg-gradient-to-br from-[hsl(349_72%_28%)] to-[hsl(349_69%_15%)] p-5 text-primary-foreground shadow-lift">
+        <div
+          className="pointer-events-none absolute -right-10 -top-10 size-40 rounded-full"
+          style={{ background: "radial-gradient(circle, hsl(var(--accent) / 0.4), transparent 68%)" }}
+          aria-hidden
+        />
+        <div className="relative">
+          <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-accent">{kicker}</p>
+          <h1 className="mt-1 font-display text-[27px] font-extrabold leading-[1.05] text-white">{ev.title}</h1>
+          <p className="mt-1 text-[13.5px] capitalize text-primary-foreground/85">{fmtEventDate(ev.starts_at)}</p>
+          <div className="mt-2 flex flex-wrap items-center gap-x-3.5 gap-y-1 text-[13.5px] text-primary-foreground/85">
             <span className="inline-flex items-center gap-1.5">
-              <Clock className="size-4" /> {fmtTime(ev.starts_at)}
+              <Clock className="size-3.5 text-accent" /> {fmtTime(ev.starts_at)}
               {ev.ends_at ? ` – ${fmtTime(ev.ends_at)}` : ""}
             </span>
             {ev.location ? (
               <span className="inline-flex items-center gap-1.5">
-                <MapPin className="size-4" /> {ev.location}
+                <MapPin className="size-3.5 text-accent" /> {ev.location}
               </span>
             ) : null}
           </div>
-          {ev.responsibleName || session.role === "admin" ? (
-            <ResponsavelControls
-              eventId={ev.id}
-              isAdmin={session.role === "admin"}
-              isResponsible={ev.isResponsible}
-              responsibleName={ev.responsibleName}
-              confirmedAt={ev.confirmedAt}
-              profiles={profiles}
-            />
-          ) : null}
-          {ev.notes ? <p className="mt-2 text-sm text-muted-foreground">{ev.notes}</p> : null}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
+
+      {hasMeta ? (
+        <Card>
+          <CardContent className="space-y-2 p-4">
+            {ev.responsibleName || session.role === "admin" ? (
+              <ResponsavelControls
+                eventId={ev.id}
+                isAdmin={session.role === "admin"}
+                isResponsible={ev.isResponsible}
+                responsibleName={ev.responsibleName}
+                confirmedAt={ev.confirmedAt}
+                profiles={profiles}
+              />
+            ) : null}
+            {ev.notes ? <p className="text-sm text-muted-foreground">{ev.notes}</p> : null}
+          </CardContent>
+        </Card>
+      ) : null}
 
       {ev.teams.length === 0 ? (
         <Card className="border-dashed">
@@ -100,15 +119,13 @@ function TeamBlock({
   canCheckin: boolean;
 }) {
   return (
-    <Card>
-      <div className="flex items-center justify-between gap-2 border-b border-border p-4">
-        <div className="flex items-center gap-2">
-          <TeamDot color={team.color} className="size-3" />
-          <h2 className="text-lg font-semibold">{team.name}</h2>
-        </div>
-        <CoverageBadge tone={team.tone} assigned={team.assigned} needed={team.needed} />
+    <Card className="overflow-hidden">
+      <div className="flex items-center gap-2.5 border-b border-border p-4">
+        <TeamDot color={team.color} className="size-3" />
+        <h2 className="font-display text-[17px] font-bold">{team.name}</h2>
+        <CoverageBadge tone={team.tone} assigned={team.assigned} needed={team.needed} className="ml-auto" />
       </div>
-      <ul className="divide-y divide-border">
+      <ul className="divide-y divide-border/70">
         {team.positions.map((pos) => (
           <li key={pos.positionId} className="p-4">
             <PositionRow eventId={eventId} team={team} pos={pos} canCheckin={canCheckin} />

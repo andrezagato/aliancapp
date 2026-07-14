@@ -229,8 +229,40 @@ Enum `notification_kind` estende: `evento_alterado`, `aniversario`, `responsavel
 - **Fase 3 — Avisos compartimentados:** sino Realtime; Web Push (VAPID + Edge Function) +
   email (Resend), roteados por escopo; preferências de canal; máquina de recorrência
   (gerar ocorrências da série) + jobs agendados (lembrete D-1, alerta de cobertura).
-- **Roadmap pós-MVP:** WhatsApp; roteiro/ordem do culto (setlist, preletor, avisos, mídias,
-  link OneDrive → upload); relatórios de assiduidade; multi-igreja + billing; app nativo.
+- **Roadmap pós-MVP:** **"Montar escala com IA"** (ver §10.1); WhatsApp; roteiro/ordem do culto
+  (setlist, preletor, avisos, mídias, link OneDrive → upload); relatórios de assiduidade;
+  multi-igreja + billing; app nativo.
+
+### 10.1 🔥 Ideia — "Montar escala com IA" (assistente de escalação)
+
+> Ideia do André (jul/2026). **Não é MVP** — é a aposta grande que pode virar o diferencial nº 1
+> sobre o Timbragem. Registrada aqui pra amadurecer.
+
+**O que é:** o líder abre um evento sem escala e toca em **"Montar com IA"**. O assistente
+propõe uma escala completa (quem em cada posição), o líder revisa, ajusta e confirma num toque —
+os convites saem daí. Transforma o trabalho chato (encaixar gente nas vagas) em revisar/aprovar.
+
+**Por que é viável aqui:** o schema já guarda tudo que uma boa sugestão precisa —
+`member_positions` (quem sabe fazer o quê), `availability_blocks` (quem não pode no dia),
+histórico / "última vez que serviu" (rodízio justo), `event_requirements` (quantas vagas por
+posição) e `memberships` (equipe). A IA é só a camada que **otimiza sobre dados que já existem**.
+
+**Como poderia funcionar (em níveis crescentes):**
+1. **Sugestão determinística (sem LLM):** um solver preenche cada vaga respeitando aptidão +
+   disponibilidade + rodízio (quem serviu há mais tempo entra antes), balanceando a carga entre
+   as pessoas. Entrega ~80% do valor, é explicável e barato. Melhor primeiro passo.
+2. **Assistente em linguagem natural (LLM):** *"monta o domingo priorizando quem não serve há um
+   mês e deixa a Bia de fora que ela pediu folga"* → a IA traduz a intenção em restrições e
+   devolve a escala + uma justificativa curta por escolha (*"Pedro: não serve há 5 semanas"*).
+3. **Proativo:** avisa o líder (*"faltam 3 dias e a Bateria está sem ninguém — quer que eu
+   sugira?"*) e aprende as preferências do líder ao longo do tempo.
+
+**Guarda-corpos (inegociáveis):** a IA **sugere, o humano decide** — nada vai pra escala sem o
+líder confirmar. Transparência ("por que essa pessoa?") e respeito às travas de indisponibilidade.
+
+**Perguntas em aberto:** solver próprio × LLM × híbrido (solver gera candidatos, LLM explica e
+ajusta por linguagem); custo/latência por sugestão; onde roda (Edge Function × API); métrica de
+qualidade (taxa de aceitação da escala sugerida pelo líder).
 
 ---
 

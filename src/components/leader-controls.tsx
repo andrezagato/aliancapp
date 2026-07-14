@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
 import { Modal } from "@/components/modal";
 import { TeamDot } from "@/components/coverage-badge";
+import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 import { fmtDayMonthShort } from "@/lib/format";
 import {
@@ -38,6 +39,7 @@ export function EscalarDialog({
   openCount: number;
 }) {
   const router = useRouter();
+  const { showToast } = useToast();
   const [open, setOpen] = useState(false);
   const [members, setMembers] = useState<EligibleMember[] | null>(null);
   const [loadingList, setLoadingList] = useState(false);
@@ -64,9 +66,11 @@ export function EscalarDialog({
         else setError(r.error);
         return;
       }
+      const nm = members?.find((x) => x.profileId === profileId)?.name?.split(/\s+/)[0];
       setConfirmId(null);
       setOpen(false);
       setMembers(null);
+      showToast(nm ? `Convite enviado a ${nm}.` : "Convite enviado.");
       router.refresh();
     });
   }
@@ -81,89 +85,90 @@ export function EscalarDialog({
       <button
         type="button"
         onClick={openDialog}
-        className="flex w-full items-center gap-3 rounded-xl border border-dashed border-primary/40 p-3 text-left text-primary transition-colors hover:bg-primary/5"
+        className="press flex w-full items-center gap-2.5 rounded-[13px] border-[1.5px] border-dashed border-primary/35 bg-primary/[0.03] px-3 py-2.5 text-left text-primary"
       >
-        <span className="inline-flex size-9 items-center justify-center rounded-full border-2 border-dashed border-primary/40">
+        <span className="grid size-8 shrink-0 place-items-center rounded-full border-2 border-dashed border-primary/40">
           <Plus className="size-4" />
         </span>
-        <span className="text-sm font-medium">
-          Escalar {positionName}
-          {openCount > 1 ? ` · ${openCount} vagas` : ""}
+        <span className="text-sm font-bold">Escalar {positionName}</span>
+        <span className="ml-auto text-xs font-bold text-destructive">
+          {openCount} vaga{openCount > 1 ? "s" : ""}
         </span>
       </button>
 
-      <Modal open={open} onClose={() => !pending && setOpen(false)}>
-        <div className="flex max-h-[80dvh] flex-col rounded-2xl border border-border bg-card shadow-lift">
-          <div className="border-b border-border p-4">
-            <h3 className="text-lg font-semibold">Escalar · {positionName}</h3>
-            <p className="text-sm text-muted-foreground">Quem serve nesta posição?</p>
-          </div>
-          <div className="min-h-0 flex-1 overflow-y-auto p-2">
-            {loadingList ? (
-              <p className="p-4 text-center text-sm text-muted-foreground">Carregando…</p>
-            ) : members && members.length > 0 ? (
-              <ul className="space-y-1">
-                {members.map((m) => (
-                  <li key={m.profileId}>
-                    <button
-                      type="button"
-                      disabled={pending || m.alreadyInEvent}
-                      onClick={() => onPick(m)}
-                      className="flex w-full items-center gap-3 rounded-xl p-2.5 text-left hover:bg-muted disabled:opacity-50"
-                    >
-                      <Avatar name={m.name} src={m.avatarUrl} />
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate font-medium">{m.name}</p>
-                        <p className={cn("text-xs", m.unavailable ? "font-medium text-warning" : "text-muted-foreground")}>
-                          {m.alreadyInEvent
-                            ? "Já escalado neste evento"
-                            : m.unavailable
-                              ? "Indisponível nesse dia"
-                              : m.knowsPosition
-                                ? "Faz esta função"
-                                : "Da equipe"}
-                        </p>
-                        <p className="text-[11px] text-muted-foreground">
-                          {m.lastServedISO ? `Serviu por último em ${fmtDayMonthShort(m.lastServedISO)}` : "Nunca serviu nesta função"}
-                        </p>
-                      </div>
-                      {m.unavailable && !m.alreadyInEvent ? (
-                        <CalendarOff className="size-4 text-warning" />
-                      ) : m.knowsPosition && !m.alreadyInEvent ? (
-                        <Check className="size-4 text-success" />
-                      ) : null}
-                    </button>
-                    {confirmId === m.profileId ? (
-                      <div className="mx-1 mb-1 rounded-xl bg-warning/10 p-2.5">
-                        <p className="mb-2 text-xs font-medium text-warning">
-                          {m.name} marcou indisponível nesse dia. Escalar mesmo assim?
-                        </p>
-                        <div className="flex gap-2">
-                          <Button size="sm" variant="destructive" onClick={() => escalar(m.profileId, true)} disabled={pending}>
-                            {pending ? "…" : "Escalar assim mesmo"}
-                          </Button>
-                          <Button size="sm" variant="ghost" onClick={() => setConfirmId(null)} disabled={pending}>
-                            Cancelar
-                          </Button>
-                        </div>
-                      </div>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="p-4 text-center text-sm text-muted-foreground">
-                Ninguém disponível nesta equipe ainda. Convide ou adicione pessoas à equipe.
-              </p>
-            )}
-          </div>
-          {error ? <p className="px-4 pb-2 text-sm text-destructive">{error}</p> : null}
-          <div className="border-t border-border p-3">
-            <Button variant="ghost" className="w-full" onClick={() => setOpen(false)} disabled={pending}>
-              Fechar
-            </Button>
-          </div>
+      <Modal open={open} onClose={() => !pending && setOpen(false)} sheet title={`Escalar · ${positionName}`}>
+        <p className="mt-1.5 text-[13.5px] text-muted-foreground">
+          Quem sabe fazer, com a última vez que serviu. Toque para convidar.
+        </p>
+        <div className="mt-3 space-y-2">
+          {loadingList ? (
+            <p className="p-3 text-center text-sm text-muted-foreground">Carregando…</p>
+          ) : members && members.length > 0 ? (
+            members.map((m) => (
+              <div key={m.profileId}>
+                <button
+                  type="button"
+                  disabled={pending || m.alreadyInEvent}
+                  onClick={() => onPick(m)}
+                  className={cn(
+                    "press-sm flex w-full items-center gap-3 rounded-[16px] border p-2.5 text-left disabled:cursor-default",
+                    m.unavailable ? "border-border bg-muted/40 opacity-60" : "border-border bg-card",
+                  )}
+                >
+                  <Avatar name={m.name} src={m.avatarUrl} className="size-10 shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-semibold">{m.name}</p>
+                    <p className={cn("truncate text-[12.5px]", m.unavailable ? "text-destructive" : "text-muted-foreground")}>
+                      {m.unavailable
+                        ? "Indisponível nesse dia"
+                        : m.lastServedISO
+                          ? `Serviu por último em ${fmtDayMonthShort(m.lastServedISO)}`
+                          : "Nunca serviu nesta função"}
+                    </p>
+                  </div>
+                  {m.alreadyInEvent ? (
+                    <span className="shrink-0 text-[11.5px] font-extrabold text-success">Já na escala</span>
+                  ) : m.unavailable ? (
+                    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-destructive/10 px-2.5 py-1 text-[11.5px] font-extrabold text-destructive">
+                      <CalendarOff className="size-3.5" /> Indisponível
+                    </span>
+                  ) : (
+                    <span className="grid size-8 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground">
+                      {m.knowsPosition ? <Check className="size-4" strokeWidth={2.6} /> : <Plus className="size-4" strokeWidth={2.6} />}
+                    </span>
+                  )}
+                </button>
+                {confirmId === m.profileId ? (
+                  <div className="mx-1 mt-1 rounded-[14px] bg-warning/10 p-3">
+                    <p className="mb-2 text-xs font-semibold text-warning">
+                      {m.name} marcou indisponível nesse dia. Escalar mesmo assim?
+                    </p>
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="destructive" onClick={() => escalar(m.profileId, true)} disabled={pending}>
+                        {pending ? "…" : "Escalar assim mesmo"}
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => setConfirmId(null)} disabled={pending}>
+                        Cancelar
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            ))
+          ) : (
+            <p className="p-3 text-center text-sm text-muted-foreground">
+              Ninguém disponível nesta equipe ainda. Convide ou adicione pessoas à equipe.
+            </p>
+          )}
         </div>
+        {error ? <p className="mt-2 text-sm text-destructive">{error}</p> : null}
+        <button
+          onClick={() => setOpen(false)}
+          disabled={pending}
+          className="mt-3 h-11 w-full text-[14.5px] font-bold text-muted-foreground"
+        >
+          Fechar
+        </button>
       </Modal>
     </>
   );

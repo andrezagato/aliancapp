@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400;0,500;0,700;0,800;1,400;1,500&family=Alegreya+Sans:ital,wght@0,400;0,500;0,700;0,800&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  @keyframes sv-fadeup{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+  @keyframes sv-flame{to{transform:rotate(360deg)}}
+  @keyframes sv-pop{0%{transform:scale(1)}38%{transform:scale(1.045)}100%{transform:scale(1)}}
+  @keyframes sv-draw{to{stroke-dashoffset:0}}
+  @keyframes sv-sheet{from{transform:translateY(102%)}to{transform:translateY(0)}}
+  @keyframes sv-scrim{from{opacity:0}to{opacity:1}}
+  @keyframes sv-toast{0%{opacity:0;transform:translate(-50%,14px)}12%{opacity:1;transform:translate(-50%,0)}88%{opacity:1;transform:translate(-50%,0)}100%{opacity:0;transform:translate(-50%,-6px)}}
+  @keyframes sv-glow{0%,100%{opacity:.55}50%{opacity:.9}}
+  @keyframes sv-rowin{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:none}}
+</style>
+</helmet>
+
+<div style="min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:28px;font-family:'Alegreya Sans',system-ui,sans-serif;background:radial-gradient(1100px 620px at 82% -12%,#FCEFC9 0%,transparent 55%),radial-gradient(820px 500px at -12% 112%,#F3E0DE 0%,transparent 52%),#F1E7CE;">
+  <div style="width:402px;height:872px;border-radius:52px;padding:11px;background:linear-gradient(160deg,#2A1418,#43121C);box-shadow:0 2px 6px rgba(85,16,30,.18),0 40px 90px rgba(58,42,40,.34),inset 0 0 0 1.5px rgba(255,240,220,.08);flex:none;">
+    <div style="position:relative;width:100%;height:100%;border-radius:42px;overflow:hidden;background:#FBF6E9;isolation:isolate;">
+
+      <div style="position:absolute;top:0;left:0;right:0;z-index:60;display:flex;align-items:center;justify-content:space-between;padding:14px 26px 0;font-weight:700;font-size:14px;color:#3A2A28;pointer-events:none;">
+        <span style="letter-spacing:.02em;">18:02</span>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <svg width="17" height="12" viewBox="0 0 17 12" fill="#3A2A28"><rect x="0" y="7" width="3" height="5" rx="1"/><rect x="4.5" y="4.5" width="3" height="7.5" rx="1"/><rect x="9" y="2" width="3" height="10" rx="1"/><rect x="13.5" y="0" width="3" height="12" rx="1"/></svg>
+          <svg width="16" height="12" viewBox="0 0 16 12" fill="none" stroke="#3A2A28" stroke-width="1.6"><path d="M1 4.2C4.8 1 11.2 1 15 4.2M3.4 6.8c3-2.4 6.2-2.4 9.2 0M6 9.3c1.4-1 2.6-1 4 0" stroke-linecap="round"/></svg>
+          <svg width="26" height="13" viewBox="0 0 26 13" fill="none"><rect x="1" y="1" width="21" height="11" rx="3" stroke="#3A2A28" stroke-opacity=".5" stroke-width="1.2"/><rect x="3" y="3" width="15.5" height="7" rx="1.6" fill="#3A2A28"/><rect x="23.4" y="4" width="1.8" height="5" rx=".9" fill="#3A2A28" fill-opacity=".5"/></svg>
+        </div>
+      </div>
+
+      <!-- reactive header -->
+      <div ref="{{ setHeaderEl }}" style="position:absolute;top:0;left:0;right:0;z-index:50;padding-top:42px;">
+        <div class="sv-hbg" style="position:absolute;inset:0;background:rgba(251,246,233,.82);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid rgba(234,223,199,.9);opacity:0;transition:opacity .2s ease;"></div>
+        <div class="sv-hcondensed" style="position:absolute;left:0;right:0;top:48px;text-align:center;font-family:'Alegreya';font-weight:700;font-size:17px;color:#3A2A28;opacity:0;transition:opacity .2s ease;pointer-events:none;">{{ headerTitle }}</div>
+        <div class="sv-hbig" style="position:relative;display:flex;align-items:center;gap:12px;padding:8px 20px 14px;transform-origin:left top;">
+          <div style="min-width:0;flex:1;">
+            <div style="font-family:'Alegreya';font-weight:800;font-size:26px;line-height:1.04;color:#3A2A28;letter-spacing:-.01em;">{{ headerTitle }}</div>
+            <sc-if value="{{ headerSub }}" hint-placeholder-val="{{ true }}"><div style="font-size:13.5px;color:#8A7A6B;margin-top:2px;">{{ headerSub }}</div></sc-if>
+          </div>
+          <button onClick="{{ openNotif }}" style="position:relative;width:42px;height:42px;border:0;border-radius:999px;background:rgba(110,17,34,.06);display:grid;place-items:center;color:#3A2A28;cursor:pointer;transition:transform .12s;" onpointerdown="this.style.transform='scale(.9)'" onpointerup="this.style.transform=''" onpointerleave="this.style.transform=''">
+            <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+            <sc-if value="{{ hasUnread }}" hint-placeholder-val="{{ true }}"><span style="position:absolute;top:6px;right:6px;min-width:17px;height:17px;padding:0 4px;background:#6E1122;color:#fff;border-radius:999px;font-size:10px;font-weight:800;display:grid;place-items:center;border:2px solid #FBF6E9;">{{ unread }}</span></sc-if>
+          </button>
+          <div style="width:42px;height:42px;border-radius:999px;background:#F1D278;color:#6E1122;display:grid;place-items:center;font-family:'Alegreya';font-weight:800;font-size:15px;border:1px solid rgba(234,223,199,.9);">{{ initials }}</div>
+        </div>
+      </div>
+
+      <!-- scroll body -->
+      <div ref="{{ setScrollEl }}" style="position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;">
+        <div ref="{{ setPullEl }}" style="height:0;opacity:0;display:flex;align-items:flex-end;justify-content:center;overflow:hidden;">
+          <div style="display:flex;align-items:center;gap:8px;padding-bottom:8px;color:#6E1122;font-size:12.5px;font-weight:700;">
+            <span class="sv-flame" style="display:grid;place-items:center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6E1122" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg></span>
+            <span class="sv-pulltxt">Solte para atualizar</span>
+          </div>
+        </div>
+
+        <div style="padding:112px 16px 108px;display:flex;flex-direction:column;gap:16px;">
+
+          <!-- ============ HOME ============ -->
+          <sc-if value="{{ tabHome }}" hint-placeholder-val="{{ true }}">
+            <!-- VOLUNTÁRIO -->
+            <sc-if value="{{ isVolunteer }}" hint-placeholder-val="{{ true }}">
+              <sc-if value="{{ hasToday }}" hint-placeholder-val="{{ true }}">
+                <div style="animation:sv-fadeup .5s .02s both;border-radius:22px;padding:16px 16px 15px;background:linear-gradient(150deg,#FBEFD0,#F6E2B4);border:1px solid #EAD39A;box-shadow:0 1px 2px rgba(58,42,40,.05),0 12px 30px rgba(201,138,44,.14);">
+                  <div style="display:flex;align-items:center;gap:8px;">
+                    <span style="display:inline-flex;align-items:center;gap:6px;background:#E7B84E;color:#4a350a;font-weight:800;font-size:11px;letter-spacing:.08em;text-transform:uppercase;padding:4px 10px;border-radius:999px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>É hoje</span>
+                    <span style="font-size:12.5px;color:#7a5a1c;font-weight:600;">{{ today.time }} · {{ today.location }}</span>
+                  </div>
+                  <div style="margin-top:9px;font-family:'Alegreya';font-weight:700;font-size:20px;color:#3A2A28;line-height:1.12;">{{ today.event }}</div>
+                  <div style="font-size:13.5px;color:#7a5a1c;margin-top:1px;">{{ today.team }} · {{ today.position }}</div>
+                  <div style="margin-top:13px;">
+                    <sc-if value="{{ today.checkedIn }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;justify-content:center;gap:8px;height:46px;border-radius:14px;background:rgba(63,125,82,.14);color:#2f6440;font-weight:800;font-size:15px;animation:sv-pop .5s both;"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#3F7D52" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path stroke-dasharray="24" stroke-dashoffset="24" style="animation:sv-draw .45s .05s ease forwards" d="M20 6 9 17l-5-5"/></svg>Presente · {{ today.checkinTime }}</div></sc-if>
+                    <sc-if value="{{ todayNotChecked }}" hint-placeholder-val="{{ true }}"><button onClick="{{ today.checkin }}" style="width:100%;height:46px;border:0;border-radius:14px;background:#6E1122;color:#FDF3E4;font-weight:800;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:transform .12s;" onpointerdown="this.style.transform='scale(.975)'" onpointerup="this.style.transform=''" onpointerleave="this.style.transform=''"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>Fazer check-in</button></sc-if>
+                  </div>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ hero }}" hint-placeholder-val="{{ true }}">
+                <div style="animation:sv-fadeup .55s .06s both;position:relative;overflow:hidden;border-radius:26px;padding:20px;color:#FBF1DE;background:linear-gradient(155deg,#7A1327 0%,#55101E 100%);box-shadow:0 2px 6px rgba(85,16,30,.22),0 22px 48px rgba(85,16,30,.26);">
+                  <div style="position:absolute;right:-46px;top:-46px;width:180px;height:180px;border-radius:999px;background:radial-gradient(circle,rgba(231,184,78,.42),transparent 68%);animation:sv-glow 5s ease-in-out infinite;"></div>
+                  <div style="position:relative;">
+                    <div style="font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#F1D278;">Sua próxima escala</div>
+                    <div style="font-family:'Alegreya';font-weight:800;font-size:29px;line-height:1.04;margin-top:4px;color:#fff;">{{ hero.event }}</div>
+                    <div style="font-size:14px;color:#EAD7C6;margin-top:4px;">{{ hero.whenLong }}</div>
+                    <div style="display:flex;flex-wrap:wrap;gap:7px;margin-top:13px;">
+                      <span style="display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.13);padding:5px 11px;border-radius:999px;font-size:12.5px;font-weight:600;"><span style="width:8px;height:8px;border-radius:999px;background:#F1D278;"></span>{{ hero.team }}</span>
+                      <span style="background:rgba(255,255,255,.13);padding:5px 11px;border-radius:999px;font-size:12.5px;font-weight:600;">{{ hero.position }}</span>
+                    </div>
+                    <sc-if value="{{ hero.pending }}" hint-placeholder-val="{{ true }}">
+                      <div style="display:flex;gap:10px;margin-top:17px;">
+                        <button onClick="{{ hero.confirm }}" style="flex:1;height:50px;border:0;border-radius:15px;background:#E7B84E;color:#4a350a;font-weight:800;font-size:15.5px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 8px 20px rgba(231,184,78,.32);transition:transform .12s;" onpointerdown="this.style.transform='scale(.97)'" onpointerup="this.style.transform=''" onpointerleave="this.style.transform=''"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Confirmar</button>
+                        <button onClick="{{ hero.cancel }}" style="width:112px;height:50px;border:1px solid rgba(255,255,255,.28);border-radius:15px;background:rgba(255,255,255,.06);color:#FBF1DE;font-weight:700;font-size:14.5px;cursor:pointer;transition:transform .12s;" onpointerdown="this.style.transform='scale(.97)'" onpointerup="this.style.transform=''" onpointerleave="this.style.transform=''">Não posso</button>
+                      </div>
+                    </sc-if>
+                    <sc-if value="{{ hero.done }}" hint-placeholder-val="{{ false }}">
+                      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:17px;background:rgba(255,255,255,.1);border-radius:15px;padding:13px 16px;animation:sv-pop .5s both;">
+                        <span style="display:inline-flex;align-items:center;gap:9px;font-weight:800;font-size:15px;color:#fff;"><span style="width:26px;height:26px;border-radius:999px;background:#E7B84E;display:grid;place-items:center;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#4a350a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path stroke-dasharray="24" stroke-dashoffset="24" style="animation:sv-draw .4s .05s ease forwards" d="M20 6 9 17l-5-5"/></svg></span>{{ hero.doneLabel }}</span>
+                        <button onClick="{{ hero.open }}" style="border:0;background:transparent;color:#F1D278;font-weight:700;font-size:13.5px;cursor:pointer;">Ver escala ›</button>
+                      </div>
+                    </sc-if>
+                  </div>
+                </div>
+              </sc-if>
+
+              <div style="animation:sv-fadeup .6s .1s both;">
+                <div style="display:flex;align-items:baseline;justify-content:space-between;padding:2px 4px 8px;">
+                  <h3 style="margin:0;font-family:'Alegreya';font-weight:700;font-size:18px;color:#3A2A28;">Suas escalas</h3>
+                  <span style="font-size:12px;color:#9a8b7c;font-weight:600;">Arraste p/ responder</span>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:11px;">
+                  <sc-for list="{{ listCards }}" as="c" hint-placeholder-count="3">
+                    <div data-swipe="{{ c.id }}" style="position:relative;border-radius:20px;overflow:hidden;touch-action:pan-y;">
+                      <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:space-between;">
+                        <div style="flex:1;height:100%;display:flex;align-items:center;gap:8px;padding-left:22px;background:#3F7D52;color:#fff;font-weight:800;font-size:14px;opacity:calc(var(--rl,0));"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Confirmar</div>
+                        <div style="flex:1;height:100%;display:flex;align-items:center;justify-content:flex-end;gap:8px;padding-right:22px;background:#C0392B;color:#fff;font-weight:800;font-size:14px;opacity:calc(var(--rr,0));">Não posso<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg></div>
+                      </div>
+                      <div class="card-fg" style="position:relative;background:#FFFDF8;border:1px solid #EADFC7;border-radius:20px;padding:13px 14px;display:flex;align-items:center;gap:13px;box-shadow:0 1px 2px rgba(58,42,40,.04),0 8px 22px rgba(58,42,40,.06);will-change:transform;">
+                        <button onClick="{{ c.open }}" style="all:unset;cursor:pointer;display:flex;align-items:center;gap:13px;flex:1;min-width:0;">
+                          <div style="width:50px;flex:none;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:13px;background:#F6EED8;padding:7px 0;">
+                            <span style="font-size:10.5px;font-weight:800;letter-spacing:.06em;color:#9a8b7c;">{{ c.weekday }}</span>
+                            <span style="font-family:'Alegreya';font-weight:800;font-size:21px;line-height:.95;color:#6E1122;">{{ c.day }}</span>
+                            <span style="font-size:9.5px;color:#9a8b7c;">{{ c.time }}</span>
+                          </div>
+                          <div style="min-width:0;flex:1;">
+                            <div style="font-weight:700;font-size:15.5px;color:#3A2A28;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ c.event }}</div>
+                            <div style="display:flex;align-items:center;gap:6px;font-size:13px;color:#8A7A6B;margin-top:2px;"><span style="width:8px;height:8px;border-radius:999px;background:{{ c.color }};flex:none;"></span>{{ c.team }} · {{ c.position }}</div>
+                          </div>
+                        </button>
+                        <span style="flex:none;display:inline-flex;align-items:center;gap:5px;font-weight:800;font-size:12px;padding:5px 10px;border-radius:999px;background:{{ c.badgeBg }};color:{{ c.badgeFg }};">{{ c.badgeLabel }}</span>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-if>
+
+            <!-- LÍDER -->
+            <sc-if value="{{ isLeader }}" hint-placeholder-val="{{ false }}">
+              <div style="animation:sv-fadeup .5s both;display:flex;gap:10px;">
+                <sc-for list="{{ stats }}" as="s" hint-placeholder-count="3">
+                  <div style="flex:1;border-radius:18px;background:#FFFDF8;border:1px solid #EADFC7;padding:13px 12px;text-align:center;box-shadow:0 1px 2px rgba(58,42,40,.04),0 8px 20px rgba(58,42,40,.05);">
+                    <span style="display:inline-grid;place-items:center;width:34px;height:34px;border-radius:999px;background:{{ s.bg }};color:{{ s.fg }};margin-bottom:5px;" innerHTML="{{ s.icon }}"></span>
+                    <div style="font-family:'Alegreya';font-weight:800;font-size:24px;line-height:1;color:#3A2A28;">{{ s.value }}</div>
+                    <div style="font-size:11px;color:#8A7A6B;margin-top:3px;line-height:1.15;">{{ s.label }}</div>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="animation:sv-fadeup .55s .05s both;position:relative;overflow:hidden;border-radius:26px;padding:20px;color:#FBF1DE;background:linear-gradient(155deg,#7A1327 0%,#55101E 100%);box-shadow:0 22px 48px rgba(85,16,30,.26);">
+                <div style="position:absolute;right:-46px;top:-46px;width:180px;height:180px;border-radius:999px;background:radial-gradient(circle,rgba(231,184,78,.42),transparent 68%);animation:sv-glow 5s ease-in-out infinite;"></div>
+                <div style="position:relative;">
+                  <div style="font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#F1D278;">Próximo culto</div>
+                  <div style="font-family:'Alegreya';font-weight:800;font-size:28px;line-height:1.04;margin-top:4px;color:#fff;">{{ leadEvent.event }}</div>
+                  <div style="font-size:14px;color:#EAD7C6;margin-top:4px;">{{ leadEvent.whenLong }}</div>
+                  <div style="display:flex;align-items:center;gap:13px;margin-top:16px;">
+                    <div style="width:56px;height:56px;border-radius:999px;flex:none;display:grid;place-items:center;background:conic-gradient(#E7B84E {{ leadPct }}%, rgba(255,255,255,.18) 0);"><span style="width:42px;height:42px;border-radius:999px;background:#55101E;display:grid;place-items:center;font-weight:800;font-size:12.5px;color:#fff;">{{ leadCovLabel }}</span></div>
+                    <div style="font-size:12.5px;line-height:1.3;color:#EAD7C6;">confirmados<br/>na sua equipe</div>
+                    <button onClick="{{ openLead }}" style="margin-left:auto;height:42px;padding:0 18px;border:0;border-radius:13px;background:#E7B84E;color:#4a350a;font-weight:800;font-size:14px;cursor:pointer;box-shadow:0 8px 20px rgba(231,184,78,.32);transition:transform .12s;" onpointerdown="this.style.transform='scale(.96)'" onpointerup="this.style.transform=''" onpointerleave="this.style.transform=''">Abrir escala</button>
+                  </div>
+                </div>
+              </div>
+              <div style="animation:sv-fadeup .6s .1s both;">
+                <h3 style="margin:0 0 9px;padding:0 4px;font-family:'Alegreya';font-weight:700;font-size:18px;color:#3A2A28;">Precisam de escala</h3>
+                <div style="border-radius:20px;background:#FFFDF8;border:1px solid #EADFC7;overflow:hidden;box-shadow:0 8px 22px rgba(58,42,40,.06);">
+                  <button onClick="{{ openLead }}" style="all:unset;cursor:pointer;display:flex;align-items:center;gap:13px;padding:15px 16px;width:100%;box-sizing:border-box;transition:background .15s;" onpointerdown="this.style.background='rgba(110,17,34,.04)'" onpointerup="this.style.background=''" onpointerleave="this.style.background=''">
+                    <span style="width:40px;height:40px;border-radius:999px;background:rgba(192,57,43,.12);color:#C0392B;display:grid;place-items:center;flex:none;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg></span>
+                    <div style="min-width:0;flex:1;"><div style="font-weight:700;font-size:15.5px;color:#3A2A28;">{{ leadEvent.event }}</div><div style="font-size:13px;color:#8A7A6B;">{{ leadEvent.whenLong }}</div></div>
+                    <span style="flex:none;font-weight:800;font-size:12px;padding:5px 11px;border-radius:999px;background:rgba(192,57,43,.12);color:#a33125;">{{ leadOpen }} vagas</span>
+                  </button>
+                </div>
+              </div>
+            </sc-if>
+
+            <!-- ADMIN -->
+            <sc-if value="{{ isAdmin }}" hint-placeholder-val="{{ false }}">
+              <div style="animation:sv-fadeup .5s both;display:flex;gap:10px;">
+                <sc-for list="{{ adminStats }}" as="s" hint-placeholder-count="3">
+                  <div style="flex:1;border-radius:18px;background:#FFFDF8;border:1px solid #EADFC7;padding:13px 12px;text-align:center;box-shadow:0 1px 2px rgba(58,42,40,.04),0 8px 20px rgba(58,42,40,.05);">
+                    <span style="display:inline-grid;place-items:center;width:34px;height:34px;border-radius:999px;background:{{ s.bg }};color:{{ s.fg }};margin-bottom:5px;" innerHTML="{{ s.icon }}"></span>
+                    <div style="font-family:'Alegreya';font-weight:800;font-size:24px;line-height:1;color:#3A2A28;">{{ s.value }}</div>
+                    <div style="font-size:11px;color:#8A7A6B;margin-top:3px;line-height:1.15;">{{ s.label }}</div>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="animation:sv-fadeup .52s .04s both;display:flex;gap:10px;">
+                <button onClick="{{ openCreate }}" style="flex:1;height:48px;border:0;border-radius:14px;background:#6E1122;color:#FDF3E4;font-weight:800;font-size:14.5px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:transform .12s;" onpointerdown="this.style.transform='scale(.97)'" onpointerup="this.style.transform=''" onpointerleave="this.style.transform=''"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Criar evento</button>
+                <button onClick="{{ invite }}" style="flex:1;height:48px;border:1px solid #E3D3B4;border-radius:14px;background:#FFFDF8;color:#6E1122;font-weight:800;font-size:14.5px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:transform .12s;" onpointerdown="this.style.transform='scale(.97)'" onpointerup="this.style.transform=''" onpointerleave="this.style.transform=''"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg>Convidar</button>
+              </div>
+              <div style="animation:sv-fadeup .56s .08s both;position:relative;overflow:hidden;border-radius:26px;padding:20px;color:#FBF1DE;background:linear-gradient(155deg,#7A1327 0%,#55101E 100%);box-shadow:0 22px 48px rgba(85,16,30,.26);">
+                <div style="position:absolute;right:-46px;top:-46px;width:180px;height:180px;border-radius:999px;background:radial-gradient(circle,rgba(231,184,78,.42),transparent 68%);animation:sv-glow 5s ease-in-out infinite;"></div>
+                <div style="position:relative;">
+                  <div style="font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#F1D278;">Próximo culto</div>
+                  <div style="font-family:'Alegreya';font-weight:800;font-size:28px;line-height:1.04;margin-top:4px;color:#fff;">Culto de Domingo</div>
+                  <div style="font-size:14px;color:#EAD7C6;margin-top:4px;">domingo, 19 de julho · 18h00 · Templo</div>
+                  <div style="display:flex;flex-wrap:wrap;gap:7px;margin-top:14px;">
+                    <sc-for list="{{ adminCoverage }}" as="t" hint-placeholder-count="4"><span style="display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.12);padding:5px 11px;border-radius:999px;font-size:12.5px;font-weight:600;"><span style="width:8px;height:8px;border-radius:999px;background:{{ t.dot }};"></span>{{ t.label }}</span></sc-for>
+                  </div>
+                </div>
+              </div>
+              <div style="animation:sv-fadeup .6s .12s both;">
+                <h3 style="margin:0 0 9px;padding:0 4px;font-family:'Alegreya';font-weight:700;font-size:18px;color:#3A2A28;">Aguardando aprovação</h3>
+                <div style="border-radius:20px;background:#FFFDF8;border:1px solid #EADFC7;overflow:hidden;box-shadow:0 8px 22px rgba(58,42,40,.06);">
+                  <sc-for list="{{ joinReqs }}" as="j" hint-placeholder-count="2">
+                    <div style="display:flex;align-items:center;gap:12px;padding:13px 15px;border-bottom:1px solid #F1E8D2;animation:sv-rowin .3s both;">
+                      <div style="width:42px;height:42px;border-radius:999px;background:#F1D278;color:#6E1122;display:grid;place-items:center;font-family:'Alegreya';font-weight:800;font-size:15px;flex:none;">{{ j.initials }}</div>
+                      <div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:15px;color:#3A2A28;">{{ j.name }}</div><div style="font-size:12.5px;color:#8A7A6B;">{{ j.email }}</div></div>
+                      <button onClick="{{ j.approve }}" style="flex:none;height:36px;padding:0 14px;border:0;border-radius:11px;background:#3F7D52;color:#fff;font-weight:800;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px;transition:transform .12s;" onpointerdown="this.style.transform='scale(.94)'" onpointerup="this.style.transform=''" onpointerleave="this.style.transform=''"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Aprovar</button>
+                      <button onClick="{{ j.reject }}" style="flex:none;width:36px;height:36px;border:1px solid #EADFC7;border-radius:11px;background:transparent;color:#b6a891;cursor:pointer;display:grid;place-items:center;transition:color .15s,border-color .15s;" onpointerdown="this.style.color='#C0392B';this.style.borderColor='#E3C9C4'" onpointerup="this.style.color='#b6a891';this.style.borderColor='#EADFC7'" onpointerleave="this.style.color='#b6a891';this.style.borderColor='#EADFC7'"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+                    </div>
+                  </sc-for>
+                  <sc-if value="{{ noJoinReqs }}" hint-placeholder-val="{{ false }}">
+                    <div style="padding:26px 20px;text-align:center;">
+                      <div style="width:52px;height:52px;border-radius:999px;background:rgba(63,125,82,.12);color:#3F7D52;display:grid;place-items:center;margin:0 auto 10px;"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+                      <div style="font-family:'Alegreya';font-weight:700;font-size:16px;color:#3A2A28;">Tudo em dia</div>
+                      <div style="font-size:13px;color:#8A7A6B;margin-top:2px;">Nenhuma solicitação pendente.</div>
+                    </div>
+                  </sc-if>
+                </div>
+              </div>
+            </sc-if>
+          </sc-if>
+
+          <!-- ============ ESCALAS ============ -->
+          <sc-if value="{{ tabEscalas }}" hint-placeholder-val="{{ false }}">
+            <sc-if value="{{ isVolunteer }}" hint-placeholder-val="{{ true }}">
+              <div style="animation:sv-fadeup .45s both;font-size:13px;color:#8A7A6B;padding:0 4px;">Julho de 2026 · <b style="color:#6E1122;">{{ escCount }}</b> escalas</div>
+              <div style="display:flex;flex-direction:column;gap:11px;">
+                <sc-for list="{{ escalaCards }}" as="c" hint-placeholder-count="4">
+                  <button onClick="{{ c.open }}" style="all:unset;cursor:pointer;animation:sv-fadeup .5s both;">
+                    <div style="background:#FFFDF8;border:1px solid #EADFC7;border-radius:20px;padding:13px 14px;display:flex;align-items:center;gap:13px;box-shadow:0 1px 2px rgba(58,42,40,.04),0 8px 22px rgba(58,42,40,.06);transition:transform .12s;" onpointerdown="this.style.transform='scale(.985)'" onpointerup="this.style.transform=''" onpointerleave="this.style.transform=''">
+                      <div style="width:50px;flex:none;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:13px;background:#F6EED8;padding:7px 0;"><span style="font-size:10.5px;font-weight:800;letter-spacing:.06em;color:#9a8b7c;">{{ c.weekday }}</span><span style="font-family:'Alegreya';font-weight:800;font-size:21px;line-height:.95;color:#6E1122;">{{ c.day }}</span><span style="font-size:9.5px;color:#9a8b7c;">{{ c.time }}</span></div>
+                      <div style="min-width:0;flex:1;"><div style="font-weight:700;font-size:15.5px;color:#3A2A28;">{{ c.event }}</div><div style="display:flex;align-items:center;gap:6px;font-size:13px;color:#8A7A6B;margin-top:2px;"><span style="width:8px;height:8px;border-radius:999px;background:{{ c.color }};"></span>{{ c.team }} · {{ c.position }}</div></div>
+                      <span style="flex:none;font-weight:800;font-size:12px;padding:5px 10px;border-radius:999px;background:{{ c.badgeBg }};color:{{ c.badgeFg }};">{{ c.badgeLabel }}</span>
+                    </div>
+                  </button>
+                </sc-for>
+              </div>
+            </sc-if>
+            <sc-if value="{{ isManager }}" hint-placeholder-val="{{ false }}">
+              <div style="animation:sv-fadeup .45s both;font-size:13px;color:#8A7A6B;padding:0 4px;">Próximos eventos · toque para gerir a escala</div>
+              <div style="display:flex;flex-direction:column;gap:12px;">
+                <sc-for list="{{ eventList }}" as="e" hint-placeholder-count="3">
+                  <button onClick="{{ openLead }}" style="all:unset;cursor:pointer;animation:sv-fadeup .5s both;">
+                    <div style="background:#FFFDF8;border:1px solid #EADFC7;border-radius:20px;padding:15px 16px;box-shadow:0 1px 2px rgba(58,42,40,.04),0 8px 22px rgba(58,42,40,.06);transition:transform .12s;" onpointerdown="this.style.transform='scale(.99)'" onpointerup="this.style.transform=''" onpointerleave="this.style.transform=''">
+                      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;"><div style="font-family:'Alegreya';font-weight:700;font-size:17px;color:#3A2A28;">{{ e.title }}</div><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#c3b39d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></div>
+                      <div style="font-size:13px;color:#8A7A6B;margin-top:1px;">{{ e.when }}</div>
+                      <div style="display:flex;flex-wrap:wrap;gap:7px;margin-top:11px;"><sc-for list="{{ e.teams }}" as="t" hint-placeholder-count="3"><span style="display:inline-flex;align-items:center;gap:6px;background:{{ t.bg }};color:{{ t.fg }};padding:5px 10px;border-radius:999px;font-size:12px;font-weight:800;"><span style="width:8px;height:8px;border-radius:999px;background:{{ t.fg }};"></span>{{ t.label }}</span></sc-for></div>
+                    </div>
+                  </button>
+                </sc-for>
+              </div>
+            </sc-if>
+          </sc-if>
+
+          <!-- ============ PESSOAS ============ -->
+          <sc-if value="{{ tabPessoas }}" hint-placeholder-val="{{ false }}">
+            <sc-if value="{{ isAdmin }}" hint-placeholder-val="{{ false }}">
+              <button onClick="{{ invite }}" style="all:unset;cursor:pointer;animation:sv-fadeup .45s both;display:flex;align-items:center;justify-content:center;gap:8px;height:48px;border-radius:14px;background:#6E1122;color:#FDF3E4;font-weight:800;font-size:14.5px;transition:transform .12s;" onpointerdown="this.style.transform='scale(.98)'" onpointerup="this.style.transform=''" onpointerleave="this.style.transform=''"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg>Convidar pessoa</button>
+              <sc-if value="{{ hasJoinReqs }}" hint-placeholder-val="{{ true }}">
+                <div style="animation:sv-fadeup .5s both;">
+                  <h3 style="margin:0 0 9px;padding:0 4px;font-family:'Alegreya';font-weight:700;font-size:16px;color:#6E1122;">Pendentes de aprovação</h3>
+                  <div style="border-radius:20px;background:#FFFDF8;border:1px solid #EADFC7;overflow:hidden;box-shadow:0 8px 22px rgba(58,42,40,.06);">
+                    <sc-for list="{{ joinReqs }}" as="j" hint-placeholder-count="2">
+                      <div style="display:flex;align-items:center;gap:12px;padding:12px 15px;border-bottom:1px solid #F1E8D2;">
+                        <div style="width:40px;height:40px;border-radius:999px;background:#F1D278;color:#6E1122;display:grid;place-items:center;font-family:'Alegreya';font-weight:800;font-size:14px;flex:none;">{{ j.initials }}</div>
+                        <div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:14.5px;color:#3A2A28;">{{ j.name }}</div><div style="font-size:12px;color:#8A7A6B;">{{ j.email }}</div></div>
+                        <button onClick="{{ j.approve }}" style="flex:none;height:34px;padding:0 12px;border:0;border-radius:10px;background:#3F7D52;color:#fff;font-weight:800;font-size:12.5px;cursor:pointer;transition:transform .12s;" onpointerdown="this.style.transform='scale(.94)'" onpointerup="this.style.transform=''" onpointerleave="this.style.transform=''">Aprovar</button>
+                        <button onClick="{{ j.reject }}" style="flex:none;width:34px;height:34px;border:1px solid #EADFC7;border-radius:10px;background:transparent;color:#b6a891;cursor:pointer;display:grid;place-items:center;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+              </sc-if>
+            </sc-if>
+            <div style="animation:sv-fadeup .55s .05s both;">
+              <h3 style="margin:0 0 9px;padding:0 4px;font-family:'Alegreya';font-weight:700;font-size:16px;color:#3A2A28;">{{ peopleTitle }}</h3>
+              <div style="border-radius:20px;background:#FFFDF8;border:1px solid #EADFC7;overflow:hidden;box-shadow:0 8px 22px rgba(58,42,40,.06);">
+                <sc-for list="{{ members }}" as="m" hint-placeholder-count="6">
+                  <div style="display:flex;align-items:center;gap:12px;padding:12px 15px;border-bottom:1px solid #F1E8D2;">
+                    <div style="width:42px;height:42px;border-radius:999px;background:#F1D278;color:#6E1122;display:grid;place-items:center;font-family:'Alegreya';font-weight:800;font-size:15px;flex:none;">{{ m.initials }}</div>
+                    <div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:15px;color:#3A2A28;">{{ m.name }}</div><div style="font-size:12.5px;color:#8A7A6B;">{{ m.teams }}</div></div>
+                    <sc-if value="{{ m.isLeader }}" hint-placeholder-val="{{ false }}"><span style="flex:none;font-weight:800;font-size:11px;padding:4px 9px;border-radius:999px;background:rgba(110,17,34,.09);color:#6E1122;">Líder</span></sc-if>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+
+          <!-- ============ LIVRE? (disponibilidade) ============ -->
+          <sc-if value="{{ tabLivre }}" hint-placeholder-val="{{ false }}">
+            <div style="animation:sv-fadeup .45s both;border-radius:20px;background:linear-gradient(150deg,#FBEFD0,#F6E2B4);border:1px solid #EAD39A;padding:16px 17px;box-shadow:0 12px 30px rgba(201,138,44,.12);">
+              <div style="font-family:'Alegreya';font-weight:800;font-size:19px;color:#3A2A28;">Quando você não pode</div>
+              <div style="font-size:13.5px;color:#7a5a1c;margin-top:3px;line-height:1.4;">Toque nos dias que você não estará disponível. Seu líder vê isso antes de escalar.</div>
+            </div>
+            <div style="animation:sv-fadeup .5s .04s both;border-radius:22px;background:#FFFDF8;border:1px solid #EADFC7;padding:16px 15px;box-shadow:0 8px 22px rgba(58,42,40,.06);">
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:0 4px 12px;"><span style="font-family:'Alegreya';font-weight:700;font-size:17px;color:#3A2A28;">Julho 2026</span><span style="font-size:12px;font-weight:700;color:#9a8b7c;">{{ blockedCount }} dias bloqueados</span></div>
+              <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:5px;text-align:center;font-size:11px;font-weight:800;color:#b6a891;padding-bottom:6px;"><span>D</span><span>S</span><span>T</span><span>Q</span><span>Q</span><span>S</span><span>S</span></div>
+              <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:5px;">
+                <sc-for list="{{ days }}" as="d" hint-placeholder-count="34">
+                  <button onClick="{{ d.toggle }}" style="aspect-ratio:1;border:0;border-radius:11px;cursor:{{ d.cursor }};background:{{ d.bg }};color:{{ d.fg }};font-weight:700;font-size:14px;display:grid;place-items:center;position:relative;transition:transform .1s,background .15s;font-family:'Alegreya Sans';" onpointerdown="{{ d.down }}" onpointerup="this.style.transform=''" onpointerleave="this.style.transform=''">{{ d.n }}</button>
+                </sc-for>
+              </div>
+              <div style="display:flex;gap:16px;margin-top:14px;padding:0 4px;font-size:12px;color:#8A7A6B;"><span style="display:inline-flex;align-items:center;gap:6px;"><span style="width:12px;height:12px;border-radius:5px;background:#C0392B;"></span>Não posso</span><span style="display:inline-flex;align-items:center;gap:6px;"><span style="width:12px;height:12px;border-radius:5px;background:#F6EED8;border:1px solid #EADFC7;"></span>Livre</span></div>
+            </div>
+            <button onClick="{{ saveAvail }}" style="animation:sv-fadeup .55s .08s both;height:50px;border:0;border-radius:15px;background:#6E1122;color:#FDF3E4;font-weight:800;font-size:15px;cursor:pointer;transition:transform .12s;" onpointerdown="this.style.transform='scale(.98)'" onpointerup="this.style.transform=''" onpointerleave="this.style.transform=''">Salvar disponibilidade</button>
+          </sc-if>
+
+          <!-- ============ PERFIL ============ -->
+          <sc-if value="{{ tabPerfil }}" hint-placeholder-val="{{ false }}">
+            <div style="animation:sv-fadeup .45s both;display:flex;flex-direction:column;align-items:center;text-align:center;border-radius:24px;background:linear-gradient(155deg,#7A1327,#55101E);padding:26px 20px;color:#FBF1DE;box-shadow:0 22px 48px rgba(85,16,30,.24);position:relative;overflow:hidden;">
+              <div style="position:absolute;right:-40px;top:-40px;width:150px;height:150px;border-radius:999px;background:radial-gradient(circle,rgba(231,184,78,.4),transparent 68%);"></div>
+              <div style="width:80px;height:80px;border-radius:999px;background:#F1D278;color:#6E1122;display:grid;place-items:center;font-family:'Alegreya';font-weight:800;font-size:30px;border:3px solid rgba(255,255,255,.25);position:relative;">{{ initials }}</div>
+              <div style="font-family:'Alegreya';font-weight:800;font-size:24px;color:#fff;margin-top:12px;position:relative;">{{ userName }}</div>
+              <div style="font-size:13.5px;color:#EAD7C6;margin-top:2px;position:relative;">{{ roleLabel }}</div>
+              <div style="display:flex;gap:7px;margin-top:13px;flex-wrap:wrap;justify-content:center;position:relative;"><sc-for list="{{ myTeams }}" as="t" hint-placeholder-count="2"><span style="background:rgba(255,255,255,.14);padding:5px 12px;border-radius:999px;font-size:12.5px;font-weight:600;">{{ t }}</span></sc-for></div>
+            </div>
+            <div style="animation:sv-fadeup .5s .05s both;border-radius:20px;background:#FFFDF8;border:1px solid #EADFC7;overflow:hidden;box-shadow:0 8px 22px rgba(58,42,40,.06);">
+              <sc-for list="{{ profileRows }}" as="r" hint-placeholder-count="4">
+                <button onClick="{{ r.action }}" style="all:unset;cursor:pointer;display:flex;align-items:center;gap:13px;padding:14px 16px;width:100%;box-sizing:border-box;border-bottom:1px solid #F1E8D2;transition:background .15s;" onpointerdown="this.style.background='rgba(110,17,34,.04)'" onpointerup="this.style.background=''" onpointerleave="this.style.background=''">
+                  <span style="width:38px;height:38px;border-radius:11px;background:{{ r.bg }};color:{{ r.fg }};display:grid;place-items:center;flex:none;" innerHTML="{{ r.icon }}"></span>
+                  <span style="flex:1;font-weight:700;font-size:15px;color:{{ r.text }};">{{ r.label }}</span>
+                  <sc-if value="{{ r.chevron }}" hint-placeholder-val="{{ true }}"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#c3b39d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></sc-if>
+                </button>
+              </sc-for>
+            </div>
+            <div style="text-align:center;font-size:12px;color:#b6a891;font-family:'Alegreya';font-style:italic;">Sirvo · Aliança · v1.0</div>
+          </sc-if>
+
+          <sc-if value="{{ showFooter }}" hint-placeholder-val="{{ true }}"><div style="text-align:center;padding:10px 0 2px;color:#b6a891;font-size:12px;font-family:'Alegreya';font-style:italic;">Servir com alegria.</div></sc-if>
+        </div>
+      </div>
+
+      <!-- EVENT DETAIL push -->
+      <div style="position:absolute;inset:0;z-index:70;background:#FBF6E9;transform:translateX({{ eventX }});transition:transform .34s cubic-bezier(.32,.72,.24,1);box-shadow:-16px 0 40px rgba(58,42,40,.14);display:flex;flex-direction:column;">
+        <div style="padding:52px 18px 12px;display:flex;align-items:center;gap:6px;background:rgba(251,246,233,.9);backdrop-filter:blur(10px);border-bottom:1px solid rgba(234,223,199,.7);">
+          <button onClick="{{ back }}" style="display:inline-flex;align-items:center;gap:5px;border:0;background:transparent;color:#6E1122;font-weight:700;font-size:15px;cursor:pointer;padding:6px 8px;margin-left:-4px;border-radius:10px;transition:transform .12s;" onpointerdown="this.style.transform='translateX(-2px)'" onpointerup="this.style.transform=''" onpointerleave="this.style.transform=''"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>{{ backLabel }}</button>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:14px 16px 28px;display:flex;flex-direction:column;gap:14px;">
+          <sc-if value="{{ ev }}" hint-placeholder-val="{{ true }}">
+            <div style="position:relative;overflow:hidden;border-radius:24px;padding:20px;color:#FBF1DE;background:linear-gradient(155deg,#7A1327,#55101E);box-shadow:0 18px 40px rgba(85,16,30,.22);">
+              <div style="position:absolute;right:-40px;top:-40px;width:150px;height:150px;border-radius:999px;background:radial-gradient(circle,rgba(231,184,78,.4),transparent 68%);"></div>
+              <div style="position:relative;">
+                <div style="font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#F1D278;">{{ ev.kicker }}</div>
+                <div style="font-family:'Alegreya';font-weight:800;font-size:27px;line-height:1.05;margin-top:4px;color:#fff;">{{ ev.event }}</div>
+                <div style="font-size:13.5px;color:#EAD7C6;margin-top:5px;display:flex;flex-wrap:wrap;gap:4px 14px;">
+                  <span style="display:inline-flex;align-items:center;gap:5px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#F1D278" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>{{ ev.time }}</span>
+                  <span style="display:inline-flex;align-items:center;gap:5px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#F1D278" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/></svg>{{ ev.location }}</span>
+                </div>
+              </div>
+            </div>
+
+            <sc-if value="{{ ev.isVol }}" hint-placeholder-val="{{ true }}">
+              <div style="border-radius:20px;background:#FFFDF8;border:1px solid #EADFC7;box-shadow:0 8px 22px rgba(58,42,40,.06);overflow:hidden;">
+                <div style="display:flex;align-items:center;gap:9px;padding:14px 16px;border-bottom:1px solid #EADFC7;">
+                  <span style="width:11px;height:11px;border-radius:999px;background:{{ ev.color }};"></span>
+                  <h4 style="margin:0;font-family:'Alegreya';font-weight:700;font-size:17px;color:#3A2A28;">{{ ev.team }}</h4>
+                  <span style="margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:800;padding:5px 10px;border-radius:999px;background:{{ ev.covBg }};color:{{ ev.covFg }};"><span style="width:8px;height:8px;border-radius:999px;background:{{ ev.covFg }};"></span>{{ ev.covLabel }}</span>
+                </div>
+                <div style="padding:14px 16px;">
+                  <div style="font-size:12.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#9a8b7c;">Sua função · {{ ev.position }}</div>
+                  <div style="display:flex;align-items:center;gap:12px;margin-top:11px;">
+                    <div style="width:44px;height:44px;border-radius:999px;background:#F1D278;color:#6E1122;display:grid;place-items:center;font-family:'Alegreya';font-weight:800;font-size:16px;flex:none;">{{ initials }}</div>
+                    <div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:15.5px;color:#3A2A28;">{{ userName }} <span style="color:#9a8b7c;font-weight:500;">(você)</span></div></div>
+                    <span style="flex:none;display:inline-flex;align-items:center;gap:5px;font-weight:800;font-size:12px;padding:5px 11px;border-radius:999px;background:{{ ev.badgeBg }};color:{{ ev.badgeFg }};">{{ ev.badgeLabel }}</span>
+                  </div>
+                  <sc-if value="{{ ev.pending }}" hint-placeholder-val="{{ true }}">
+                    <div style="display:flex;gap:10px;margin-top:15px;">
+                      <button onClick="{{ ev.confirm }}" style="flex:1;height:47px;border:0;border-radius:14px;background:#6E1122;color:#FDF3E4;font-weight:800;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:transform .12s;" onpointerdown="this.style.transform='scale(.97)'" onpointerup="this.style.transform=''" onpointerleave="this.style.transform=''"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Confirmar presença</button>
+                      <button onClick="{{ ev.cancel }}" style="width:106px;height:47px;border:1px solid #E3C9C4;border-radius:14px;background:#FBEFEC;color:#C0392B;font-weight:700;font-size:14px;cursor:pointer;transition:transform .12s;" onpointerdown="this.style.transform='scale(.97)'" onpointerup="this.style.transform=''" onpointerleave="this.style.transform=''">Não posso</button>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ ev.canCheckin }}" hint-placeholder-val="{{ false }}">
+                    <div style="margin-top:15px;">
+                      <sc-if value="{{ ev.checkedIn }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;justify-content:center;gap:8px;height:47px;border-radius:14px;background:rgba(63,125,82,.14);color:#2f6440;font-weight:800;font-size:15px;animation:sv-pop .5s both;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3F7D52" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Você fez check-in</div></sc-if>
+                      <sc-if value="{{ ev.notChecked }}" hint-placeholder-val="{{ true }}"><button onClick="{{ ev.checkin }}" style="width:100%;height:47px;border:0;border-radius:14px;background:#6E1122;color:#FDF3E4;font-weight:800;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:transform .12s;" onpointerdown="this.style.transform='scale(.975)'" onpointerup="this.style.transform=''" onpointerleave="this.style.transform=''"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>Fazer check-in</button></sc-if>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ ev.declined }}" hint-placeholder-val="{{ false }}"><div style="margin-top:13px;display:flex;align-items:center;gap:9px;background:#FBEFEC;border:1px solid #E9CEC9;border-radius:13px;padding:11px 13px;color:#a33125;font-size:13.5px;font-weight:600;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>Você avisou que não pode. O líder foi notificado.</div></sc-if>
+                </div>
+              </div>
+              <div>
+                <div style="padding:2px 4px 8px;font-size:12.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#9a8b7c;">Como está o evento</div>
+                <div style="display:flex;flex-wrap:wrap;gap:8px;"><sc-for list="{{ ev.coverage }}" as="t" hint-placeholder-count="3"><span style="display:inline-flex;align-items:center;gap:7px;background:#FFFDF8;border:1px solid #EADFC7;padding:8px 12px;border-radius:999px;font-size:13px;font-weight:600;color:#3A2A28;"><span style="width:9px;height:9px;border-radius:999px;background:{{ t.dot }};"></span>{{ t.label }}</span></sc-for></div>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ ev.isLead }}" hint-placeholder-val="{{ false }}">
+              <div style="border-radius:20px;background:#FFFDF8;border:1px solid #EADFC7;box-shadow:0 8px 22px rgba(58,42,40,.06);overflow:hidden;">
+                <div style="display:flex;align-items:center;gap:9px;padding:14px 16px;border-bottom:1px solid #EADFC7;">
+                  <span style="width:11px;height:11px;border-radius:999px;background:#6E1122;"></span>
+                  <h4 style="margin:0;font-family:'Alegreya';font-weight:700;font-size:17px;color:#3A2A28;">Louvor</h4>
+                  <span style="margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:800;padding:5px 10px;border-radius:999px;background:{{ leadCov.bg }};color:{{ leadCov.fg }};"><span style="width:8px;height:8px;border-radius:999px;background:{{ leadCov.fg }};"></span>{{ leadCov.label }}</span>
+                </div>
+                <div>
+                  <sc-for list="{{ positions }}" as="p" hint-placeholder-count="4">
+                    <div style="padding:14px 16px;border-bottom:1px solid #F1E8D2;">
+                      <div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-weight:800;font-size:14.5px;color:#3A2A28;">{{ p.name }}</span><span style="font-size:11.5px;font-weight:700;color:{{ p.countFg }};">{{ p.count }}</span></div>
+                      <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px;">
+                        <sc-for list="{{ p.filled }}" as="f" hint-placeholder-count="1">
+                          <div style="display:flex;align-items:center;gap:11px;animation:sv-rowin .3s both;">
+                            <div style="width:38px;height:38px;border-radius:999px;background:{{ f.avBg }};color:#6E1122;display:grid;place-items:center;font-family:'Alegreya';font-weight:800;font-size:14px;flex:none;">{{ f.initials }}</div>
+                            <div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:14.5px;color:#3A2A28;">{{ f.name }}</div></div>
+                            <span style="flex:none;font-weight:800;font-size:11.5px;padding:4px 10px;border-radius:999px;background:{{ f.badgeBg }};color:{{ f.badgeFg }};">{{ f.badgeLabel }}</span>
+                            <button onClick="{{ f.remove }}" style="flex:none;width:30px;height:30px;border:0;border-radius:999px;background:transparent;color:#b6a891;cursor:pointer;display:grid;place-items:center;transition:background .15s,color .15s;" onpointerdown="this.style.background='rgba(192,57,43,.1)';this.style.color='#C0392B'" onpointerup="this.style.background='';this.style.color='#b6a891'" onpointerleave="this.style.background='';this.style.color='#b6a891'"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+                          </div>
+                        </sc-for>
+                        <sc-if value="{{ p.hasOpen }}" hint-placeholder-val="{{ true }}">
+                          <button onClick="{{ p.escalar }}" style="display:flex;align-items:center;gap:10px;width:100%;border:1.5px dashed #D9B9AE;border-radius:13px;background:rgba(110,17,34,.03);padding:9px 12px;cursor:pointer;color:#6E1122;font-weight:700;font-size:14px;transition:transform .12s,background .15s;" onpointerdown="this.style.transform='scale(.985)';this.style.background='rgba(110,17,34,.07)'" onpointerup="this.style.transform='';this.style.background='rgba(110,17,34,.03)'" onpointerleave="this.style.transform='';this.style.background='rgba(110,17,34,.03)'">
+                            <span style="width:32px;height:32px;border-radius:999px;border:2px dashed #C79A8E;display:grid;place-items:center;flex:none;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></span>
+                            Escalar {{ p.name }}<span style="margin-left:auto;font-size:12px;font-weight:700;color:#a33125;">{{ p.openLabel }}</span>
+                          </button>
+                        </sc-if>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-if>
+          </sc-if>
+        </div>
+      </div>
+
+      <!-- NOTIFICAÇÕES push -->
+      <div style="position:absolute;inset:0;z-index:72;background:#FBF6E9;transform:translateX({{ notifX }});transition:transform .34s cubic-bezier(.32,.72,.24,1);box-shadow:-16px 0 40px rgba(58,42,40,.14);display:flex;flex-direction:column;">
+        <div style="padding:52px 18px 12px;display:flex;align-items:center;gap:8px;background:rgba(251,246,233,.9);backdrop-filter:blur(10px);border-bottom:1px solid rgba(234,223,199,.7);">
+          <button onClick="{{ closeNotif }}" style="display:inline-flex;align-items:center;gap:5px;border:0;background:transparent;color:#6E1122;font-weight:700;font-size:15px;cursor:pointer;padding:6px 8px;margin-left:-4px;border-radius:10px;transition:transform .12s;" onpointerdown="this.style.transform='translateX(-2px)'" onpointerup="this.style.transform=''" onpointerleave="this.style.transform=''"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>Voltar</button>
+          <span style="font-family:'Alegreya';font-weight:700;font-size:17px;color:#3A2A28;">Notificações</span>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:14px 16px 28px;display:flex;flex-direction:column;gap:10px;">
+          <sc-for list="{{ notifs }}" as="n" hint-placeholder-count="4">
+            <div style="display:flex;align-items:flex-start;gap:12px;background:{{ n.bg }};border:1px solid {{ n.border }};border-radius:16px;padding:13px 14px;">
+              <span style="width:40px;height:40px;border-radius:11px;background:{{ n.tint }};color:{{ n.tintFg }};display:grid;place-items:center;flex:none;" innerHTML="{{ n.icon }}"></span>
+              <div style="flex:1;min-width:0;"><div style="font-size:14px;color:#3A2A28;line-height:1.35;">{{ n.text }}</div><div style="font-size:12px;color:#9a8b7c;margin-top:3px;">{{ n.time }}</div></div>
+              <sc-if value="{{ n.unread }}" hint-placeholder-val="{{ false }}"><span style="width:9px;height:9px;border-radius:999px;background:#E7B84E;flex:none;margin-top:6px;"></span></sc-if>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <!-- CANCEL SHEET -->
+      <sc-if value="{{ cancelOpen }}" hint-placeholder-val="{{ false }}">
+        <div style="position:absolute;inset:0;z-index:90;">
+          <div onClick="{{ closeCancel }}" style="position:absolute;inset:0;background:rgba(43,20,24,.42);animation:sv-scrim .22s ease both;"></div>
+          <div style="position:absolute;left:0;right:0;bottom:0;background:#FBF6E9;border-radius:26px 26px 42px 42px;padding:10px 20px 26px;animation:sv-sheet .34s cubic-bezier(.32,.72,.24,1) both;box-shadow:0 -12px 40px rgba(58,42,40,.2);">
+            <div style="width:40px;height:5px;border-radius:999px;background:#E3D6BC;margin:6px auto 14px;"></div>
+            <h3 style="margin:0;font-family:'Alegreya';font-weight:800;font-size:22px;color:#3A2A28;">Não vai poder?</h3>
+            <p style="margin:5px 0 0;font-size:14px;color:#8A7A6B;line-height:1.4;">Avisar cedo ajuda o líder a achar alguém. Conta rapidinho o motivo.</p>
+            <div style="display:flex;flex-wrap:wrap;gap:9px;margin-top:16px;"><sc-for list="{{ reasons }}" as="r" hint-placeholder-count="5"><button onClick="{{ r.pick }}" style="border:1.5px solid {{ r.border }};background:{{ r.bg }};color:{{ r.fg }};font-weight:700;font-size:14px;padding:10px 15px;border-radius:999px;cursor:pointer;transition:transform .12s;" onpointerdown="this.style.transform='scale(.95)'" onpointerup="this.style.transform=''" onpointerleave="this.style.transform=''">{{ r.label }}</button></sc-for></div>
+            <div style="margin-top:15px;display:flex;align-items:center;gap:10px;background:#FFFDF8;border:1px solid #EADFC7;border-radius:14px;padding:11px 14px;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8A7A6B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9"/><path d="M16 3.1a4 4 0 0 1 0 7.8"/></svg>
+              <span style="font-size:13.5px;color:#8A7A6B;flex:1;">Sugerir substituto <span style="color:#b6a891;">(opcional)</span></span>
+              <button onClick="{{ noop }}" style="font-size:13px;font-weight:700;color:#6E1122;border:0;background:transparent;cursor:pointer;">Escolher ›</button>
+            </div>
+            <button onClick="{{ submitCancel }}" style="width:100%;height:52px;margin-top:16px;border:0;border-radius:15px;background:{{ submitBg }};color:{{ submitFg }};font-weight:800;font-size:15.5px;cursor:pointer;transition:transform .12s;opacity:{{ submitOpacity }};" onpointerdown="this.style.transform='scale(.98)'" onpointerup="this.style.transform=''" onpointerleave="this.style.transform=''">Avisar que não posso</button>
+            <button onClick="{{ closeCancel }}" style="width:100%;height:44px;margin-top:8px;border:0;background:transparent;color:#8A7A6B;font-weight:700;font-size:14.5px;cursor:pointer;">Deixa, vou confirmar</button>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- ESCALAR SHEET -->
+      <sc-if value="{{ escalarOpen }}" hint-placeholder-val="{{ false }}">
+        <div style="position:absolute;inset:0;z-index:90;">
+          <div onClick="{{ closeEscalar }}" style="position:absolute;inset:0;background:rgba(43,20,24,.42);animation:sv-scrim .22s ease both;"></div>
+          <div style="position:absolute;left:0;right:0;bottom:0;max-height:74%;display:flex;flex-direction:column;background:#FBF6E9;border-radius:26px 26px 42px 42px;padding:10px 0 22px;animation:sv-sheet .34s cubic-bezier(.32,.72,.24,1) both;box-shadow:0 -12px 40px rgba(58,42,40,.2);">
+            <div style="width:40px;height:5px;border-radius:999px;background:#E3D6BC;margin:6px auto 12px;flex:none;"></div>
+            <div style="padding:0 20px 12px;flex:none;"><h3 style="margin:0;font-family:'Alegreya';font-weight:800;font-size:22px;color:#3A2A28;">Escalar · {{ escalarPos }}</h3><p style="margin:5px 0 0;font-size:13.5px;color:#8A7A6B;">Quem sabe fazer, com a última vez que serviu. Toque para convidar.</p></div>
+            <div style="flex:1;overflow-y:auto;padding:2px 14px 6px;display:flex;flex-direction:column;gap:8px;">
+              <sc-for list="{{ candidates }}" as="c" hint-placeholder-count="5">
+                <button onClick="{{ c.pick }}" style="all:unset;display:flex;align-items:center;gap:12px;padding:11px 13px;border-radius:16px;background:{{ c.bg }};border:1px solid {{ c.border }};cursor:{{ c.cursor }};opacity:{{ c.opacity }};transition:transform .12s;" onpointerdown="{{ c.down }}" onpointerup="this.style.transform=''" onpointerleave="this.style.transform=''">
+                  <div style="width:42px;height:42px;border-radius:999px;background:{{ c.avBg }};color:#6E1122;display:grid;place-items:center;font-family:'Alegreya';font-weight:800;font-size:15px;flex:none;">{{ c.initials }}</div>
+                  <div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:15px;color:#3A2A28;">{{ c.name }}</div><div style="font-size:12.5px;color:{{ c.metaFg }};margin-top:1px;">{{ c.meta }}</div></div>
+                  <span innerHTML="{{ c.action }}" style="flex:none;"></span>
+                </button>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- CREATE SHEET -->
+      <sc-if value="{{ createOpen }}" hint-placeholder-val="{{ false }}">
+        <div style="position:absolute;inset:0;z-index:90;">
+          <div onClick="{{ closeCreate }}" style="position:absolute;inset:0;background:rgba(43,20,24,.42);animation:sv-scrim .22s ease both;"></div>
+          <div style="position:absolute;left:0;right:0;bottom:0;background:#FBF6E9;border-radius:26px 26px 42px 42px;padding:10px 20px 26px;animation:sv-sheet .34s cubic-bezier(.32,.72,.24,1) both;box-shadow:0 -12px 40px rgba(58,42,40,.2);">
+            <div style="width:40px;height:5px;border-radius:999px;background:#E3D6BC;margin:6px auto 14px;"></div>
+            <h3 style="margin:0;font-family:'Alegreya';font-weight:800;font-size:22px;color:#3A2A28;">Novo culto</h3>
+            <p style="margin:5px 0 0;font-size:14px;color:#8A7A6B;">Preencha o essencial. A escala você monta depois.</p>
+            <div style="display:flex;gap:8px;margin-top:16px;background:#F1E8D2;border-radius:13px;padding:4px;"><div style="flex:1;text-align:center;padding:9px 0;border-radius:10px;background:#FFFDF8;font-weight:800;font-size:13.5px;color:#6E1122;box-shadow:0 1px 3px rgba(58,42,40,.08);">Avulso</div><div style="flex:1;text-align:center;padding:9px 0;border-radius:10px;font-weight:700;font-size:13.5px;color:#8A7A6B;">Série (semanal)</div></div>
+            <div style="display:flex;flex-direction:column;gap:11px;margin-top:14px;">
+              <div style="border:1px solid #EADFC7;border-radius:13px;background:#FFFDF8;padding:10px 14px;"><div style="font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#9a8b7c;">Título</div><div style="font-weight:600;font-size:15.5px;color:#3A2A28;margin-top:2px;">Culto de Domingo</div></div>
+              <div style="display:flex;gap:11px;"><div style="flex:1;border:1px solid #EADFC7;border-radius:13px;background:#FFFDF8;padding:10px 14px;"><div style="font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#9a8b7c;">Data</div><div style="font-weight:600;font-size:15.5px;color:#3A2A28;margin-top:2px;">19 jul</div></div><div style="flex:1;border:1px solid #EADFC7;border-radius:13px;background:#FFFDF8;padding:10px 14px;"><div style="font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#9a8b7c;">Hora</div><div style="font-weight:600;font-size:15.5px;color:#3A2A28;margin-top:2px;">18h00</div></div></div>
+              <div style="border:1px solid #EADFC7;border-radius:13px;background:#FFFDF8;padding:10px 14px;"><div style="font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#9a8b7c;">Local</div><div style="font-weight:600;font-size:15.5px;color:#3A2A28;margin-top:2px;">Templo</div></div>
+            </div>
+            <button onClick="{{ submitCreate }}" style="width:100%;height:52px;margin-top:18px;border:0;border-radius:15px;background:#6E1122;color:#FDF3E4;font-weight:800;font-size:15.5px;cursor:pointer;transition:transform .12s;" onpointerdown="this.style.transform='scale(.98)'" onpointerup="this.style.transform=''" onpointerleave="this.style.transform=''">Criar culto</button>
+            <button onClick="{{ closeCreate }}" style="width:100%;height:44px;margin-top:8px;border:0;background:transparent;color:#8A7A6B;font-weight:700;font-size:14.5px;cursor:pointer;">Cancelar</button>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- TOAST -->
+      <sc-if value="{{ toast }}" hint-placeholder-val="{{ false }}">
+        <div style="position:absolute;left:50%;bottom:96px;z-index:95;transform:translateX(-50%);background:#3A2A28;color:#FBF1DE;padding:12px 18px;border-radius:14px;font-weight:700;font-size:14px;box-shadow:0 12px 30px rgba(58,42,40,.32);display:flex;align-items:center;gap:9px;max-width:320px;animation:sv-toast 2.6s ease forwards;"><span style="width:22px;height:22px;border-radius:999px;background:#3F7D52;display:grid;place-items:center;flex:none;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>{{ toast }}</div>
+      </sc-if>
+
+      <!-- BOTTOM NAV -->
+      <div style="position:absolute;left:0;right:0;bottom:0;z-index:55;padding:8px 10px 22px;background:rgba(255,253,248,.9);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-top:1px solid rgba(234,223,199,.9);display:flex;justify-content:space-around;">
+        <sc-for list="{{ nav }}" as="n" hint-placeholder-count="4"><button onClick="{{ n.go }}" style="all:unset;cursor:pointer;flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:4px 0;transition:transform .12s;" onpointerdown="this.style.transform='scale(.92)'" onpointerup="this.style.transform=''" onpointerleave="this.style.transform=''"><span style="width:52px;height:30px;border-radius:999px;display:grid;place-items:center;background:{{ n.pill }};color:{{ n.fg }};transition:background .2s;" innerHTML="{{ n.icon }}"></span><span style="font-size:10.5px;font-weight:700;color:{{ n.fg }};">{{ n.label }}</span></button></sc-for>
+      </div>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:460,&quot;height&quot;:928},&quot;role&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;volunteer&quot;,&quot;leader&quot;,&quot;admin&quot;],&quot;default&quot;:&quot;volunteer&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Papel&quot;},&quot;userName&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;André&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Conteúdo&quot;}}">
+class Component extends DCLogic {
+  state = {
+    tab:'home', route:'home', eventId:null, notifOpen:false,
+    cancelId:null, cancelReason:null, toast:null, justConfirmed:null,
+    escalarOpen:false, escalarPosId:null, createOpen:false,
+    unavail:{12:true,13:true},
+    assignments:[
+      { id:'a1', event:'Culto de Domingo', weekday:'DOM', day:'19', time:'18h00', whenLong:'domingo, 19 de julho · 18h00', location:'Templo', team:'Louvor', color:'#6E1122', position:'Vocal', status:'convidado', today:false, checkedIn:false },
+      { id:'a2', event:'Reunião de Oração', weekday:'TER', day:'14', time:'19h30', whenLong:'hoje, terça · 19h30', location:'Sala 2', team:'Recepção', color:'#3F7D52', position:'Acolhida', status:'confirmado', today:true, checkedIn:false },
+      { id:'a3', event:'Culto de Quarta', weekday:'QUA', day:'16', time:'19h30', whenLong:'quarta, 16 de julho · 19h30', location:'Templo', team:'Mídia', color:'#6E97D6', position:'Projeção', status:'convidado', today:false, checkedIn:false },
+      { id:'a4', event:'Ensaio de Louvor', weekday:'QUI', day:'17', time:'20h00', whenLong:'quinta, 17 de julho · 20h00', location:'Sala de música', team:'Louvor', color:'#6E1122', position:'Vocal', status:'confirmado', today:false, checkedIn:false },
+    ],
+    checkinTime:'19h34',
+    joinReqs:[ {id:'j1',name:'Camila Rocha',initials:'CA',email:'camila.r@email.com'}, {id:'j2',name:'Lucas Ferreira',initials:'LU',email:'lucas.f@email.com'} ],
+    positions:[
+      { id:'vocal', name:'Vocal', needed:2, filled:[ {key:'k1',name:'Juliana Alves',initials:'JU',status:'confirmado'} ] },
+      { id:'guitarra', name:'Guitarra', needed:1, filled:[ {key:'k2',name:'Pedro Nunes',initials:'PE',status:'convidado'} ] },
+      { id:'bateria', name:'Bateria', needed:1, filled:[] },
+      { id:'teclado', name:'Teclado', needed:1, filled:[ {key:'k3',name:'André Zagato',initials:'AZ',status:'confirmado'} ] },
+    ],
+    pool:[
+      { name:'Marina Costa', initials:'MA', last:'Serviu há 2 semanas', unavailable:false },
+      { name:'Rafael Dias', initials:'RA', last:'Serviu há 1 mês', unavailable:false },
+      { name:'Beatriz Lima', initials:'BE', last:'Indisponível · viajando', unavailable:true },
+      { name:'Tiago Melo', initials:'TI', last:'Nunca serviu nesta função', unavailable:false },
+      { name:'Sara Prado', initials:'SA', last:'Serviu há 3 semanas', unavailable:false },
+    ],
+    members:[
+      { name:'Juliana Alves', initials:'JU', teams:'Louvor · Vocal', leader:false },
+      { name:'Pedro Nunes', initials:'PE', teams:'Louvor · Guitarra', leader:false },
+      { name:'André Zagato', initials:'AZ', teams:'Louvor, Mídia', leader:true },
+      { name:'Marina Costa', initials:'MA', teams:'Louvor · Teclado', leader:false },
+      { name:'Sara Prado', initials:'SA', teams:'Recepção', leader:false },
+      { name:'Tiago Melo', initials:'TI', teams:'Som', leader:false },
+    ],
+  };
+
+  componentDidMount(){ this._ges=false; setTimeout(()=>this.initGestures(),30); }
+  find(id){ return this.state.assignments.find(a=>a.id===id); }
+  setStatus(id,patch){ this.setState(s=>({assignments:s.assignments.map(a=>a.id===id?{...a,...patch}:a)})); }
+  flash(id){ this.setState({justConfirmed:id}); setTimeout(()=>{ if(this.state.justConfirmed===id) this.setState({justConfirmed:null}); },800); }
+  showToast(t){ this.setState({toast:t}); clearTimeout(this._tt); this._tt=setTimeout(()=>this.setState({toast:null}),2600); }
+
+  setTab=(t)=>{ this.setState({tab:t}); if(this._scroll){ this._scroll.scrollTop=0; setTimeout(()=>{ if(this._scroll) this._scroll.dispatchEvent(new Event('scroll')); },0);} };
+  confirm=(id)=>{ const a=this.find(id); if(!a||a.status==='confirmado')return; this.setStatus(id,{status:'confirmado'}); this.flash(id); this.showToast('Presença confirmada — obrigado!'); };
+  openCancel=(id)=>{ this.setState({cancelId:id,cancelReason:null}); };
+  closeCancel=()=>{ this.setState({cancelId:null,cancelReason:null}); };
+  pickReason=(r)=>{ this.setState({cancelReason:r}); };
+  submitCancel=()=>{ const id=this.state.cancelId; if(!id||!this.state.cancelReason)return; this.setStatus(id,{status:'recusado'}); this.setState({cancelId:null,cancelReason:null}); this.showToast('Avisamos o líder. Obrigado por avisar.'); };
+  checkin=(id)=>{ this.setStatus(id,{checkedIn:true}); this.showToast('Check-in feito. Bom culto!'); };
+  openEvent=(id)=>{ this.setState({route:'event',eventId:id}); };
+  openLead=()=>{ this.setState({route:'event',eventId:'lead'}); };
+  back=()=>{ this.setState({route:'home'}); };
+  openNotif=()=>{ this.setState({notifOpen:true}); };
+  closeNotif=()=>{ this.setState({notifOpen:false}); };
+  openEscalar=(pid)=>{ this.setState({escalarOpen:true,escalarPosId:pid}); };
+  closeEscalar=()=>{ this.setState({escalarOpen:false,escalarPosId:null}); };
+  assign=(person)=>{ const pid=this.state.escalarPosId; if(!pid)return; this.setState(s=>({positions:s.positions.map(p=>p.id===pid?{...p,filled:[...p.filled,{key:'k'+Date.now(),name:person.name,initials:person.initials,status:'convidado'}]}:p),escalarOpen:false,escalarPosId:null})); this.showToast('Convite enviado a '+person.name.split(' ')[0]+'.'); };
+  removeFilled=(pid,key)=>{ this.setState(s=>({positions:s.positions.map(p=>p.id===pid?{...p,filled:p.filled.filter(f=>f.key!==key)}:p)})); };
+  approve=(id)=>{ this.setState(s=>({joinReqs:s.joinReqs.filter(j=>j.id!==id)})); this.showToast('Membro aprovado. Bem-vindo!'); };
+  reject=(id)=>{ this.setState(s=>({joinReqs:s.joinReqs.filter(j=>j.id!==id)})); this.showToast('Solicitação recusada.'); };
+  openCreate=()=>{ this.setState({createOpen:true}); };
+  closeCreate=()=>{ this.setState({createOpen:false}); };
+  submitCreate=()=>{ this.setState({createOpen:false}); this.showToast('Culto criado — agora é só escalar.'); };
+  invite=()=>{ this.showToast('Link de convite copiado.'); };
+  toggleDay=(d)=>{ this.setState(s=>{ const u={...s.unavail}; if(u[d])delete u[d]; else u[d]=true; return {unavail:u}; }); };
+  saveAvail=()=>{ this.showToast('Disponibilidade salva.'); };
+  refresh=()=>{ const pull=this._pull; if(pull){pull.style.transition='height .3s ease, opacity .3s';pull.style.height='46px';pull.style.opacity='1';} const txt=this._pull&&this._pull.querySelector('.sv-pulltxt'); if(txt)txt.textContent='Atualizando…'; setTimeout(()=>{ if(txt)txt.textContent='Tudo em dia'; setTimeout(()=>{ if(pull){pull.style.height='0px';pull.style.opacity='0';} },500); this.showToast('Tudo em dia por aqui.'); },950); };
+  noop=()=>{};
+
+  initGestures(){
+    if(this._ges)return; const scroller=this._scroll; if(!scroller)return; this._ges=true; const header=this._header;
+    scroller.addEventListener('scroll',()=>{ if(this.state.route!=='home'||this.state.notifOpen||!header)return; const t=Math.min(1,scroller.scrollTop/70);
+      const bg=header.querySelector('.sv-hbg'),cond=header.querySelector('.sv-hcondensed'),big=header.querySelector('.sv-hbig');
+      if(bg)bg.style.opacity=t; if(cond)cond.style.opacity=Math.max(0,(t-.55)/.45); if(big){big.style.transform='scale('+(1-.14*t)+') translateY('+(-6*t)+'px)';big.style.opacity=String(1-.72*t);} },{passive:true});
+    let mode=null,sx=0,sy=0,dx=0,dy=0,card=null,fg=null;
+    scroller.addEventListener('pointerdown',(e)=>{ if(this.state.route!=='home'||this.state.tab!=='home')return; sx=e.clientX;sy=e.clientY;dx=0;dy=0;mode=null; card=e.target.closest?e.target.closest('[data-swipe]'):null; fg=card?card.querySelector('.card-fg'):null; });
+    const move=(e)=>{ if(sx===0&&sy===0)return; dx=e.clientX-sx;dy=e.clientY-sy;
+      if(!mode){ if(card&&Math.abs(dx)>9&&Math.abs(dx)>Math.abs(dy))mode='swipe'; else if(Math.abs(dy)>9)mode='scroll'; }
+      if(mode==='swipe'&&fg){ e.preventDefault(); const a=this.find(card.getAttribute('data-swipe')); let hi=(a&&a.status!=='convidado')?42:140; let d=Math.max(-140,Math.min(hi,dx)); fg.style.transition='none';fg.style.transform='translateX('+d+'px)'; card.style.setProperty('--rl',d>0?Math.min(1,d/70):0); card.style.setProperty('--rr',d<0?Math.min(1,-d/70):0); } };
+    const up=()=>{ if(mode==='swipe'&&fg&&card){ const id=card.getAttribute('data-swipe'),a=this.find(id); fg.style.transition='transform .28s cubic-bezier(.2,.7,.2,1)';fg.style.transform='translateX(0)'; card.style.setProperty('--rl',0);card.style.setProperty('--rr',0); if(dx>88&&a&&a.status==='convidado')this.confirm(id); else if(dx<-88)this.openCancel(id); } sx=0;sy=0;mode=null;card=null;fg=null; };
+    window.addEventListener('pointermove',move,{passive:false}); window.addEventListener('pointerup',up); window.addEventListener('pointercancel',up);
+    let py=0,pulling=false;
+    scroller.addEventListener('pointerdown',(e)=>{ if(this.state.route==='home'&&!this.state.notifOpen&&scroller.scrollTop<=0&&!(e.target.closest&&e.target.closest('[data-swipe]'))){py=e.clientY;pulling=true;} });
+    const pmove=(e)=>{ if(!pulling)return; const d=e.clientY-py; if(d>0&&scroller.scrollTop<=0){e.preventDefault(); const h=Math.min(90,d*.5); if(this._pull){this._pull.style.transition='none';this._pull.style.height=h+'px';this._pull.style.opacity=String(Math.min(1,h/50)); const fl=this._pull.querySelector('.sv-flame'); if(fl)fl.style.transform='rotate('+(h*4)+'deg)';}} };
+    const pup=(e)=>{ if(!pulling)return; const d=(e.clientY-py)*.5; pulling=false; if(d>48)this.refresh(); else if(this._pull){this._pull.style.transition='height .3s ease,opacity .3s';this._pull.style.height='0px';this._pull.style.opacity='0';} };
+    window.addEventListener('pointermove',pmove,{passive:false}); window.addEventListener('pointerup',pup);
+  }
+
+  meta(status){ if(status==='confirmado')return{label:'Confirmado',bg:'rgba(63,125,82,.14)',fg:'#2f6440'}; if(status==='recusado')return{label:'Não vou',bg:'rgba(192,57,43,.12)',fg:'#a33125'}; return{label:'Responder',bg:'rgba(201,138,44,.16)',fg:'#8a5e1a'}; }
+  metaShort(status){ if(status==='confirmado')return{label:'Confirmado',bg:'rgba(63,125,82,.14)',fg:'#2f6440'}; return{label:'Aguardando',bg:'rgba(201,138,44,.16)',fg:'#8a5e1a'}; }
+  navIcon(name,active){ const c=active?'#6E1122':'#9a8b7c'; const p={home:'<path d="M3 10.5 12 4l9 6.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>',cal:'<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',free:'<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M9.5 14.5l5 3M14.5 14.5l-5 3"/>',people:'<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.9"/>',user:'<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>'}[name]; return '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="'+c+'" stroke-width="'+(active?2.3:2)+'" stroke-linecap="round" stroke-linejoin="round">'+p+'</svg>'; }
+  statIcon(name){ const p={open:'<circle cx="12" cy="12" r="9" stroke-dasharray="3 3"/>',clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',spark:'<path d="M12 3l1.9 4.8L18.7 9l-4.8 1.9L12 15.6 10.1 10.8 5.3 9l4.8-1.2z"/>',user:'<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',cal:'<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',alert:'<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/>'}[name]; return '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+p+'</svg>'; }
+  rowIcon(name){ const p={teams:'<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.9"/>',bell:'<path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/>',cal:'<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',moon:'<path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/>',help:'<circle cx="12" cy="12" r="9"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>',out:'<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5M21 12H9"/>'}[name]; return '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+p+'</svg>'; }
+  notifIcon(name){ const p={cal:'<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',check:'<path d="M20 6 9 17l-5-5"/>',alert:'<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/>',cake:'<path d="M4 21h16M5 21v-8a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v8M12 11V7M12 4v0"/>'}[name]; return '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+p+'</svg>'; }
+
+  setScrollEl=(el)=>{this._scroll=el;}; setPullEl=(el)=>{this._pull=el;}; setHeaderEl=(el)=>{this._header=el;};
+
+  renderVals(){
+    const role=this.props.role||'volunteer';
+    const isLeader=role==='leader', isAdmin=role==='admin', isVol=role==='volunteer';
+    const isManager=isLeader||isAdmin;
+    const userName=this.props.userName||'André';
+    const first=userName.split(/\s+/)[0];
+    const initials=userName.split(/\s+/).slice(0,2).map(w=>w[0]).join('').toUpperCase();
+    const tab=this.state.tab;
+    const A=this.state.assignments;
+
+    const today=A.find(a=>a.today);
+    const upcoming=A.filter(a=>!a.today);
+    const heroSrc=upcoming.find(a=>a.status==='convidado')||upcoming[0]||null;
+    const decorate=(a)=>{ const m=this.meta(a.status); return {...a,badgeLabel:m.label,badgeBg:m.bg,badgeFg:m.fg,pending:a.status==='convidado',confirm:()=>this.confirm(a.id),cancel:()=>this.openCancel(a.id),open:()=>this.openEvent(a.id),checkin:()=>this.checkin(a.id)};};
+    const hero=heroSrc?(()=>{const d=decorate(heroSrc);return{...d,done:d.status!=='convidado',doneLabel:d.status==='confirmado'?'Presença confirmada':'Você avisou que não vai'};})():null;
+    const listCards=upcoming.filter(a=>!hero||a.id!==hero.id).map(decorate);
+    const escalaCards=A.map(decorate);
+
+    const sel=this.state.cancelReason;
+    const reasons=['Viajando','Trabalho','Saúde','Compromisso','Outro'].map(label=>{const on=sel===label;return{label,pick:()=>this.pickReason(label),bg:on?'#6E1122':'#FFFDF8',fg:on?'#FDF3E4':'#6E1122',border:on?'#6E1122':'#E3C9C4'};});
+
+    const P=this.state.positions;
+    const totalNeeded=P.reduce((n,p)=>n+p.needed,0);
+    const totalFilled=P.reduce((n,p)=>n+Math.min(p.needed,p.filled.length),0);
+    const leadOpen=P.reduce((n,p)=>n+Math.max(0,p.needed-p.filled.length),0);
+    const leadPct=totalNeeded?Math.round(totalFilled/totalNeeded*100):100;
+    const covTone=(a,n)=>a>=n?{bg:'rgba(63,125,82,.14)',fg:'#2f6440'}:a>0?{bg:'rgba(201,138,44,.16)',fg:'#8a5e1a'}:{bg:'rgba(192,57,43,.12)',fg:'#a33125'};
+    const leadCovT=covTone(totalFilled,totalNeeded);
+    const positions=P.map(p=>{ const openN=Math.max(0,p.needed-p.filled.length); const ct=covTone(p.filled.length,p.needed); return { name:p.name, count:p.filled.length+'/'+p.needed, countFg:ct.fg, hasOpen:openN>0, openLabel:openN+(openN>1?' vagas':' vaga'), escalar:()=>this.openEscalar(p.id), filled:p.filled.map(f=>{ const m=this.metaShort(f.status); return {...f,avBg:'#F1D278',badgeLabel:m.label,badgeBg:m.bg,badgeFg:m.fg,remove:()=>this.removeFilled(p.id,f.key)};}) };});
+    const stats=[
+      {icon:this.statIcon('open'),value:leadOpen,label:'Vagas abertas',bg:'rgba(110,17,34,.09)',fg:'#6E1122'},
+      {icon:this.statIcon('clock'),value:P.reduce((n,p)=>n+p.filled.filter(f=>f.status==='convidado').length,0),label:'Aguardando',bg:'rgba(201,138,44,.14)',fg:'#C98A2C'},
+      {icon:this.statIcon('spark'),value:2,label:'Interesses',bg:'rgba(231,184,78,.18)',fg:'#b3841f'},
+    ];
+    const adminStats=[
+      {icon:this.statIcon('user'),value:this.state.joinReqs.length,label:'Aprovações',bg:'rgba(201,138,44,.14)',fg:'#C98A2C'},
+      {icon:this.statIcon('cal'),value:5,label:'Eventos',bg:'rgba(110,17,34,.09)',fg:'#6E1122'},
+      {icon:this.statIcon('alert'),value:2,label:'Sem escala',bg:'rgba(192,57,43,.12)',fg:'#C0392B'},
+    ];
+    const joinReqs=this.state.joinReqs.map(j=>({...j,approve:()=>this.approve(j.id),reject:()=>this.reject(j.id)}));
+    const adminCoverage=[{label:'Louvor 4/5',dot:'#C98A2C'},{label:'Som 2/2',dot:'#3F7D52'},{label:'Mídia 1/2',dot:'#C98A2C'},{label:'Kids 0/2',dot:'#C0392B'}];
+
+    // escalas (manager) event list
+    const eT=(a,n)=>{const t=covTone(a,n);return {label:'',bg:t.bg,fg:t.fg};};
+    const teamPill=(name,a,n)=>{const t=covTone(a,n);return {label:name+' '+a+'/'+n,bg:t.bg,fg:t.fg};};
+    const eventList=[
+      {title:'Culto de Domingo', when:'domingo, 19 de julho · 18h00', teams:[teamPill('Louvor',4,5),teamPill('Som',2,2),teamPill('Mídia',1,2),teamPill('Kids',0,2)]},
+      {title:'Culto de Quarta', when:'quarta, 16 de julho · 19h30', teams:[teamPill('Louvor',3,3),teamPill('Mídia',2,2)]},
+      {title:'Ensaio de Louvor', when:'quinta, 17 de julho · 20h00', teams:[teamPill('Louvor',5,5)]},
+    ];
+
+    // members
+    const members=this.state.members.map(m=>({...m,isLeader:m.leader}));
+
+    // availability days (Jul 2026, Jul 1 = Wednesday -> offset 3)
+    const days=[];
+    for(let i=0;i<3;i++) days.push({n:'', blank:true, bg:'transparent', fg:'transparent', cursor:'default', toggle:this.noop, down:''});
+    for(let d=1;d<=31;d++){ const off=!!this.state.unavail[d]; days.push({ n:String(d), blank:false, bg: off?'#C0392B':'#F6EED8', fg: off?'#fff':'#3A2A28', cursor:'pointer', toggle:()=>this.toggleDay(d), down:"this.style.transform='scale(.9)'" }); }
+    const blockedCount=Object.keys(this.state.unavail).length;
+
+    // profile rows
+    const profileRows=[
+      {label:'Minhas equipes', icon:this.rowIcon('teams'), bg:'rgba(110,17,34,.08)', fg:'#6E1122', text:'#3A2A28', chevron:true, action:this.noop},
+      {label:'Notificações', icon:this.rowIcon('bell'), bg:'rgba(201,138,44,.14)', fg:'#C98A2C', text:'#3A2A28', chevron:true, action:this.openNotif},
+    ];
+    if(isVol) profileRows.push({label:'Disponibilidade', icon:this.rowIcon('cal'), bg:'rgba(63,125,82,.12)', fg:'#3F7D52', text:'#3A2A28', chevron:true, action:()=>this.setTab('livre')});
+    profileRows.push({label:'Tema', icon:this.rowIcon('moon'), bg:'rgba(110,151,214,.16)', fg:'#4f74b3', text:'#3A2A28', chevron:true, action:this.noop});
+    profileRows.push({label:'Ajuda', icon:this.rowIcon('help'), bg:'rgba(58,42,40,.07)', fg:'#6E5F55', text:'#3A2A28', chevron:true, action:this.noop});
+    profileRows.push({label:'Sair', icon:this.rowIcon('out'), bg:'rgba(192,57,43,.1)', fg:'#C0392B', text:'#C0392B', chevron:false, action:this.noop});
+
+    const myTeams=isVol?['Louvor','Mídia']:isLeader?['Louvor (líder)']:['Aliança','Admin'];
+
+    // notifications
+    const nBase=[
+      {kind:'cal',text:'Você foi escalado no Louvor · Culto de Domingo',time:'há 2 horas',unread:true,tint:'rgba(110,17,34,.1)',tintFg:'#6E1122'},
+      {kind:'check',text:'Pedro confirmou presença no Ensaio de Louvor',time:'há 5 horas',unread:true,tint:'rgba(63,125,82,.14)',tintFg:'#3F7D52'},
+      {kind:'cake',text:'Juliana faz aniversário hoje',time:'hoje',unread:false,tint:'rgba(231,184,78,.2)',tintFg:'#b3841f'},
+      {kind:'alert',text:'Bateria ainda sem ninguém no Culto de Domingo',time:'ontem',unread:false,tint:'rgba(192,57,43,.12)',tintFg:'#C0392B'},
+    ];
+    const notifs=nBase.map(n=>({text:n.text,time:n.time,unread:n.unread,tint:n.tint,tintFg:n.tintFg,icon:this.notifIcon(n.kind),bg:n.unread?'#FFFDF8':'#FBF6E9',border:n.unread?'#EAD9B4':'#EEE3CB'}));
+
+    // event detail
+    const evId=this.state.eventId; let ev=null;
+    if(evId==='lead'){ ev={ event:'Culto de Domingo', kicker:'Você lidera · Louvor', time:'18h00', location:'Templo', isLead:true, isVol:false }; }
+    else if(evId){ const s=this.find(evId); if(s){ const m=this.meta(s.status),can=s.today; ev={...s,isVol:true,isLead:false,kicker:s.today?'Acontece hoje':'Próximo culto',badgeLabel:m.label,badgeBg:m.bg,badgeFg:m.fg,pending:s.status==='convidado',declined:s.status==='recusado',canCheckin:can&&s.status!=='recusado',checkedIn:s.checkedIn,notChecked:can&&!s.checkedIn&&s.status!=='recusado',covBg:'rgba(201,138,44,.16)',covFg:'#8a5e1a',covLabel:'4/5',confirm:()=>this.confirm(s.id),cancel:()=>this.openCancel(s.id),checkin:()=>this.checkin(s.id),coverage:[{label:'Louvor 4/5',dot:'#C98A2C'},{label:'Som 2/2',dot:'#3F7D52'},{label:'Mídia 1/2',dot:'#C98A2C'},{label:'Recepção 3/3',dot:'#3F7D52'}]}; } }
+
+    // nav
+    const navDef=isManager?[['home','Início','home'],['escalas','Escalas','cal'],['pessoas','Pessoas','people'],['perfil','Perfil','user']]:[['home','Início','home'],['escalas','Escalas','cal'],['livre','Livre?','free'],['perfil','Perfil','user']];
+    const nav=navDef.map(([key,label,ic])=>{ const active=tab===key; return {label,icon:this.navIcon(ic,active),pill:active?'rgba(241,210,120,.5)':'transparent',fg:active?'#6E1122':'#9a8b7c',go:()=>this.setTab(key)}; });
+
+    // header title per tab
+    const roleLabel=isAdmin?'Administrador · Aliança':isLeader?'Líder · Louvor':'Voluntário · Louvor, Mídia';
+    const titles={home:`Boa noite, ${first}`, escalas:'Escalas', pessoas:'Pessoas', livre:'Disponibilidade', perfil:'Perfil'};
+    const headerTitle=titles[tab]||'Sirvo';
+    const headerSub=tab==='home'?roleLabel:null;
+
+    return {
+      isVolunteer:isVol, isLeader, isAdmin, isManager, userName, initials, roleLabel, myTeams,
+      unread:isAdmin?8:isLeader?5:3, hasUnread:true, headerTitle, headerSub,
+      tabHome:tab==='home', tabEscalas:tab==='escalas', tabPessoas:tab==='pessoas', tabLivre:tab==='livre', tabPerfil:tab==='perfil',
+      showFooter:tab==='home',
+      hasToday:isVol&&!!today, today: today?{...today,checkin:()=>this.checkin(today.id),checkinTime:this.state.checkinTime}:null, todayNotChecked: today&&!today.checkedIn,
+      hero, listCards, escalaCards, escCount:A.length,
+      stats, positions, leadOpen, leadPct, leadCovLabel:totalFilled+'/'+totalNeeded, leadCov:{...leadCovT,label:totalFilled+'/'+totalNeeded}, leadEvent:{event:'Culto de Domingo',whenLong:'domingo, 19 de julho · 18h00'},
+      adminStats, joinReqs, hasJoinReqs:this.state.joinReqs.length>0, noJoinReqs:this.state.joinReqs.length===0, adminCoverage,
+      eventList, members, peopleTitle:isAdmin?'Toda a igreja':'Minha equipe',
+      days, blockedCount, saveAvail:this.saveAvail,
+      profileRows,
+      notifs, notifX:this.state.notifOpen?'0':'100%', openNotif:this.openNotif, closeNotif:this.closeNotif,
+      reasons, cancelOpen:!!this.state.cancelId, submitBg:sel?'#C0392B':'#EDE0C6', submitFg:sel?'#fff':'#b3a48f', submitOpacity:sel?'1':'.75',
+      escalarOpen:this.state.escalarOpen, escalarPos:(P.find(p=>p.id===this.state.escalarPosId)||{}).name||'', candidates:this.candidates(),
+      createOpen:this.state.createOpen, openCreate:this.openCreate, closeCreate:this.closeCreate, submitCreate:this.submitCreate, invite:this.invite,
+      ev, eventX:this.state.route==='event'?'0':'100%', backLabel:isManager?'Início':'Escalas',
+      toast:this.state.toast,
+      nav, noop:this.noop, back:this.back, openLead:this.openLead, closeCancel:this.closeCancel, submitCancel:this.submitCancel, closeEscalar:this.closeEscalar,
+      setScrollEl:this.setScrollEl, setPullEl:this.setPullEl, setHeaderEl:this.setHeaderEl,
+    };
+  }
+
+  candidates(){
+    const P=this.state.positions; const curPos=P.find(p=>p.id===this.state.escalarPosId);
+    const inPos=new Set((curPos?curPos.filled:[]).map(f=>f.name));
+    return this.state.pool.map(c=>{ const already=inPos.has(c.name), dis=c.unavailable, blocked=dis||already;
+      const action=dis?'<span style="font-size:11.5px;font-weight:800;color:#a33125;background:rgba(192,57,43,.1);padding:5px 9px;border-radius:999px;">Indisponível</span>':already?'<span style="font-size:11.5px;font-weight:800;color:#2f6440;">Já na escala</span>':'<span style="display:grid;place-items:center;width:32px;height:32px;border-radius:999px;background:#6E1122;color:#FDF3E4;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></span>';
+      return { name:c.name, initials:c.initials, meta:c.last, metaFg:dis?'#a33125':'#8A7A6B', avBg:dis?'#EADFC7':'#F1D278', bg:blocked?'#F6EFDF':'#FFFDF8', border:'#EADFC7', opacity:dis?'.6':'1', cursor:blocked?'default':'pointer', action, down:blocked?'':"this.style.transform='scale(.98)'", pick:blocked?this.noop:()=>this.assign(c) };
+    });
+  }
+}
+</script>
+</body>
+</html>

@@ -3,76 +3,123 @@
 @tailwind utilities;
 
 /* =============================================================
-   Tema "acolhedor / quente"
-   base creme · primária terracota · acento verde-musgo
+   Sirvo — identidade da Aliança
+   creme (base) · vinho (ação) · dourado (calor/ênfase) · marrom (texto)
+   Tipografia Alegreya (títulos) + Alegreya Sans (interface).
    ============================================================= */
 @layer base {
   :root {
-    --background: 40 44% 96%;
-    --foreground: 30 10% 15%;
+    --background: 44 56% 95%;
+    --foreground: 8 20% 18%;
 
-    --card: 40 50% 99%;
-    --card-foreground: 30 10% 15%;
+    --card: 48 60% 98%;
+    --card-foreground: 8 20% 18%;
 
-    --primary: 17 54% 51%;
-    --primary-foreground: 30 60% 98%;
+    /* vinho — cor de ação/sagrado */
+    --primary: 349 70% 26%;
+    --primary-foreground: 36 78% 95%;
 
-    --accent: 92 16% 36%;
-    --accent-foreground: 40 44% 96%;
+    /* dourado — calor, ênfase, "a chama" */
+    --accent: 42 78% 60%;
+    --accent-foreground: 32 70% 16%;
 
-    --muted: 36 34% 90%;
-    --muted-foreground: 33 12% 42%;
+    --muted: 43 46% 89%;
+    --muted-foreground: 27 13% 40%;
 
-    --success: 122 30% 38%;
+    --success: 138 34% 37%;
     --success-foreground: 0 0% 100%;
 
-    --warning: 39 52% 48%;
+    --warning: 36 62% 47%;
     --warning-foreground: 0 0% 100%;
 
-    --destructive: 4 58% 48%;
+    --destructive: 6 62% 46%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 38 30% 85%;
-    --input: 38 30% 85%;
-    --ring: 17 54% 51%;
+    /* azul suave — apoio */
+    --info: 217 54% 63%;
 
-    --radius: 0.9rem;
+    --border: 40 40% 85%;
+    --input: 40 40% 85%;
+    --ring: 349 70% 32%;
+
+    --radius: 1rem;
   }
 
   .dark {
-    --background: 28 12% 10%;
-    --foreground: 38 30% 92%;
-    --card: 28 12% 13%;
-    --card-foreground: 38 30% 92%;
-    --primary: 17 62% 56%;
-    --primary-foreground: 28 20% 8%;
-    --accent: 92 18% 52%;
-    --accent-foreground: 28 20% 8%;
-    --muted: 28 10% 20%;
-    --muted-foreground: 36 12% 66%;
-    --border: 28 10% 22%;
-    --input: 28 10% 22%;
-    --ring: 17 62% 56%;
+    --background: 350 18% 9%;
+    --foreground: 40 30% 92%;
+    --card: 350 16% 12%;
+    --card-foreground: 40 30% 92%;
+    --primary: 349 55% 55%;
+    --primary-foreground: 350 30% 8%;
+    --accent: 42 72% 58%;
+    --accent-foreground: 32 70% 12%;
+    --muted: 350 12% 18%;
+    --muted-foreground: 38 14% 66%;
+    --border: 350 12% 22%;
+    --input: 350 12% 22%;
+    --ring: 42 72% 58%;
   }
 
   * {
     @apply border-border;
   }
+  html {
+    -webkit-tap-highlight-color: transparent;
+    scroll-behavior: smooth;
+  }
   body {
     @apply bg-background text-foreground antialiased;
+    /* respiro visual: leve calor nas quinas, sem poluir */
+    background-image:
+      radial-gradient(60rem 30rem at 85% -8%, hsl(45 80% 88% / 0.55), transparent 60%),
+      radial-gradient(48rem 26rem at -10% 108%, hsl(6 40% 88% / 0.4), transparent 55%);
+    background-attachment: fixed;
     font-feature-settings: "ss01", "cv01";
+    text-rendering: optimizeLegibility;
+    overscroll-behavior-y: none;
   }
   h1, h2, h3 {
     @apply font-display tracking-tight;
+    text-wrap: balance;
+  }
+  ::selection {
+    background: hsl(var(--accent) / 0.35);
+    color: hsl(var(--foreground));
+  }
+  /* foco visível e consistente (acessibilidade) */
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+    border-radius: 6px;
   }
 }
 
-/* Faixa de segurança pra notch/gestos em PWA fullscreen */
 @layer utilities {
-  .pb-safe {
-    padding-bottom: calc(env(safe-area-inset-bottom) + 0.5rem);
-  }
-  .pt-safe {
-    padding-top: env(safe-area-inset-top);
+  /* faixa de segurança pra notch/gestos em PWA */
+  .pb-safe { padding-bottom: calc(env(safe-area-inset-bottom) + 0.5rem); }
+  .pt-safe { padding-top: env(safe-area-inset-top); }
+
+  /* tato: resposta ao toque/clique — a coisa "afunda" de leve */
+  .press { transition: transform 0.13s cubic-bezier(0.2, 0, 0.2, 1), filter 0.15s ease, background-color 0.15s ease; }
+  .press:active { transform: scale(0.975); }
+  .press-sm { transition: transform 0.13s cubic-bezier(0.2, 0, 0.2, 1), background-color 0.15s ease; }
+  .press-sm:active { transform: scale(0.99); }
+}
+
+/* scrollbar discreta e quente (desktop) */
+@media (pointer: fine) {
+  * { scrollbar-width: thin; scrollbar-color: hsl(var(--border)) transparent; }
+  *::-webkit-scrollbar { width: 10px; height: 10px; }
+  *::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 999px; border: 2px solid hsl(var(--background)); }
+}
+
+/* respeita quem pediu menos movimento */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

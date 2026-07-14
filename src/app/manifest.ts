@@ -2,13 +2,13 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Servir — escalas da sua igreja",
-    short_name: "Servir",
-    description: "Escalas de equipes para igreja.",
+    name: "Sirvo — escalas da sua igreja",
+    short_name: "Sirvo",
+    description: "Escalas de equipes para igreja, com alma.",
     start_url: "/inicio",
     display: "standalone",
-    background_color: "#FBF7F0",
-    theme_color: "#C4633E",
+    background_color: "#FBF6E9",
+    theme_color: "#6E1122",
     orientation: "portrait",
     lang: "pt-BR",
     icons: [

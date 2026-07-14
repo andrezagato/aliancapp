@@ -43,7 +43,7 @@ export default async function EscalasPage() {
           <div className="space-y-3">
             {events.map((ev) => (
               <Card key={ev.id}>
-                <Link href={`/escalas/${ev.id}`} className="block p-4 hover:bg-muted/40">
+                <Link href={`/escalas/${ev.id}`} className="press-sm block p-4">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <p className="font-medium">{ev.title}</p>

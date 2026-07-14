@@ -15,8 +15,8 @@ export default async function DisponibilidadePage() {
   return (
     <>
       <TopBar
-        title="Quando não posso"
-        subtitle="Marque os dias que você não está disponível"
+        title="Disponibilidade"
+        subtitle="Marque os dias que você não pode"
         userName={session.profile.full_name || "?"}
       />
       <div className="animate-fade-in py-4">

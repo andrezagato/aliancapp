@@ -1,35 +1,37 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, Fraunces } from "next/font/google";
+import { Alegreya, Alegreya_Sans } from "next/font/google";
 import "./globals.css";
 
-const inter = Inter({
-  subsets: ["latin"],
+const sans = Alegreya_Sans({
+  subsets: ["latin", "latin-ext"],
+  weight: ["400", "500", "700"],
   variable: "--font-sans",
   display: "swap",
 });
 
-const fraunces = Fraunces({
-  subsets: ["latin"],
+const display = Alegreya({
+  subsets: ["latin", "latin-ext"],
+  weight: ["500", "700", "800"],
   variable: "--font-display",
-  weight: ["500", "600", "700"],
   display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "Servir — escalas da sua igreja",
+  title: "Sirvo — escalas da sua igreja",
   description:
     "Organize as equipes da sua igreja: escale voluntários, confirme presença e cuide de cada ministério com carinho.",
-  applicationName: "Servir",
+  applicationName: "Sirvo",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Servir",
+    title: "Sirvo",
   },
+  icons: { icon: "/icon.svg", apple: "/icon.svg" },
   formatDetection: { telephone: false },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#C4633E",
+  themeColor: "#6E1122",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
@@ -40,7 +42,7 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="pt-BR" className={`${inter.variable} ${fraunces.variable}`}>
+    <html lang="pt-BR" className={`${sans.variable} ${display.variable}`}>
       <body>{children}</body>
     </html>
   );

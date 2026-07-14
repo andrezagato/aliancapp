@@ -76,9 +76,70 @@ const config: Config = {
           from: { opacity: "0", transform: "translateY(6px)" },
           to: { opacity: "1", transform: "translateY(0)" },
         },
+        // entrada dos cards (herói, tiles) — "sobe e aparece"
+        "fade-up": {
+          from: { opacity: "0", transform: "translateY(12px)" },
+          to: { opacity: "1", transform: "none" },
+        },
+        // linha que desliza da esquerda (listas de pessoas/posições)
+        rowin: {
+          from: { opacity: "0", transform: "translateX(-8px)" },
+          to: { opacity: "1", transform: "none" },
+        },
+        // "pop" de confirmação — a coisa incha de leve e volta
+        pop: {
+          "0%": { transform: "scale(1)" },
+          "38%": { transform: "scale(1.045)" },
+          "100%": { transform: "scale(1)" },
+        },
+        // check que se desenha (usa stroke-dasharray no path)
+        draw: {
+          to: { strokeDashoffset: "0" },
+        },
+        // bottom sheet subindo com mola
+        sheet: {
+          from: { transform: "translateY(102%)" },
+          to: { transform: "translateY(0)" },
+        },
+        // véu escuro atrás do sheet
+        scrim: {
+          from: { opacity: "0" },
+          to: { opacity: "1" },
+        },
+        // toast: sobe, fica, some (self-contained; mantém translateX(-50%))
+        toast: {
+          "0%": { opacity: "0", transform: "translate(-50%, 14px)" },
+          "12%": { opacity: "1", transform: "translate(-50%, 0)" },
+          "88%": { opacity: "1", transform: "translate(-50%, 0)" },
+          "100%": { opacity: "0", transform: "translate(-50%, -6px)" },
+        },
+        // brilho dourado pulsando no canto dos heróis vinho
+        glow: {
+          "0%, 100%": { opacity: "0.55" },
+          "50%": { opacity: "0.9" },
+        },
+        // chama girando (pull-to-refresh / spinner)
+        flame: {
+          to: { transform: "rotate(360deg)" },
+        },
+        // push da direita: detalhe do evento / notificações entram deslizando
+        push: {
+          from: { transform: "translateX(100%)" },
+          to: { transform: "none" },
+        },
       },
       animation: {
         "fade-in": "fade-in 0.24s ease-out both",
+        "fade-up": "fade-up 0.5s ease both",
+        rowin: "rowin 0.3s ease both",
+        pop: "pop 0.5s both",
+        draw: "draw 0.45s 0.05s ease forwards",
+        sheet: "sheet 0.34s cubic-bezier(0.32, 0.72, 0.24, 1) both",
+        scrim: "scrim 0.22s ease both",
+        toast: "toast 2.6s ease forwards",
+        glow: "glow 5s ease-in-out infinite",
+        flame: "flame 1s linear infinite",
+        push: "push 0.34s cubic-bezier(0.32, 0.72, 0.24, 1) both",
       },
     },
   },

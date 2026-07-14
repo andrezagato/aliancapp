@@ -1,0 +1,295 @@
+<style>
+/*@FONTS@*/
+
+:root {
+  --cream: #FBF6E9;
+  --cream-2: #F4EAD2;
+  --card: #FFFDF8;
+  --ink: #3A2A28;
+  --ink-soft: #6E5F55;
+  --wine: #6E1122;
+  --wine-deep: #55101E;
+  --gold: #E7B84E;
+  --gold-soft: #F1D278;
+  --blue: #6E97D6;
+  --success: #3F7D52;
+  --warning: #C98A2C;
+  --danger: #C0392B;
+  --border: #EADFC7;
+  --shadow: 0 1px 2px rgba(58,42,40,.05), 0 10px 30px rgba(58,42,40,.08);
+  --shadow-lift: 0 2px 6px rgba(85,16,30,.10), 0 18px 44px rgba(85,16,30,.14);
+  --display: "Alegreya", Georgia, serif;
+  --sans: "Alegreya Sans", system-ui, -apple-system, sans-serif;
+}
+
+* { box-sizing: border-box; }
+.wrap {
+  min-height: 100dvh;
+  background:
+    radial-gradient(1200px 600px at 80% -10%, #FCEFC9 0%, transparent 55%),
+    radial-gradient(900px 500px at -10% 110%, #F3E0DE 0%, transparent 50%),
+    var(--cream);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.55;
+  padding: clamp(20px, 5vw, 64px) clamp(16px, 4vw, 48px) 72px;
+}
+.container { max-width: 1080px; margin: 0 auto; }
+h1,h2,h3 { font-family: var(--display); font-weight: 700; text-wrap: balance; margin: 0; letter-spacing: -.01em; }
+p { margin: 0; }
+.eyebrow { font-family: var(--sans); font-weight: 700; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--wine); }
+.muted { color: var(--ink-soft); }
+.section { margin-top: clamp(40px, 7vw, 72px); }
+.section > .eyebrow { margin-bottom: 8px; }
+.section-title { font-size: clamp(22px, 3.4vw, 30px); margin-bottom: 6px; }
+
+/* ---------- Header ---------- */
+.head { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; }
+.mark {
+  width: 92px; height: 92px; border-radius: 24px; flex: none;
+  background: var(--wine); box-shadow: var(--shadow-lift);
+  display: grid; place-items: center; overflow: hidden;
+}
+.mark img { width: 82%; height: 82%; object-fit: contain; mix-blend-mode: normal; }
+.head-word { display: flex; flex-direction: column; gap: 2px; }
+.head-word .name { font-family: var(--display); font-weight: 800; font-size: clamp(40px, 8vw, 66px); line-height: .95; color: var(--wine); }
+.head-word .tag { font-family: var(--display); font-style: italic; font-size: clamp(16px, 2.6vw, 20px); color: var(--ink-soft); }
+.head-meta { margin-left: auto; text-align: right; }
+.pill-note { display: inline-block; background: var(--gold); color: #4a350a; font-weight: 700; font-size: 12px; letter-spacing: .04em; padding: 6px 12px; border-radius: 999px; }
+
+/* ---------- Palette ---------- */
+.swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; }
+.sw { border-radius: 18px; overflow: hidden; border: 1px solid var(--border); background: var(--card); box-shadow: var(--shadow); }
+.sw .chip { height: 84px; display: flex; align-items: flex-end; padding: 10px; }
+.sw .body { padding: 10px 12px 12px; }
+.sw .role { font-weight: 700; font-size: 14px; }
+.sw .hex { font-family: var(--sans); font-variant-numeric: tabular-nums; font-size: 12px; color: var(--ink-soft); letter-spacing: .03em; }
+.sw small { display:block; color: var(--ink-soft); font-size: 11.5px; margin-top: 2px; }
+
+/* ---------- Type ---------- */
+.type-grid { display: grid; gap: 18px; }
+.type-card { background: var(--card); border: 1px solid var(--border); border-radius: 20px; padding: 22px 24px; box-shadow: var(--shadow); }
+.spec-display { font-family: var(--display); color: var(--wine); line-height: 1.02; }
+.spec-row { display:flex; align-items:baseline; gap: 14px; flex-wrap: wrap; border-top: 1px dashed var(--border); padding-top: 12px; margin-top: 12px; }
+.spec-row:first-of-type { border-top: 0; padding-top: 0; margin-top: 0; }
+.spec-label { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-soft); width: 92px; flex: none; }
+
+/* ---------- Phone mock ---------- */
+.showcase { display: grid; grid-template-columns: minmax(0, 360px) 1fr; gap: 34px; align-items: start; }
+@media (max-width: 760px){ .showcase { grid-template-columns: 1fr; } }
+.phone {
+  background: var(--cream); border-radius: 40px; padding: 12px;
+  box-shadow: var(--shadow-lift), inset 0 0 0 1px rgba(58,42,40,.06);
+  border: 1px solid var(--border);
+}
+.screen {
+  background: var(--cream); border-radius: 30px; overflow: hidden;
+  border: 1px solid var(--border);
+}
+.app { display: flex; flex-direction: column; }
+.appbar { display:flex; align-items:center; gap: 10px; padding: 16px 16px 10px; }
+.appbar .hi { font-family: var(--display); font-weight: 700; font-size: 20px; line-height: 1.1; }
+.appbar .sub { font-size: 12.5px; color: var(--ink-soft); }
+.appbar .spacer { margin-left: auto; }
+.avatar { width: 38px; height: 38px; border-radius: 999px; background: color-mix(in srgb, var(--gold) 35%, white); color: var(--wine); display:grid; place-items:center; font-weight:700; font-size:14px; border: 1px solid var(--border); }
+.bell { width: 38px; height: 38px; border-radius: 999px; display:grid; place-items:center; color: var(--ink); position: relative; }
+.bell .dot { position:absolute; top:7px; right:7px; width:16px;height:16px; background:var(--wine); color:#fff; border-radius:999px; font-size:10px; display:grid;place-items:center; font-weight:700;}
+.body-scroll { padding: 6px 16px 16px; display:flex; flex-direction:column; gap: 14px; }
+
+.hero { border-radius: 22px; padding: 18px; color: #FBF1DE; background: linear-gradient(150deg, var(--wine) 0%, var(--wine-deep) 100%); box-shadow: var(--shadow-lift); position: relative; overflow:hidden; }
+.hero::after{ content:""; position:absolute; right:-40px; top:-40px; width:160px;height:160px; background: radial-gradient(circle, rgba(231,184,78,.4), transparent 70%); }
+.hero .kicker { font-size: 11px; letter-spacing:.12em; text-transform:uppercase; color: var(--gold-soft); font-weight:700; }
+.hero h3 { color:#fff; font-size: 25px; margin-top: 3px; }
+.hero .when { font-size: 13px; color: #EBD9C9; margin-top: 2px; }
+.hero-foot { display:flex; align-items:center; gap: 14px; margin-top: 16px; }
+.ring { --p: 42; width: 54px; height:54px; border-radius:999px; flex:none;
+  background: conic-gradient(var(--gold) calc(var(--p)*1%), rgba(255,255,255,.18) 0);
+  display:grid; place-items:center; }
+.ring i { width: 40px;height:40px;border-radius:999px; background: var(--wine-deep); display:grid;place-items:center; font-style:normal; font-weight:700; font-size:12px; color:#fff; }
+.hero .btn-gold { margin-left:auto; }
+
+.btn { border:0; cursor:pointer; font-family: var(--sans); font-weight:700; font-size:14px; border-radius:999px; padding:11px 18px; display:inline-flex; align-items:center; gap:8px; transition: filter .15s, transform .05s; }
+.btn:active{ transform: translateY(1px); }
+.btn-primary{ background: var(--wine); color:#FDF3E4; }
+.btn-gold{ background: var(--gold); color:#4a350a; }
+.btn-outline{ background: var(--card); color: var(--ink); border:1px solid var(--border); }
+.btn-ghost{ background: transparent; color: var(--wine); }
+.btn-sm{ padding:8px 14px; font-size:13px; }
+
+.card { background: var(--card); border:1px solid var(--border); border-radius: 20px; box-shadow: var(--shadow); overflow:hidden; }
+.card-h { display:flex; align-items:center; gap:8px; padding:14px 16px; border-bottom:1px solid var(--border); }
+.card-h h4 { font-family: var(--display); font-weight:700; font-size:18px; margin:0; }
+.dot { width:10px;height:10px;border-radius:999px; flex:none; }
+.cov { margin-left:auto; display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700; padding:5px 10px; border-radius:999px; }
+.cov .d{ width:8px;height:8px;border-radius:999px; }
+.cov.full{ background: color-mix(in srgb, var(--success) 14%, white); color: var(--success);} .cov.full .d{background:var(--success);}
+.cov.part{ background: color-mix(in srgb, var(--warning) 16%, white); color: #966215;} .cov.part .d{background:var(--warning);}
+.cov.empty{ background: color-mix(in srgb, var(--danger) 12%, white); color: var(--danger);} .cov.empty .d{background:var(--danger);}
+
+.slot { display:flex; align-items:center; gap:12px; padding:13px 16px; }
+.slot + .slot { border-top:1px solid var(--border); }
+.slot .av{ width:38px;height:38px;border-radius:999px; background: color-mix(in srgb, var(--gold) 30%, white); color:var(--wine); display:grid;place-items:center; font-weight:700; font-size:13px; }
+.slot .who{ flex:1; min-width:0; }
+.slot .who b{ font-weight:600; font-size:14.5px; }
+.slot .who span{ display:block; font-size:12.5px; color:var(--ink-soft); }
+.badge{ font-size:12px; font-weight:700; padding:5px 10px; border-radius:999px; }
+.badge.ok{ background: color-mix(in srgb, var(--success) 14%, white); color:var(--success); }
+.badge.wait{ background: color-mix(in srgb, var(--warning) 16%, white); color:#966215; }
+.open{ display:flex; align-items:center; gap:12px; padding:12px 16px; border-top:1px dashed var(--border); color:var(--wine); font-weight:600; font-size:14px; }
+.open .plus{ width:38px;height:38px;border-radius:999px;border:2px dashed color-mix(in srgb,var(--wine) 40%, var(--cream)); display:grid;place-items:center; }
+
+.nav { display:flex; justify-content:space-around; padding:9px 8px calc(9px + 6px); border-top:1px solid var(--border); background: color-mix(in srgb, var(--card) 92%, transparent); }
+.nav a{ display:flex; flex-direction:column; align-items:center; gap:3px; font-size:11px; font-weight:600; color:var(--ink-soft); text-decoration:none; }
+.nav a.on{ color: var(--wine); }
+.nav .ic{ width:24px;height:24px; display:grid;place-items:center; }
+.nav a.on .ic{ background: color-mix(in srgb,var(--gold) 45%, white); border-radius:10px; color:var(--wine); }
+
+.notes { display:grid; gap: 12px; align-content: start; }
+.note { background: var(--card); border:1px solid var(--border); border-left:4px solid var(--gold); border-radius: 14px; padding: 14px 16px; box-shadow: var(--shadow); }
+.note b { font-weight:700; }
+.badges-row{ display:flex; gap:8px; flex-wrap:wrap; }
+.btns-row{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+.foot { margin-top: 48px; text-align:center; color: var(--ink-soft); font-size: 13px; }
+svg.i{ width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round; }
+</style>
+
+<div class="wrap">
+  <div class="container">
+
+    <header class="head">
+      <div class="mark"><img src="@LOGO_CREME@" alt="Marca Aliança — arco e chama" /></div>
+      <div class="head-word">
+        <span class="name">Sirvo</span>
+        <span class="tag">as escalas da sua igreja, com alma</span>
+      </div>
+      <div class="head-meta">
+        <span class="pill-note">Guia de estilo · proposta</span>
+        <p class="muted" style="margin-top:8px;font-size:13px;max-width:220px">Identidade da <b>Aliança</b> aplicada ao app <b>Sirvo</b>.</p>
+      </div>
+    </header>
+
+    <!-- PALETA -->
+    <section class="section">
+      <div class="eyebrow">Paleta</div>
+      <h2 class="section-title">Cores da marca</h2>
+      <p class="muted" style="max-width:620px;margin-bottom:18px">Tiradas direto da logo: creme como base, <b>vinho</b> como cor de ação (sagrado, profundo), <b>dourado</b> como calor e destaque (a chama). Verde/âmbar/vinho-claro contam a cobertura das escalas.</p>
+      <div class="swatches">
+        <div class="sw"><div class="chip" style="background:var(--cream)"></div><div class="body"><div class="role">Creme</div><div class="hex">#FBF6E9</div><small>Fundo / base</small></div></div>
+        <div class="sw"><div class="chip" style="background:var(--card);box-shadow:inset 0 0 0 1px var(--border)"></div><div class="body"><div class="role">Cartão</div><div class="hex">#FFFDF8</div><small>Superfície</small></div></div>
+        <div class="sw"><div class="chip" style="background:var(--wine)"></div><div class="body"><div class="role">Vinho</div><div class="hex">#6E1122</div><small>Primária / ação</small></div></div>
+        <div class="sw"><div class="chip" style="background:var(--gold)"></div><div class="body"><div class="role">Dourado</div><div class="hex">#E7B84E</div><small>Acento / destaque</small></div></div>
+        <div class="sw"><div class="chip" style="background:var(--ink)"></div><div class="body"><div class="role">Marrom</div><div class="hex">#3A2A28</div><small>Texto</small></div></div>
+        <div class="sw"><div class="chip" style="background:var(--blue)"></div><div class="body"><div class="role">Azul suave</div><div class="hex">#6E97D6</div><small>Apoio</small></div></div>
+        <div class="sw"><div class="chip" style="background:var(--success)"></div><div class="body"><div class="role">Verde</div><div class="hex">#3F7D52</div><small>Coberto</small></div></div>
+        <div class="sw"><div class="chip" style="background:var(--warning)"></div><div class="body"><div class="role">Âmbar</div><div class="hex">#C98A2C</div><small>Parcial</small></div></div>
+        <div class="sw"><div class="chip" style="background:var(--danger)"></div><div class="body"><div class="role">Vermelho</div><div class="hex">#C0392B</div><small>Falta gente</small></div></div>
+      </div>
+    </section>
+
+    <!-- TIPOGRAFIA -->
+    <section class="section">
+      <div class="eyebrow">Tipografia</div>
+      <h2 class="section-title">Alegreya + Alegreya Sans</h2>
+      <p class="muted" style="max-width:620px;margin-bottom:18px">A mesma família da logo. <b>Alegreya</b> (serifada, calorosa) nos títulos dá alma e voz; <b>Alegreya Sans</b> (humanista) no texto e na interface mantém tudo legível e acolhedor.</p>
+      <div class="type-grid">
+        <div class="type-card">
+          <div class="spec-row"><span class="spec-label">Display</span><span class="spec-display" style="font-size:44px;font-weight:800">Servir com alegria</span></div>
+          <div class="spec-row"><span class="spec-label">Título</span><span class="spec-display" style="font-size:28px;font-weight:700">Culto de Domingo</span></div>
+          <div class="spec-row"><span class="spec-label">Itálico</span><span class="spec-display" style="font-size:22px;font-style:italic">cada equipe no seu lugar</span></div>
+        </div>
+        <div class="type-card">
+          <div class="spec-row"><span class="spec-label">Corpo</span><span style="font-size:16px;max-width:52ch">A Joana confirmou presença no Louvor. O Pedro pediu troca e sugeriu o Rafael — falta só o líder aprovar.</span></div>
+          <div class="spec-row"><span class="spec-label">Rótulo</span><span style="font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-soft)">Próximo culto</span></div>
+          <div class="spec-row"><span class="spec-label">Números</span><span style="font-variant-numeric:tabular-nums;font-size:16px">3/5 confirmados · 18h00 · 19 jul</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- A CARA NOVA -->
+    <section class="section">
+      <div class="eyebrow">A cara nova</div>
+      <h2 class="section-title">Os componentes, no visual Sirvo</h2>
+      <p class="muted" style="max-width:620px;margin-bottom:22px">Mesma estrutura de hoje, elevada: hierarquia com a serifada, cartões mais táteis, cobertura clara num olhar, e o dourado marcando o que está ativo.</p>
+      <div class="showcase">
+        <div class="phone">
+          <div class="screen">
+            <div class="app">
+              <div class="appbar">
+                <div>
+                  <div class="hi">Boa noite, André</div>
+                  <div class="sub">Administrador · Aliança</div>
+                </div>
+                <div class="spacer"></div>
+                <div class="bell"><svg class="i" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg><span class="dot">3</span></div>
+                <div class="avatar">AZ</div>
+              </div>
+              <div class="body-scroll">
+                <div class="hero">
+                  <div class="kicker">Próximo culto</div>
+                  <h3>Culto de Domingo</h3>
+                  <div class="when">domingo, 19 de julho · 18h00 · Templo</div>
+                  <div class="hero-foot">
+                    <div class="ring" style="--p:60"><i>3/5</i></div>
+                    <div style="font-size:12.5px;line-height:1.3;color:#EBD9C9">confirmados<br/>na sua equipe</div>
+                    <button class="btn btn-gold btn-sm">Abrir escala</button>
+                  </div>
+                </div>
+
+                <div class="card">
+                  <div class="card-h">
+                    <span class="dot" style="background:var(--wine)"></span>
+                    <h4>Louvor</h4>
+                    <span class="cov part"><span class="d"></span>3/5</span>
+                  </div>
+                  <div class="slot">
+                    <span class="av">JU</span>
+                    <span class="who"><b>Juliana</b><span>Vocal</span></span>
+                    <span class="badge ok">Confirmado</span>
+                  </div>
+                  <div class="slot">
+                    <span class="av">PE</span>
+                    <span class="who"><b>Pedro</b><span>Guitarra</span></span>
+                    <span class="badge wait">Aguardando</span>
+                  </div>
+                  <div class="open">
+                    <span class="plus"><svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span>
+                    Escalar Bateria
+                  </div>
+                </div>
+
+                <div class="btns-row">
+                  <button class="btn btn-primary">Confirmar</button>
+                  <button class="btn btn-outline btn-sm">Não posso</button>
+                </div>
+                <div class="badges-row">
+                  <span class="cov full"><span class="d"></span>Som 2/2</span>
+                  <span class="cov part"><span class="d"></span>Mídia 1/2</span>
+                  <span class="cov empty"><span class="d"></span>Kids 0/2</span>
+                </div>
+              </div>
+              <div class="nav">
+                <a class="on"><span class="ic"><svg class="i" viewBox="0 0 24 24"><path d="M3 10.5 12 4l9 6.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg></span>Início</a>
+                <a><span class="ic"><svg class="i" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span>Escalas</a>
+                <a><span class="ic"><svg class="i" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.9"/></svg></span>Pessoas</a>
+                <a><span class="ic"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></span>Perfil</a>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="notes">
+          <div class="note"><b>Vinho = ação, dourado = vivo.</b> Botões primários e o cabeçalho em vinho; o dourado marca aba ativa, o "abrir escala" e a chama de cobertura. Um destaque só por tela.</div>
+          <div class="note"><b>Cobertura num olhar.</b> Anel dourado no herói + pílulas verde/âmbar/vermelho por equipe — dá pra ver onde falta gente sem ler número por número.</div>
+          <div class="note"><b>Serifada com alma.</b> Alegreya nos títulos ("Culto de Domingo", saudação) traz o tom humano/devocional; a interface segue leve na Alegreya Sans.</div>
+          <div class="note"><b>Mais tátil.</b> Cartões creme sobre fundo creme, bordas quentes e sombra suave — acolhedor, não corporativo. A marca (arco + chama) vira o ícone do app.</div>
+          <div class="note"><b>Logo variável.</b> O mesmo símbolo funciona em vinho, dourado, marrom ou creme conforme o fundo — dá respiro pra telas de login, vazios e push.</div>
+        </div>
+      </div>
+    </section>
+
+    <div class="foot">
+      Fontes: Alegreya &amp; Alegreya Sans · cores extraídas da logo da Aliança · <b>proposta pra você aprovar/ajustar</b> antes de eu aplicar no app.
+    </div>
+  </div>
+</div>

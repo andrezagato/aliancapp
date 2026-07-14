@@ -6,11 +6,12 @@ import { useRouter } from "next/navigation";
 import { MailCheck } from "lucide-react";
 import { createClient, supabaseConfigured } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
+import { SirvoMark } from "@/components/brand/sirvo-mark";
 
 const isDev = process.env.NODE_ENV === "development";
 
 const inputClass =
-  "w-full rounded-2xl border border-input bg-card px-4 py-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  "w-full rounded-2xl border border-input bg-card px-4 py-3 text-sm outline-none transition focus-visible:border-primary/40 focus-visible:ring-2 focus-visible:ring-ring";
 
 export default function EntrarPage() {
   const router = useRouter();
@@ -80,14 +81,14 @@ export default function EntrarPage() {
 
   if (magicSent) {
     return (
-      <main className="mx-auto flex min-h-dvh max-w-[480px] flex-col justify-center px-6 py-10">
+      <main className="mx-auto flex min-h-dvh max-w-[460px] flex-col justify-center px-6 py-10">
         <div className="animate-fade-in flex flex-col items-center gap-4 text-center">
           <span className="inline-flex size-16 items-center justify-center rounded-full bg-success/12 text-success">
             <MailCheck className="size-8" />
           </span>
-          <h1 className="text-2xl font-semibold">Confira seu email</h1>
+          <h1 className="text-3xl">Confira seu email</h1>
           <p className="text-balance text-muted-foreground">
-            Enviamos um link de acesso para <span className="font-medium text-foreground">{email}</span>.
+            Enviamos um link de acesso para <span className="font-semibold text-foreground">{email}</span>.
             Abra no seu celular ou computador para entrar — o link vale por 1 hora.
           </p>
           <button
@@ -105,14 +106,14 @@ export default function EntrarPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-[480px] flex-col justify-center px-6 py-10">
+    <main className="mx-auto flex min-h-dvh max-w-[460px] flex-col justify-center px-6 py-12">
       <div className="animate-fade-in flex flex-col items-center text-center">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/icon.svg" alt="Aliança" width={84} height={84} className="rounded-3xl shadow-lift" />
-        <h1 className="mt-6 text-4xl font-semibold">Aliança</h1>
-        <p className="mt-2 text-balance text-muted-foreground">
-          As escalas da sua igreja, organizadas com carinho. Cada equipe no seu lugar,
-          cada voluntário no seu tempo.
+        <span className="inline-flex size-[76px] items-center justify-center rounded-[22px] bg-primary shadow-lift">
+          <SirvoMark className="h-12 w-auto text-primary-foreground" />
+        </span>
+        <h1 className="mt-6 font-display text-5xl font-extrabold text-primary">Sirvo</h1>
+        <p className="mt-2 text-balance font-display text-lg italic text-muted-foreground">
+          as escalas da sua igreja, com alma
         </p>
       </div>
 
@@ -122,7 +123,7 @@ export default function EntrarPage() {
           {loading === "google" ? "Entrando…" : "Entrar com Google"}
         </Button>
 
-        <div className="flex items-center gap-3 py-1 text-xs text-muted-foreground">
+        <div className="flex items-center gap-3 py-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">
           <span className="h-px flex-1 bg-border" /> ou pelo email <span className="h-px flex-1 bg-border" />
         </div>
 
@@ -148,7 +149,7 @@ export default function EntrarPage() {
 
       <p className="mt-8 text-center text-sm text-muted-foreground">
         É voluntário e ainda não tem acesso?{" "}
-        <Link href="/cadastro" className="font-medium text-primary underline-offset-4 hover:underline">
+        <Link href="/cadastro" className="font-semibold text-primary underline-offset-4 hover:underline">
           Solicitar entrada
         </Link>
       </p>
@@ -164,7 +165,7 @@ export default function EntrarPage() {
             </Button>
           </form>
           <p className="mt-2 text-xs text-muted-foreground">
-            Personas: joana@ (líder Louvor), ana@ (líder Som), tiago@ (líder Kids), pedro@/rafael@/bia@/lucas@/clara@ (voluntários). Senha: teste123.
+            joana@ (líder Louvor), ana@ (líder Som), tiago@ (líder Kids), pedro@/rafael@/bia@/lucas@/clara@ (voluntários). Senha: teste123.
           </p>
         </details>
       ) : null}

@@ -1,8 +1,7 @@
 import Link from "next/link";
-import { Bell, Check, CircleDashed, Sparkles, CalendarClock, UserCheck, Cake } from "lucide-react";
-import { TopBar } from "@/components/app-shell/top-bar";
-import { Card } from "@/components/ui/card";
+import { Bell, Check, CircleDashed, Sparkles, CalendarClock, UserCheck, Cake, ChevronLeft } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
+import { cn } from "@/lib/utils";
 import { getSession } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import type { NotificationKind } from "@/lib/supabase/database.types";
@@ -16,7 +15,7 @@ function iconFor(kind: NotificationKind): { Icon: typeof Bell; tone: string } {
     case "cobertura":
       return { Icon: CircleDashed, tone: "text-primary bg-primary/10" };
     case "interesse_servir":
-      return { Icon: Sparkles, tone: "text-accent bg-accent/12" };
+      return { Icon: Sparkles, tone: "text-accent bg-accent/15" };
     case "evento_alterado":
     case "lembrete":
     case "evento_confirmar":
@@ -25,7 +24,7 @@ function iconFor(kind: NotificationKind): { Icon: typeof Bell; tone: string } {
     case "cadastro_pendente":
       return { Icon: UserCheck, tone: "text-primary bg-primary/10" };
     case "aniversario":
-      return { Icon: Cake, tone: "text-accent bg-accent/12" };
+      return { Icon: Cake, tone: "text-accent bg-accent/15" };
     default:
       return { Icon: Bell, tone: "text-muted-foreground bg-muted" };
   }
@@ -56,9 +55,20 @@ export default async function NotificacoesPage() {
   const notifs = data ?? [];
 
   return (
-    <>
-      <TopBar title="Notificações" subtitle="Só o que é das suas equipes" userName={session.profile.full_name || "?"} />
-      <div className="animate-fade-in space-y-2 py-4">
+    <div className="pb-4">
+      <header className="sticky top-0 z-30 -mx-5 border-b border-border/70 bg-background/90 pt-safe backdrop-blur">
+        <div className="flex items-center gap-1 px-5 pb-3 pt-2">
+          <Link
+            href="/inicio"
+            className="press -ml-1 inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-[15px] font-bold text-primary"
+          >
+            <ChevronLeft className="size-5" /> Voltar
+          </Link>
+          <span className="font-display text-[17px] font-bold text-foreground">Notificações</span>
+        </div>
+      </header>
+
+      <div className="space-y-2.5 py-4">
         {notifs.length === 0 ? (
           <EmptyState
             icon={<Bell className="size-7" />}
@@ -69,30 +79,42 @@ export default async function NotificacoesPage() {
           <>
             {notifs.map((n) => {
               const { Icon, tone } = iconFor(n.kind);
+              const unread = !n.read_at;
               const inner = (
-                <div className="flex items-center gap-3 p-4">
-                  <span className={`inline-flex size-10 items-center justify-center rounded-full ${tone}`}>
+                <div className="flex items-start gap-3 p-3.5">
+                  <span className={cn("grid size-10 shrink-0 place-items-center rounded-[11px]", tone)}>
                     <Icon className="size-5" />
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className={`truncate ${n.read_at ? "font-normal" : "font-medium"}`}>{n.title}</p>
-                    {n.body ? <p className="truncate text-sm text-muted-foreground">{n.body}</p> : null}
+                    <p className={cn("text-sm leading-snug", unread ? "font-semibold text-foreground" : "text-foreground/80")}>
+                      {n.title}
+                    </p>
+                    {n.body ? <p className="mt-0.5 text-sm text-muted-foreground">{n.body}</p> : null}
+                    <p className="mt-1 text-xs text-muted-foreground/80">{relativeTime(n.created_at)}</p>
                   </div>
-                  <span className="shrink-0 text-xs text-muted-foreground">{relativeTime(n.created_at)}</span>
+                  {unread ? <span className="mt-1.5 size-2.5 shrink-0 rounded-full bg-accent" aria-label="Não lida" /> : null}
                 </div>
               );
-              return (
-                <Card key={n.id} className={n.read_at ? "opacity-70" : undefined}>
-                  {n.link ? <Link href={n.link}>{inner}</Link> : inner}
-                </Card>
+              const shell = cn(
+                "block rounded-2xl border",
+                unread ? "border-accent/40 bg-card shadow-soft" : "border-border/70 bg-background/50",
+              );
+              return n.link ? (
+                <Link key={n.id} href={n.link} className={cn(shell, "press-sm")}>
+                  {inner}
+                </Link>
+              ) : (
+                <div key={n.id} className={shell}>
+                  {inner}
+                </div>
               );
             })}
-            <p className="flex items-center justify-center gap-2 pt-4 text-center text-xs text-muted-foreground">
+            <p className="flex items-center justify-center gap-2 pt-3 text-center text-xs text-muted-foreground">
               <Bell className="size-3.5" /> Avisos compartimentados por equipe
             </p>
           </>
         )}
       </div>
-    </>
+    </div>
   );
 }

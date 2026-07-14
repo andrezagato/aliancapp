@@ -12,7 +12,7 @@ import {
   AlertTriangle,
   CheckCircle2,
 } from "lucide-react";
-import { TopBar } from "@/components/app-shell/top-bar";
+import { HomeShell } from "@/components/app-shell/home-shell";
 import { Card, CardContent } from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -40,6 +40,7 @@ import { fmtEventWhen, fmtWeekdayShort, fmtDayMonthShort, fmtTime, fmtBirthday, 
 import { CheckinButton } from "@/components/slot-controls";
 import { SwapInbox } from "@/components/swap-inbox";
 import { InteresseButton, InteresseResolveButtons } from "@/components/interesse-controls";
+import { VolunteerHome } from "@/components/home/volunteer-home";
 
 function greeting() {
   const h = Number(new Intl.DateTimeFormat("pt-BR", { hour: "numeric", hour12: false, timeZone: "America/Sao_Paulo" }).format(new Date()));
@@ -67,31 +68,38 @@ export default async function InicioPage() {
         ? `Líder · ${lead.join(", ")}`
         : session.profile.teams.map((t) => t.name).join(", ") || "Voluntário";
 
-  return (
-    <>
-      <TopBar title={`${greeting()}, ${first}`} subtitle={roleLabel} userName={session.profile.full_name || "?"} />
-      <div className="animate-fade-in space-y-5 py-3">
+  const userName = session.profile.full_name || "?";
+
+  // Voluntário: experiência "Aconchego" completa (cabeçalho reativo,
+  // pull-to-refresh, herói, swipe). Os blocos extras entram como children.
+  if (session.role === "volunteer") {
+    const mine = await getMyUpcomingAssignments(session);
+    return (
+      <VolunteerHome title={`${greeting()}, ${first}`} subtitle={roleLabel} userName={userName} assignments={mine}>
         <SwapInbox items={swaps} />
         <ResponsibleConfirm events={respEvents} />
-        {session.role === "admin" && <AdminSection />}
-        {session.role === "leader" && <LeaderSection />}
-        {session.role === "volunteer" && <VolunteerSection />}
         <Servir teams={teamsWithPos} interests={myInterests} />
         <Birthdays />
-      </div>
-    </>
+      </VolunteerHome>
+    );
+  }
+
+  // Líder / Admin: mesma casca "Aconchego" (cabeçalho reativo + pull-to-refresh).
+  return (
+    <HomeShell title={`${greeting()}, ${first}`} subtitle={roleLabel} userName={userName}>
+      <SwapInbox items={swaps} />
+      <ResponsibleConfirm events={respEvents} />
+      {session.role === "admin" && <AdminSection />}
+      {session.role === "leader" && <LeaderSection />}
+      <Servir teams={teamsWithPos} interests={myInterests} />
+      <Birthdays />
+    </HomeShell>
   );
 }
 
 // -----------------------------------------------------------------------------
-// VOLUNTÁRIO
+// LISTA DE ESCALAS (usada pelo líder na home)
 // -----------------------------------------------------------------------------
-async function VolunteerSection() {
-  const session = (await getSession())!;
-  const mine = await getMyUpcomingAssignments(session);
-  return <MyScheduleList mine={mine} title="Suas próximas escalas" />;
-}
-
 function MyScheduleList({ mine, title }: { mine: MyAssignment[]; title: string }) {
   const todaySP = churchDateISO(new Date().toISOString());
   if (mine.length === 0) {
@@ -307,31 +315,61 @@ async function AdminSection() {
 // COMPARTILHADOS
 // -----------------------------------------------------------------------------
 function NextEventCard({ ev }: { ev: EventListItem }) {
+  const pct = ev.neededTotal > 0 ? Math.round((ev.assignedTotal / ev.neededTotal) * 100) : 100;
   return (
-    <Card className="overflow-hidden border-primary/20 bg-gradient-to-br from-primary/10 to-card">
-      <CardContent className="p-5">
-        <div className="flex items-center gap-2 text-sm font-medium text-primary">
-          <CalendarDays className="size-4" /> {fmtEventWhen(ev.starts_at)}
-        </div>
-        <div className="mt-1 flex items-center justify-between gap-3">
-          <h2 className="text-2xl font-semibold">{ev.title}</h2>
-          <CoverageBadge tone={ev.overallTone} assigned={ev.assignedTotal} needed={ev.neededTotal} />
-        </div>
-        {ev.location ? (
-          <p className="mt-1 inline-flex items-center gap-1.5 text-sm text-muted-foreground">
-            <MapPin className="size-4" /> {ev.location}
+    <div className="relative overflow-hidden rounded-[22px] bg-gradient-to-br from-primary to-[hsl(349_74%_19%)] p-5 text-primary-foreground shadow-lift">
+      <div
+        className="pointer-events-none absolute -right-10 -top-10 size-40 rounded-full opacity-70"
+        style={{ background: "radial-gradient(circle, hsl(var(--accent) / 0.45), transparent 70%)" }}
+      />
+      <div className="relative">
+        <p className="text-xs font-semibold uppercase tracking-wider text-accent">Próximo culto</p>
+        <h2 className="mt-1 text-2xl font-bold text-white">{ev.title}</h2>
+        <p className="mt-0.5 text-sm text-primary-foreground/80">
+          <span className="capitalize">{fmtEventWhen(ev.starts_at)}</span>
+          {ev.location ? ` · ${ev.location}` : ""}
+        </p>
+
+        <div className="mt-4 flex items-center gap-3">
+          <div
+            className="grid size-14 place-items-center rounded-full"
+            style={{ background: `conic-gradient(hsl(var(--accent)) ${pct}%, hsl(0 0% 100% / 0.18) 0)` }}
+          >
+            <span className="grid size-10 place-items-center rounded-full bg-[hsl(349_74%_17%)] text-xs font-bold tabular-nums">
+              {ev.assignedTotal}/{ev.neededTotal}
+            </span>
+          </div>
+          <p className="text-xs leading-tight text-primary-foreground/80">
+            confirmados
+            <br />
+            na sua equipe
           </p>
-        ) : null}
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          {ev.teams.map((t) => (
-            <CoverageBadge key={t.teamId} tone={t.tone} label={`${t.name} ${t.assigned}/${t.needed}`} />
-          ))}
+          <Link href={`/escalas/${ev.id}`} className={cn(buttonVariants({ variant: "accent", size: "sm" }), "ml-auto press")}>
+            Abrir escala
+          </Link>
         </div>
-        <Link href={`/escalas/${ev.id}`} className={cn(buttonVariants(), "mt-4 w-full")}>
-          Abrir escala
-        </Link>
-      </CardContent>
-    </Card>
+
+        {ev.teams.length > 0 ? (
+          <div className="mt-4 flex flex-wrap gap-1.5">
+            {ev.teams.map((t) => (
+              <span
+                key={t.teamId}
+                className="inline-flex items-center gap-1.5 rounded-full bg-white/12 px-2.5 py-1 text-xs font-medium"
+              >
+                <span
+                  className={cn(
+                    "size-2 rounded-full",
+                    t.tone === "full" ? "bg-success" : t.tone === "partial" ? "bg-warning" : "bg-destructive",
+                  )}
+                  style={t.tone === "empty" ? { backgroundColor: "hsl(6 80% 66%)" } : undefined}
+                />
+                {t.name} {t.assigned}/{t.needed}
+              </span>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </div>
   );
 }
 
@@ -470,10 +508,10 @@ function StatTile({
         ? "text-warning bg-warning/12"
         : "text-accent bg-accent/12";
   return (
-    <Card className="shadow-none">
+    <Card>
       <CardContent className="flex flex-col items-center gap-1 p-3 text-center">
         <span className={`inline-flex size-9 items-center justify-center rounded-full ${toneClass}`}>{icon}</span>
-        <span className="text-xl font-semibold leading-none">{value}</span>
+        <span className="font-display text-2xl font-extrabold leading-none">{value}</span>
         <span className="text-[11px] leading-tight text-muted-foreground">{label}</span>
       </CardContent>
     </Card>
