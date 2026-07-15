@@ -17,6 +17,7 @@ import { STATUS_META } from "@/lib/status";
 import { getSession } from "@/lib/auth";
 import { getEventDetail, listChurchProfiles, type DetailPosition, type DetailTeam } from "@/lib/data";
 import { CheckinButton, SwapPending } from "@/components/slot-controls";
+import { EventTeams } from "@/components/event/event-teams";
 import { ResponsavelControls } from "@/components/responsavel-controls";
 import { fmtEventDate, fmtTime, churchDateISO } from "@/lib/format";
 
@@ -33,6 +34,8 @@ export default async function EventoPage({ params }: { params: Promise<{ id: str
   const kicker = churchDateISO(ev.starts_at) === churchDateISO(nowISO) ? "Acontece hoje" : "Próximo culto";
   const hasMeta = !!(ev.responsibleName || session.role === "admin" || ev.notes);
   const profiles = session.role === "admin" ? await listChurchProfiles() : [];
+  const manageTeams = ev.teams.filter((t) => t.canManage);
+  const otherTeams = ev.teams.filter((t) => !t.canManage);
 
   return (
     <div className="space-y-3.5 pb-4">
@@ -93,9 +96,14 @@ export default async function EventoPage({ params }: { params: Promise<{ id: str
           </CardContent>
         </Card>
       ) : (
-        ev.teams.map((team) => (
-          <TeamBlock key={team.teamId} eventId={ev.id} team={team} canCheckin={canCheckin} />
-        ))
+        <>
+          {manageTeams.length > 0 ? (
+            <EventTeams eventId={ev.id} canCheckin={canCheckin} teams={manageTeams} />
+          ) : null}
+          {otherTeams.map((team) => (
+            <TeamBlock key={team.teamId} eventId={ev.id} team={team} canCheckin={canCheckin} />
+          ))}
+        </>
       )}
 
       {session.role === "admin" && ev.addableTeams.length > 0 ? (
