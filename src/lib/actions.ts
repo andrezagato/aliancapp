@@ -26,6 +26,30 @@ function saoPauloToIso(date: string, time: string): string {
 }
 
 // =============================================================================
+// ONBOARDING: solicitar entrada (auto-cadastro público — sem sessão)
+// Passa pelo server (mesma origem) em vez de fetch direto do navegador ao
+// Supabase — evita o "Load failed" do Safari e dá erro claro.
+// =============================================================================
+export async function solicitarEntrada(input: {
+  fullName: string;
+  email: string;
+  phone: string;
+  message: string;
+}): Promise<ActionResult> {
+  const nome = input.fullName.trim();
+  if (nome.length < 2) return fail("Informe seu nome completo.");
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("solicitar_entrada", {
+    p_full_name: nome,
+    p_email: input.email.trim(),
+    p_phone: input.phone.trim(),
+    p_message: input.message.trim(),
+  });
+  if (error) return fail(error.message);
+  return ok;
+}
+
+// =============================================================================
 // VOLUNTÁRIO: confirmar / recusar (via RPC security definer)
 // =============================================================================
 export async function confirmarEscalacao(assignmentId: string): Promise<ActionResult> {

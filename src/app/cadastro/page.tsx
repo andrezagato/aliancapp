@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { CheckCircle2 } from "lucide-react";
-import { createClient, supabaseConfigured } from "@/lib/supabase/client";
+import { solicitarEntrada } from "@/lib/actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -18,19 +18,16 @@ export default function CadastroPage() {
     setError(null);
     const form = new FormData(e.currentTarget);
 
-    if (supabaseConfigured) {
-      const supabase = createClient();
-      const { error } = await supabase.rpc("solicitar_entrada", {
-        p_full_name: String(form.get("full_name") ?? ""),
-        p_email: String(form.get("email") ?? ""),
-        p_phone: String(form.get("phone") ?? ""),
-        p_message: String(form.get("message") ?? ""),
-      });
-      if (error) {
-        setError(error.message);
-        setLoading(false);
-        return;
-      }
+    const r = await solicitarEntrada({
+      fullName: String(form.get("full_name") ?? ""),
+      email: String(form.get("email") ?? ""),
+      phone: String(form.get("phone") ?? ""),
+      message: String(form.get("message") ?? ""),
+    });
+    if (!r.ok) {
+      setError(r.error);
+      setLoading(false);
+      return;
     }
     setSent(true);
     setLoading(false);

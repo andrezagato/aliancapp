@@ -29,11 +29,13 @@ export function TopBar({
   useEffect(() => {
     const onScroll = () => {
       const t = Math.min(1, Math.max(0, window.scrollY) / 70);
+      // O título grande some DE VEZ (opacidade 0 em t=0.5) antes do condensado
+      // entrar (a partir de t=0.55) — sem os dois títulos sobrepostos.
       if (bg.current) bg.current.style.opacity = String(t);
       if (condensed.current) condensed.current.style.opacity = String(Math.max(0, (t - 0.55) / 0.45));
       if (big.current) {
-        big.current.style.transform = `scale(${1 - 0.14 * t}) translateY(${-6 * t}px)`;
-        big.current.style.opacity = String(1 - 0.72 * t);
+        big.current.style.transform = `scale(${1 - 0.12 * t}) translateY(${-6 * t}px)`;
+        big.current.style.opacity = String(Math.max(0, 1 - t / 0.5));
       }
     };
     onScroll();
