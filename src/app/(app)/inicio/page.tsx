@@ -33,6 +33,7 @@ import {
   type MyAssignment,
   type EventListItem,
   type MyResponsibleEvent,
+  type SwapInboxItem,
   type MyInterest,
   type TeamWithPositions,
 } from "@/lib/data";
@@ -84,13 +85,23 @@ export default async function InicioPage() {
     );
   }
 
-  // Líder / Admin: mesma casca "Aconchego" (cabeçalho reativo + pull-to-refresh).
+  // Admin: home reorganizada — herói no topo, pendências, resumo clicável abaixo.
+  if (session.role === "admin") {
+    return (
+      <HomeShell title={`${greeting()}, ${first}`} subtitle={roleLabel} userName={userName}>
+        <AdminSection swaps={swaps} respEvents={respEvents} />
+        <Servir teams={teamsWithPos} interests={myInterests} />
+        <Birthdays />
+      </HomeShell>
+    );
+  }
+
+  // Líder: casca "Aconchego" (cabeçalho reativo + pull-to-refresh).
   return (
     <HomeShell title={`${greeting()}, ${first}`} subtitle={roleLabel} userName={userName}>
       <SwapInbox items={swaps} />
       <ResponsibleConfirm events={respEvents} />
-      {session.role === "admin" && <AdminSection />}
-      {session.role === "leader" && <LeaderSection />}
+      <LeaderSection />
       <Servir teams={teamsWithPos} interests={myInterests} />
       <Birthdays />
     </HomeShell>
@@ -230,20 +241,22 @@ async function LeaderSection() {
 // -----------------------------------------------------------------------------
 // ADMIN
 // -----------------------------------------------------------------------------
-async function AdminSection() {
+async function AdminSection({
+  swaps,
+  respEvents,
+}: {
+  swaps: SwapInboxItem[];
+  respEvents: MyResponsibleEvent[];
+}) {
   const session = (await getSession())!;
   const home = await getAdminHome(session);
 
   return (
     <>
-      <div className="grid grid-cols-3 gap-3">
-        <Link href="/pessoas" className="contents">
-          <StatTile icon={<UserPlus className="size-5" />} value={home.pendingJoinRequests} label="Aprovações" tone="warning" />
-        </Link>
-        <StatTile icon={<CalendarDays className="size-5" />} value={home.upcomingCount} label="Eventos" tone="primary" />
-        <StatTile icon={<AlertTriangle className="size-5" />} value={home.coverageHoles.length} label="Sem escala" tone="accent" />
-      </div>
+      {/* 1. Herói — o próximo culto é a âncora da tela */}
+      {home.nextEvent ? <NextEventCard ev={home.nextEvent} /> : null}
 
+      {/* 2. Ações principais */}
       <div className="grid grid-cols-2 gap-3">
         <Link href="/escalas/novo" className={cn(buttonVariants(), "w-full")}>
           <Plus className="size-4" /> Criar evento
@@ -253,12 +266,9 @@ async function AdminSection() {
         </Link>
       </div>
 
-      {home.nextEvent ? (
-        <section>
-          <h3 className="mb-2 px-1 text-base font-semibold">Próximo culto</h3>
-          <NextEventCard ev={home.nextEvent} />
-        </section>
-      ) : null}
+      {/* 3. Precisa de você — pendências acionáveis */}
+      <SwapInbox items={swaps} />
+      <ResponsibleConfirm events={respEvents} />
 
       {home.coverageHoles.length > 0 ? (
         <section>
@@ -307,6 +317,22 @@ async function AdminSection() {
           </Card>
         </section>
       ) : null}
+
+      {/* 4. Resumo — atalhos clicáveis (não pedem ação, ficam por último) */}
+      <section>
+        <h3 className="mb-2 px-1 text-sm font-semibold text-muted-foreground">Resumo</h3>
+        <div className="grid grid-cols-3 gap-3">
+          <Link href="/pessoas" className="contents">
+            <StatTile icon={<UserPlus className="size-5" />} value={home.pendingJoinRequests} label="Aprovações" tone="warning" />
+          </Link>
+          <Link href="/escalas" className="contents">
+            <StatTile icon={<CalendarDays className="size-5" />} value={home.upcomingCount} label="Eventos" tone="primary" />
+          </Link>
+          <Link href="/escalas" className="contents">
+            <StatTile icon={<AlertTriangle className="size-5" />} value={home.coverageHoles.length} label="Sem escala" tone="accent" />
+          </Link>
+        </div>
+      </section>
     </>
   );
 }
