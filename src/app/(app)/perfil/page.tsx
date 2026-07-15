@@ -3,7 +3,8 @@ import { Mail, Phone, Cake, Users, History, Bell, CalendarOff, ChevronRight } fr
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar } from "@/components/ui/avatar";
 import { SignOutButton } from "@/components/sign-out-button";
-import { cn } from "@/lib/utils";
+import { ProfileApelido } from "@/components/profile-apelido";
+import { cn, displayName } from "@/lib/utils";
 import { getSession } from "@/lib/auth";
 import { fmtBirthday } from "@/lib/format";
 
@@ -33,7 +34,8 @@ export default async function PerfilPage() {
             src={p.avatar_url}
             className="size-20 border-[3px] border-white/25 bg-accent text-2xl text-primary"
           />
-          <h1 className="mt-3 font-display text-2xl font-extrabold text-white">{p.full_name || "Sem nome"}</h1>
+          <h1 className="mt-3 font-display text-2xl font-extrabold text-white">{displayName(p.nickname, p.full_name)}</h1>
+          {p.nickname?.trim() ? <p className="text-[12.5px] text-primary-foreground/70">{p.full_name}</p> : null}
           <p className="text-[13.5px] text-primary-foreground/85">{roleLabel}</p>
           {p.teams.length > 0 ? (
             <div className="mt-3 flex flex-wrap justify-center gap-1.5">
@@ -72,6 +74,9 @@ export default async function PerfilPage() {
 
       <Card className="overflow-hidden">
         <ul className="divide-y divide-border/70">
+          <li>
+            <ProfileApelido current={p.nickname} />
+          </li>
           <ProfileRow href="/historico" icon={<History className="size-[18px]" />} tone="primary" label="Histórico de escalas" />
           <ProfileRow href="/notificacoes" icon={<Bell className="size-[18px]" />} tone="accent" label="Notificações" />
           {isVol ? (

@@ -556,6 +556,7 @@ export async function getEventDetail(session: Session, eventId: string): Promise
 export type EligibleMember = {
   profileId: string;
   name: string;
+  nickname: string | null;
   avatarUrl: string | null;
   knowsPosition: boolean;
   alreadyInEvent: boolean;
@@ -572,7 +573,7 @@ export async function getEligibleMembers(
   const [{ data: members }, { data: eventAssigns }, { data: ev }] = await Promise.all([
     supabase
       .from("memberships")
-      .select("id, profile:profiles ( id, full_name, avatar_url, status ), member_positions ( position_id )")
+      .select("id, profile:profiles ( id, full_name, nickname, avatar_url, status ), member_positions ( position_id )")
       .eq("team_id", teamId),
     supabase.from("assignments").select("profile_id").eq("event_id", eventId),
     supabase.from("events").select("starts_at").eq("id", eventId).maybeSingle(),
@@ -582,7 +583,7 @@ export async function getEligibleMembers(
 
   const rows = (members ?? []) as {
     id: string;
-    profile: { id: string; full_name: string; avatar_url: string | null; status: string } | null;
+    profile: { id: string; full_name: string; nickname: string | null; avatar_url: string | null; status: string } | null;
     member_positions: { position_id: string }[];
   }[];
   const activeRows = rows.filter((m) => m.profile && m.profile.status === "ativo");
@@ -622,6 +623,7 @@ export async function getEligibleMembers(
     .map((m) => ({
       profileId: m.profile!.id,
       name: m.profile!.full_name || "Sem nome",
+      nickname: m.profile!.nickname,
       avatarUrl: m.profile!.avatar_url,
       knowsPosition: m.member_positions.some((mp) => mp.position_id === positionId),
       alreadyInEvent: assignedIds.has(m.profile!.id),
@@ -928,6 +930,7 @@ export type MemberTeamRef = {
 export type MemberRow = {
   id: string;
   fullName: string;
+  nickname: string | null;
   email: string | null;
   phone: string | null;
   avatarUrl: string | null;
@@ -942,12 +945,13 @@ export async function listMembers(): Promise<MemberRow[]> {
   const { data } = await supabase
     .from("profiles")
     .select(
-      "id, full_name, email, phone, avatar_url, system_role, status, created_at, memberships ( id, role, team:teams ( id, name, color, archived_at ) )",
+      "id, full_name, nickname, email, phone, avatar_url, system_role, status, created_at, memberships ( id, role, team:teams ( id, name, color, archived_at ) )",
     )
     .order("full_name");
   return ((data ?? []) as {
     id: string;
     full_name: string;
+    nickname: string | null;
     email: string | null;
     phone: string | null;
     avatar_url: string | null;
@@ -962,6 +966,7 @@ export async function listMembers(): Promise<MemberRow[]> {
   }[]).map((p) => ({
     id: p.id,
     fullName: p.full_name || "Sem nome",
+    nickname: p.nickname,
     email: p.email,
     phone: p.phone,
     avatarUrl: p.avatar_url,

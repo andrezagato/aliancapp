@@ -65,6 +65,7 @@ export const getSession = cache(async (): Promise<Session | null> => {
       id: user.id,
       church_id: null,
       full_name: (user.user_metadata?.full_name as string) ?? (user.user_metadata?.name as string) ?? "",
+      nickname: null,
       email: user.email ?? null,
       phone: null,
       avatar_url: (user.user_metadata?.avatar_url as string) ?? null,

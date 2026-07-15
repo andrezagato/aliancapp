@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
 import { TeamDot } from "@/components/coverage-badge";
-import { cn } from "@/lib/utils";
+import { cn, displayName } from "@/lib/utils";
 import { adicionarMembro, removerMembro, definirPapelMembro } from "@/lib/actions";
 import type { MemberRow } from "@/lib/data";
 
@@ -154,7 +154,8 @@ function PersonRow({
         <Avatar name={person.fullName} src={person.avatarUrl} />
         <div className="min-w-0 flex-1">
           <p className="truncate font-medium">
-            {person.fullName}
+            {displayName(person.nickname, person.fullName)}
+            {person.nickname?.trim() ? <span className="font-normal text-muted-foreground"> · {person.fullName}</span> : null}
             {person.systemRole === "admin" ? <Badge variant="primary" className="ml-2">Admin</Badge> : null}
           </p>
           {person.teams.length === 0 ? (

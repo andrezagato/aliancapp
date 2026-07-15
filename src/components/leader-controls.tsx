@@ -8,7 +8,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { Modal } from "@/components/modal";
 import { TeamDot } from "@/components/coverage-badge";
 import { useToast } from "@/components/ui/toast";
-import { cn } from "@/lib/utils";
+import { cn, displayName } from "@/lib/utils";
 import { fmtDayMonthShort } from "@/lib/format";
 import {
   buscarElegiveis,
@@ -117,7 +117,10 @@ export function EscalarDialog({
                 >
                   <Avatar name={m.name} src={m.avatarUrl} className="size-10 shrink-0" />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate font-semibold">{m.name}</p>
+                    <p className="truncate font-semibold">
+                      {displayName(m.nickname, m.name)}
+                      {m.nickname ? <span className="font-normal text-muted-foreground"> · {m.name}</span> : null}
+                    </p>
                     <p className={cn("truncate text-[12.5px]", m.unavailable ? "text-destructive" : "text-muted-foreground")}>
                       {m.unavailable
                         ? "Indisponível nesse dia"

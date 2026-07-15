@@ -49,6 +49,19 @@ export async function solicitarEntrada(input: {
   return ok;
 }
 
+// Apelido: a própria pessoa define/edita o próprio (ex.: "Maui").
+export async function atualizarApelido(nickname: string): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  const supabase = await createClient();
+  const value = nickname.trim();
+  const { error } = await supabase.from("profiles").update({ nickname: value || null }).eq("id", session.userId);
+  if (error) return fail(error.message);
+  revalidatePath("/perfil");
+  revalidatePath("/pessoas");
+  return ok;
+}
+
 // =============================================================================
 // VOLUNTÁRIO: confirmar / recusar (via RPC security definer)
 // =============================================================================

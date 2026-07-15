@@ -12,3 +12,13 @@ export function initials(name: string): string {
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
+
+/** Nome de exibição: apelido se houver, senão o nome completo. */
+export function displayName(
+  nickname: string | null | undefined,
+  fullName: string | null | undefined,
+): string {
+  const nick = nickname?.trim();
+  if (nick) return nick;
+  return (fullName ?? "").trim() || "?";
+}
