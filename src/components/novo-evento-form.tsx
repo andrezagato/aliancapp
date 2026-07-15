@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check } from "lucide-react";
+import { Check, LayoutTemplate } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { TeamDot } from "@/components/coverage-badge";
@@ -82,92 +82,103 @@ export function NovoEventoForm({
   }
 
   return (
-    <div className="space-y-5">
-      {templates.length > 0 ? (
-        <div>
-          <p className="mb-2 px-1 text-sm font-medium">Começar de um modelo</p>
-          <div className="flex flex-wrap gap-2">
-            {templates.map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => applyTemplate(t)}
-                className="rounded-full border border-border bg-card px-3 py-1.5 text-sm hover:border-primary/50"
-              >
-                {t.title}{" "}
-                <span className="text-muted-foreground">· {t.teams.length} equipe{t.teams.length === 1 ? "" : "s"}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      ) : null}
-
+    <div className="space-y-4">
       <Card>
-        <CardContent className="space-y-4 p-5">
-          <Field label="Título">
-            <input className={inputClass} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex.: Culto de Domingo" />
-          </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Data">
-              <input type="date" className={inputClass} value={date} onChange={(e) => setDate(e.target.value)} />
+        <CardContent className="space-y-5 p-5">
+          {templates.length > 0 ? (
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Começar de um modelo</p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {templates.map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => applyTemplate(t)}
+                    className="press-sm flex items-center gap-3 rounded-2xl border border-border bg-muted/30 p-3 text-left hover:border-primary/40"
+                  >
+                    <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+                      <LayoutTemplate className="size-[18px]" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-semibold">{t.title}</span>
+                      <span className="block text-xs text-muted-foreground">
+                        {t.teams.length} equipe{t.teams.length === 1 ? "" : "s"}
+                        {t.startTime ? ` · ${t.startTime.slice(0, 5)}` : ""}
+                      </span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          <div className="space-y-4">
+            <Field label="Título">
+              <input className={inputClass} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex.: Culto de Domingo" />
             </Field>
-            <Field label="Horário">
-              <input type="time" className={inputClass} value={time} onChange={(e) => setTime(e.target.value)} />
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Data">
+                <input type="date" className={inputClass} value={date} onChange={(e) => setDate(e.target.value)} />
+              </Field>
+              <Field label="Horário">
+                <input type="time" className={inputClass} value={time} onChange={(e) => setTime(e.target.value)} />
+              </Field>
+            </div>
+            <Field label="Local">
+              <input className={inputClass} value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Ex.: Templo" />
             </Field>
           </div>
-          <Field label="Local">
-            <input className={inputClass} value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Ex.: Templo" />
-          </Field>
+
+          <div className="space-y-2 border-t border-border/70 pt-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-semibold">Equipes que vão servir</h3>
+              <span className="text-sm text-muted-foreground">
+                {selected.size} selecionada{selected.size === 1 ? "" : "s"}
+              </span>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Cada líder monta a escala da própria equipe (posições e quantas pessoas) depois, na tela do evento.
+            </p>
+            <div className="space-y-2 pt-1">
+              {teams.map((team) => {
+                const on = selected.has(team.id);
+                return (
+                  <button
+                    key={team.id}
+                    type="button"
+                    onClick={() => toggle(team.id)}
+                    className={cn(
+                      "press-sm flex w-full items-start gap-3 rounded-2xl p-3 text-left transition-colors",
+                      on ? "bg-primary/5 ring-1 ring-primary" : "bg-muted/30 hover:bg-muted/60",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-md border",
+                        on ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card",
+                      )}
+                    >
+                      {on ? <Check className="size-3.5" /> : null}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="flex items-center gap-2 font-medium">
+                        <TeamDot color={team.color} /> {team.name}
+                      </p>
+                      {team.positions.length > 0 ? (
+                        <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                          Posições: {team.positions.map((p) => p.name).join(", ")}
+                        </p>
+                      ) : (
+                        <p className="mt-0.5 text-xs text-muted-foreground">Sem posições cadastradas ainda</p>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </CardContent>
       </Card>
-
-      <div>
-        <div className="mb-1 flex items-center justify-between px-1">
-          <h3 className="text-base font-semibold">Equipes necessárias</h3>
-          <span className="text-sm text-muted-foreground">{selected.size} selecionada{selected.size === 1 ? "" : "s"}</span>
-        </div>
-        <p className="mb-3 px-1 text-sm text-muted-foreground">
-          Marque quais equipes vão servir. Cada líder monta a escala da própria equipe
-          (posições e quantas pessoas) na tela do evento.
-        </p>
-        <div className="space-y-2.5">
-          {teams.map((team) => {
-            const on = selected.has(team.id);
-            return (
-              <button
-                key={team.id}
-                type="button"
-                onClick={() => toggle(team.id)}
-                className={cn(
-                  "flex w-full items-start gap-3 rounded-2xl border p-4 text-left transition-colors",
-                  on ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50",
-                )}
-              >
-                <span
-                  className={cn(
-                    "mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-md border",
-                    on ? "border-primary bg-primary text-primary-foreground" : "border-border",
-                  )}
-                >
-                  {on ? <Check className="size-3.5" /> : null}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="flex items-center gap-2 font-medium">
-                    <TeamDot color={team.color} /> {team.name}
-                  </p>
-                  {team.positions.length > 0 ? (
-                    <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                      Sugestão: {team.positions.map((p) => p.name).join(", ")}
-                    </p>
-                  ) : (
-                    <p className="mt-0.5 text-xs text-muted-foreground">Sem posições cadastradas ainda</p>
-                  )}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </div>
 
       {error ? <p className="rounded-xl bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</p> : null}
 

@@ -12,7 +12,7 @@ import { adicionarMembro, removerMembro, definirPapelMembro } from "@/lib/action
 import type { MemberRow } from "@/lib/data";
 
 type TeamOpt = { id: string; name: string; color: string };
-type SortKey = "nome" | "recentes" | "equipes";
+type SortKey = "nome" | "recentes";
 
 const norm = (s: string) =>
   s.toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
@@ -20,24 +20,28 @@ const norm = (s: string) =>
 export function PeopleDirectory({ members, teams }: { members: MemberRow[]; teams: TeamOpt[] }) {
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortKey>("nome");
+  const [teamFilter, setTeamFilter] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
 
   const shown = useMemo(() => {
     const q = norm(query.trim());
     const list = members.filter(
-      (m) => !q || norm(m.fullName).includes(q) || norm(m.email ?? "").includes(q),
+      (m) =>
+        (!q || norm(m.fullName).includes(q) || norm(m.email ?? "").includes(q)) &&
+        (!teamFilter || m.teams.some((t) => t.teamId === teamFilter)),
     );
     const sorted = [...list];
-    if (sort === "nome") sorted.sort((a, b) => a.fullName.localeCompare(b.fullName, "pt-BR"));
-    else if (sort === "recentes") sorted.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-    else sorted.sort((a, b) => b.teams.length - a.teams.length);
+    if (sort === "recentes") sorted.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    else sorted.sort((a, b) => a.fullName.localeCompare(b.fullName, "pt-BR"));
     return sorted;
-  }, [members, query, sort]);
+  }, [members, query, sort, teamFilter]);
 
   return (
     <section>
       <div className="mb-2 flex items-center justify-between px-1">
-        <h3 className="text-base font-semibold">Todas as pessoas · {members.length}</h3>
+        <h3 className="text-base font-semibold">
+          {teamFilter ? teams.find((t) => t.id === teamFilter)?.name ?? "Pessoas" : "Todas as pessoas"} · {shown.length}
+        </h3>
       </div>
 
       <div className="mb-3 space-y-2">
@@ -54,7 +58,6 @@ export function PeopleDirectory({ members, teams }: { members: MemberRow[]; team
           {([
             ["nome", "A–Z"],
             ["recentes", "Recentes"],
-            ["equipes", "Mais equipes"],
           ] as [SortKey, string][]).map(([key, label]) => (
             <button
               key={key}
@@ -68,6 +71,33 @@ export function PeopleDirectory({ members, teams }: { members: MemberRow[]; team
             </button>
           ))}
         </div>
+
+        {/* Filtro por equipe (um por vez) */}
+        {teams.length > 0 ? (
+          <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 text-xs [-ms-overflow-style:none] [scrollbar-width:none]">
+            <button
+              onClick={() => setTeamFilter(null)}
+              className={cn(
+                "shrink-0 rounded-full px-3 py-1 font-semibold",
+                teamFilter === null ? "bg-primary text-primary-foreground" : "border border-border bg-card text-muted-foreground",
+              )}
+            >
+              Todas
+            </button>
+            {teams.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => setTeamFilter(teamFilter === t.id ? null : t.id)}
+                className={cn(
+                  "inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 font-semibold",
+                  teamFilter === t.id ? "bg-primary text-primary-foreground" : "border border-border bg-card text-muted-foreground",
+                )}
+              >
+                <span className="size-2 rounded-full" style={{ backgroundColor: t.color }} /> {t.name}
+              </button>
+            ))}
+          </div>
+        ) : null}
       </div>
 
       {shown.length === 0 ? (
