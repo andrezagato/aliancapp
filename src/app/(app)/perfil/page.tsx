@@ -3,7 +3,8 @@ import { Mail, Phone, Cake, Users, History, Bell, CalendarOff, ChevronRight } fr
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar } from "@/components/ui/avatar";
 import { SignOutButton } from "@/components/sign-out-button";
-import { ProfileApelido } from "@/components/profile-apelido";
+import { ProfileEditableField } from "@/components/profile-field";
+import { atualizarNome, atualizarApelido } from "@/lib/actions";
 import { cn, displayName } from "@/lib/utils";
 import { getSession } from "@/lib/auth";
 import { fmtBirthday } from "@/lib/format";
@@ -75,7 +76,23 @@ export default async function PerfilPage() {
       <Card className="overflow-hidden">
         <ul className="divide-y divide-border/70">
           <li>
-            <ProfileApelido current={p.nickname} />
+            <ProfileEditableField
+              label="Nome"
+              current={p.full_name}
+              placeholder="Seu nome completo"
+              emptyHint="Toque para definir seu nome"
+              required
+              action={atualizarNome}
+            />
+          </li>
+          <li>
+            <ProfileEditableField
+              label="Apelido"
+              current={p.nickname}
+              placeholder="Ex.: Maui"
+              emptyHint="Como querem te chamar (ex.: Maui)"
+              action={atualizarApelido}
+            />
           </li>
           <ProfileRow href="/historico" icon={<History className="size-[18px]" />} tone="primary" label="Histórico de escalas" />
           <ProfileRow href="/notificacoes" icon={<Bell className="size-[18px]" />} tone="accent" label="Notificações" />

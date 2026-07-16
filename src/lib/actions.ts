@@ -62,6 +62,20 @@ export async function atualizarApelido(nickname: string): Promise<ActionResult> 
   return ok;
 }
 
+// Nome completo: a própria pessoa edita o próprio.
+export async function atualizarNome(fullName: string): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  const value = fullName.trim();
+  if (value.length < 2) return fail("Informe seu nome.");
+  const supabase = await createClient();
+  const { error } = await supabase.from("profiles").update({ full_name: value }).eq("id", session.userId);
+  if (error) return fail(error.message);
+  revalidatePath("/perfil");
+  revalidatePath("/pessoas");
+  return ok;
+}
+
 // =============================================================================
 // VOLUNTÁRIO: confirmar / recusar (via RPC security definer)
 // =============================================================================

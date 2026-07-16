@@ -4,13 +4,27 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Pencil, Check, X } from "lucide-react";
 import { useToast } from "@/components/ui/toast";
-import { atualizarApelido } from "@/lib/actions";
+import type { ActionResult } from "@/lib/types";
 
 /**
- * Linha do Perfil pra a pessoa definir/editar o próprio apelido (ex.: "Maui").
- * Aparece em escalar, diretório e no cabeçalho do perfil via displayName.
+ * Linha editável do Perfil (Nome, Apelido…). A própria pessoa edita o próprio
+ * campo; recebe a server action como prop. `required` impede salvar vazio.
  */
-export function ProfileApelido({ current }: { current: string | null }) {
+export function ProfileEditableField({
+  label,
+  current,
+  placeholder,
+  emptyHint,
+  required = false,
+  action,
+}: {
+  label: string;
+  current: string | null;
+  placeholder: string;
+  emptyHint: string;
+  required?: boolean;
+  action: (value: string) => Promise<ActionResult>;
+}) {
   const router = useRouter();
   const { showToast } = useToast();
   const [editing, setEditing] = useState(false);
@@ -18,14 +32,18 @@ export function ProfileApelido({ current }: { current: string | null }) {
   const [pending, start] = useTransition();
 
   function save() {
+    if (required && !value.trim()) {
+      showToast(`${label} não pode ficar vazio.`);
+      return;
+    }
     start(async () => {
-      const r = await atualizarApelido(value);
+      const r = await action(value);
       if (!r.ok) {
         showToast(r.error);
         return;
       }
       setEditing(false);
-      showToast(value.trim() ? "Apelido salvo." : "Apelido removido.");
+      showToast(`${label} salvo.`);
       router.refresh();
     });
   }
@@ -36,19 +54,19 @@ export function ProfileApelido({ current }: { current: string | null }) {
         <input
           autoFocus
           value={value}
-          maxLength={40}
+          maxLength={60}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter") save();
             if (e.key === "Escape") setEditing(false);
           }}
-          placeholder="Ex.: Maui"
+          placeholder={placeholder}
           className="min-w-0 flex-1 rounded-xl border border-input bg-card px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
         />
         <button
           onClick={save}
           disabled={pending}
-          aria-label="Salvar apelido"
+          aria-label={`Salvar ${label.toLowerCase()}`}
           className="press-sm grid size-9 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground disabled:opacity-60"
         >
           <Check className="size-4" />
@@ -76,9 +94,9 @@ export function ProfileApelido({ current }: { current: string | null }) {
         <Pencil className="size-[18px]" />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block text-[15px] font-semibold">Apelido</span>
+        <span className="block text-[15px] font-semibold">{label}</span>
         <span className="block truncate text-sm text-muted-foreground">
-          {current?.trim() ? `"${current}"` : "Como querem te chamar (ex.: Maui)"}
+          {current?.trim() ? current : emptyHint}
         </span>
       </span>
       <span className="shrink-0 text-[13px] font-bold text-primary">{current?.trim() ? "Editar" : "Adicionar"}</span>

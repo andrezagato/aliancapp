@@ -21,12 +21,12 @@ import type { DetailTeam, DetailPosition } from "@/lib/data";
 const MODE_KEY = "sirvo:evt-mode";
 const EXPAND_KEY = "sirvo:evt-expand-all";
 
-const BORDER: Record<string, string> = {
-  confirmado: "border-success",
-  presente: "border-success",
-  convidado: "border-warning",
-  recusado: "border-destructive",
-  vaga_aberta: "border-border",
+const SHORT: Record<string, string> = {
+  confirmado: "Confirmado",
+  presente: "Presente",
+  convidado: "Aguardando",
+  recusado: "Recusou",
+  vaga_aberta: "Vaga",
 };
 
 /**
@@ -171,27 +171,35 @@ function CompactPosition({ pos }: { pos: DetailPosition }) {
           {occ}/{pos.needed}
         </span>
       </div>
-      {pos.filled.map((person) => (
-        <div
-          key={person.assignmentId}
-          className={cn(
-            "flex items-center gap-2.5 rounded-r-md border-l-[3px] bg-muted/25 py-1.5 pl-2.5 pr-2",
-            BORDER[person.status] ?? "border-border",
-          )}
-        >
-          <Avatar name={person.name} src={person.avatarUrl} className="size-7 text-[11px]" />
-          <span className="min-w-0 flex-1 truncate text-[13.5px] font-medium">
-            {person.name}
-            {person.isMe ? <span className="text-muted-foreground"> (você)</span> : null}
-          </span>
-          {person.checkedIn ? <BadgeCheck className="size-4 shrink-0 text-success" /> : null}
-          {person.swap ? (
-            <span className="grid size-[18px] shrink-0 place-items-center rounded-full bg-warning/20 text-[10px] font-extrabold text-warning">
-              !
+      {pos.filled.map((person) => {
+        const meta = STATUS_META[person.status];
+        return (
+          <div key={person.assignmentId} className="flex items-center gap-2.5 rounded-md bg-muted/25 px-2.5 py-1.5">
+            <Avatar name={person.name} src={person.avatarUrl} className="size-7 text-[11px]" />
+            <span className="min-w-0 flex-1 truncate text-[13.5px] font-medium">
+              {person.name}
+              {person.isMe ? <span className="text-muted-foreground"> (você)</span> : null}
             </span>
-          ) : null}
-        </div>
-      ))}
+            {person.swap ? (
+              <span
+                title="Troca pendente"
+                className="grid size-[18px] shrink-0 place-items-center rounded-full bg-warning/20 text-[10px] font-extrabold text-warning"
+              >
+                !
+              </span>
+            ) : null}
+            {person.checkedIn ? (
+              <Badge variant="success" className="shrink-0 gap-1 px-2 py-0.5 text-[11px]">
+                <BadgeCheck className="size-3.5" /> Presente
+              </Badge>
+            ) : (
+              <Badge variant={meta.variant} className="shrink-0 px-2 py-0.5 text-[11px]">
+                {SHORT[person.status] ?? meta.label}
+              </Badge>
+            )}
+          </div>
+        );
+      })}
       {pos.openCount > 0 ? (
         <p className="pl-2.5 text-[13px] font-medium text-destructive/90">
           {pos.openCount} vaga{pos.openCount > 1 ? "s" : ""} em aberto
