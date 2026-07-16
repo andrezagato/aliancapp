@@ -100,6 +100,17 @@ export async function confirmarEscalacao(assignmentId: string): Promise<ActionRe
   const supabase = await createClient();
   const { error } = await supabase.rpc("confirmar_escalacao", { p_assignment: assignmentId });
   if (error) return fail(error.message);
+  const { data: ca } = await supabase.from("assignments").select("team_id, event_id").eq("id", assignmentId).maybeSingle();
+  if (ca?.team_id) {
+    await notifyMany(await teamLeaderIds(ca.team_id), {
+      kind: "confirmado",
+      title: "Presença confirmada",
+      body: `${session.profile.full_name || "Alguém"} confirmou presença.`,
+      link: ca.event_id ? `/escalas/${ca.event_id}` : "/inicio",
+      teamId: ca.team_id,
+      eventId: ca.event_id,
+    });
+  }
   revalidatePath("/inicio");
   revalidatePath("/escalas");
   return ok;
@@ -116,6 +127,17 @@ export async function recusarEscalacao(assignmentId: string, motivo: string): Pr
     p_motivo: reason,
   });
   if (error) return fail(error.message);
+  const { data: ra } = await supabase.from("assignments").select("team_id, event_id").eq("id", assignmentId).maybeSingle();
+  if (ra?.team_id) {
+    await notifyMany(await teamLeaderIds(ra.team_id), {
+      kind: "cancelado",
+      title: "Alguém não vai poder",
+      body: `${session.profile.full_name || "Alguém"} não vai poder: ${reason}`,
+      link: ra.event_id ? `/escalas/${ra.event_id}` : "/inicio",
+      teamId: ra.team_id,
+      eventId: ra.event_id,
+    });
+  }
   revalidatePath("/inicio");
   revalidatePath("/escalas");
   return ok;
@@ -866,7 +888,7 @@ export async function pedirTroca(
 
   const { data: a } = await supabase
     .from("assignments")
-    .select("profile_id, event_id")
+    .select("profile_id, event_id, team_id")
     .eq("id", assignmentId)
     .maybeSingle();
   if (!a) return fail("Escalação não encontrada.");
@@ -887,6 +909,28 @@ export async function pedirTroca(
     reason: motivo,
   });
   if (error) return fail(error.message);
+
+  const swapLink = `/escalas/${a.event_id}`;
+  await notifyMany(await teamLeaderIds(a.team_id), {
+    kind: "troca_solicitada",
+    title: "Pedido de troca",
+    body: `${session.profile.full_name || "Alguém"} pediu troca de escala.`,
+    link: swapLink,
+    teamId: a.team_id,
+    eventId: a.event_id,
+  });
+  if (suggestedProfileId) {
+    await notify({
+      recipientId: suggestedProfileId,
+      kind: "troca_solicitada",
+      title: "Pediram você como substituto",
+      body: `${session.profile.full_name || "Alguém"} sugeriu você pra cobrir. Topa?`,
+      link: swapLink,
+      teamId: a.team_id,
+      eventId: a.event_id,
+    });
+  }
+
   revalidatePath(`/escalas/${a.event_id}`);
   revalidatePath("/inicio");
   return ok;
@@ -899,7 +943,7 @@ export async function resolverTroca(swapId: string, aprovar: boolean, eventId: s
 
   const { data: swap } = await supabase
     .from("swap_requests")
-    .select("id, assignment_id, suggested_profile_id, status, substitute_accepted_at")
+    .select("id, assignment_id, suggested_profile_id, status, substitute_accepted_at, requested_by")
     .eq("id", swapId)
     .maybeSingle();
   if (!swap) return fail("Pedido de troca não encontrado.");
@@ -946,6 +990,16 @@ export async function resolverTroca(swapId: string, aprovar: boolean, eventId: s
     .update({ status: aprovar ? "aprovada" : "recusada", resolved_by: session.userId })
     .eq("id", swapId);
   if (sErr) return fail(sErr.message);
+
+  await notify({
+    recipientId: swap.requested_by,
+    kind: "troca_resolvida",
+    title: aprovar ? "Sua troca foi aprovada" : "Troca não aprovada",
+    body: aprovar ? "Você foi liberado dessa escala." : "O líder não aprovou — você segue escalado.",
+    link: `/escalas/${eventId}`,
+    teamId: a.team_id,
+    eventId,
+  });
 
   revalidatePath(`/escalas/${eventId}`);
   revalidatePath("/inicio");

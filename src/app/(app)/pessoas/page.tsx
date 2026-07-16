@@ -39,19 +39,22 @@ export default async function PessoasPage() {
       <div className="animate-fade-in space-y-6 py-3">
         <ConvidarForm teams={teamOpts} />
 
-        {/* Auto-cadastros aguardando */}
-        {joins.length > 0 ? (
+        {/* Querem entrar — formulário + login espontâneo numa fila só */}
+        {joins.length + pendingProfiles.length > 0 ? (
           <section>
-            <h3 className="mb-2 px-1 text-base font-semibold">Pediram para entrar</h3>
+            <h3 className="mb-2 px-1 text-base font-semibold">
+              Querem entrar · {joins.length + pendingProfiles.length}
+            </h3>
             <div className="space-y-3">
               {joins.map((j) => (
-                <Card key={j.id}>
+                <Card key={`j-${j.id}`}>
                   <CardContent className="p-4">
                     <div className="flex items-start gap-3">
                       <Avatar name={j.fullName} />
                       <div className="min-w-0 flex-1">
                         <p className="font-medium">{j.fullName}</p>
-                        {j.email ? <p className="truncate text-sm text-muted-foreground">{j.email}</p> : null}
+                        <Badge variant="neutral" className="mt-0.5">Pediu pelo formulário</Badge>
+                        {j.email ? <p className="mt-1 truncate text-sm text-muted-foreground">{j.email}</p> : null}
                         {j.phone ? <p className="text-sm text-muted-foreground">{j.phone}</p> : null}
                         {j.message ? <p className="mt-1 text-sm text-muted-foreground">“{j.message}”</p> : null}
                       </div>
@@ -62,23 +65,15 @@ export default async function PessoasPage() {
                   </CardContent>
                 </Card>
               ))}
-            </div>
-          </section>
-        ) : null}
-
-        {/* Profiles pendentes (logaram sem convite) */}
-        {pendingProfiles.length > 0 ? (
-          <section>
-            <h3 className="mb-2 px-1 text-base font-semibold">Entraram sem convite</h3>
-            <div className="space-y-3">
               {pendingProfiles.map((m) => (
-                <Card key={m.id}>
+                <Card key={`p-${m.id}`}>
                   <CardContent className="p-4">
                     <div className="flex items-center gap-3">
                       <Avatar name={m.fullName} src={m.avatarUrl} />
                       <div className="min-w-0 flex-1">
                         <p className="font-medium">{m.fullName}</p>
-                        {m.email ? <p className="truncate text-sm text-muted-foreground">{m.email}</p> : null}
+                        <Badge variant="neutral" className="mt-0.5">Já logou · aguardando</Badge>
+                        {m.email ? <p className="mt-1 truncate text-sm text-muted-foreground">{m.email}</p> : null}
                       </div>
                       <PendingProfileActions profileId={m.id} teams={teamOpts} />
                     </div>
