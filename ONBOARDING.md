@@ -36,11 +36,11 @@ na aba **Pessoas**. É isso que dá a sensação de "não faz muito sentido" —
 | Momento | Aviso | Pra quem | Status |
 |---|---|---|---|
 | Pessoa é **aprovada** (Caminho 3) | `cadastro_aprovado` "Bem-vindo!" | a própria pessoa | ✅ feito |
-| Alguém **pede pra entrar** (Caminhos 2 e 3) | `cadastro_pendente` | admin | 🕗 pendente* |
-| **Convite** criado | e-mail com o link | a pessoa convidada | 🕗 Fase 3B (Resend) |
+| Alguém **pede pra entrar** (Caminhos 2 e 3) | `cadastro_pendente` | admin | ✅ feito |
+| **Convite** criado | e-mail com o link | a pessoa convidada | 🕗 Fase 3B (Resend — ver EMAIL-RESEND.md) |
 
-\* `cadastro_pendente` pro admin precisa disparar do lado anônimo/trigger (quem pede ainda não está
-logado como membro ativo, então não passa pela função `notificar`). Fica pra próxima leva do sino.
+O `cadastro_pendente` é disparado pelos dois lados: a RPC `solicitar_entrada` avisa os admins quando
+alguém usa o formulário, e um trigger em `profiles` avisa quando alguém loga sem convite.
 
 ---
 
@@ -62,8 +62,8 @@ logado como membro ativo, então não passa pela função `notificar`). Fica pra
 ---
 
 ## 💡 Sugestões de simplificação (decisão sua — não implementado)
-1. **Juntar "Pediram para entrar" + "Entraram sem convite"** numa seção só ("Querem entrar") —
-   pro admin é a mesma intenção; a distinção técnica (join_request × profile pendente) não importa pra ele.
+1. ✅ **FEITO** — "Pediram para entrar" + "Entraram sem convite" agora são uma fila só ("Querem
+   entrar"), cada item com etiqueta do tipo (pediu pelo formulário / já logou · aguardando).
 2. **Aprovar sempre ativar direto** (hoje o Caminho 2 obriga a pessoa a logar de novo depois de
    aprovada; o Caminho 3 já ativa na hora — inconsistente).
 3. **E-mail de convite (Fase 3B):** hoje o convite não avisa ninguém — a pessoa só entra se você
