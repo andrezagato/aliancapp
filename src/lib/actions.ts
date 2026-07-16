@@ -5,7 +5,8 @@ import { createClient } from "@/lib/supabase/server";
 import { getSession, canManageTeam } from "@/lib/auth";
 import { getEligibleMembers, type EligibleMember } from "@/lib/data";
 import { notify, notifyMany, teamLeaderIds } from "@/lib/notify";
-import { churchDateISO } from "@/lib/format";
+import { sendEmail, conviteEmail, escaladoEmail, siteUrl } from "@/lib/email";
+import { churchDateISO, fmtEventWhen } from "@/lib/format";
 import type {
   ActionResult,
   CriarConviteInput,
@@ -218,6 +219,24 @@ export async function escalarVoluntario(
     teamId: input.teamId,
     eventId: input.eventId,
   });
+
+  // E-mail (best-effort) — canal garantido no iPhone, complementa o sino.
+  try {
+    const [{ data: prof }, { data: evInfo }] = await Promise.all([
+      supabase.from("profiles").select("email").eq("id", input.profileId).maybeSingle(),
+      supabase.from("events").select("title, starts_at").eq("id", input.eventId).maybeSingle(),
+    ]);
+    if (prof?.email) {
+      const esc = escaladoEmail({
+        evento: evInfo?.title ?? "um evento",
+        quando: fmtEventWhen(evInfo?.starts_at),
+        href: `${siteUrl()}/escalas/${input.eventId}`,
+      });
+      await sendEmail({ to: prof.email, subject: esc.subject, html: esc.html });
+    }
+  } catch {
+    /* best-effort — falha de e-mail não derruba a escalação */
+  }
 
   revalidatePath(`/escalas/${input.eventId}`);
   revalidatePath("/escalas");
@@ -497,6 +516,14 @@ export async function criarConvite(input: CriarConviteInput): Promise<ActionResu
     );
     if (itErr) return fail(itErr.message);
   }
+
+  // E-mail de convite (best-effort) — resolve o "convite não avisa ninguém":
+  // a pessoa ainda não é usuária, então o sino não alcança; o e-mail chega sozinho.
+  const convite = conviteEmail({
+    nome: input.fullName.trim(),
+    href: `${siteUrl()}/entrar`,
+  });
+  await sendEmail({ to: email, subject: convite.subject, html: convite.html });
 
   revalidatePath("/pessoas");
   return ok;
