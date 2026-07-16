@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getSession, canManageTeam } from "@/lib/auth";
 import { getEligibleMembers, type EligibleMember } from "@/lib/data";
+import { notify, notifyMany, teamLeaderIds } from "@/lib/notify";
 import { churchDateISO } from "@/lib/format";
 import type {
   ActionResult,
@@ -73,6 +74,20 @@ export async function atualizarNome(fullName: string): Promise<ActionResult> {
   if (error) return fail(error.message);
   revalidatePath("/perfil");
   revalidatePath("/pessoas");
+  return ok;
+}
+
+// Marca todas as notificações do usuário como lidas (limpa o sino).
+export async function marcarNotificacoesLidas(): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("notifications")
+    .update({ read_at: new Date().toISOString() })
+    .is("read_at", null)
+    .eq("recipient_id", session.userId);
+  if (error) return fail(error.message);
   return ok;
 }
 
@@ -171,6 +186,16 @@ export async function escalarVoluntario(
     assigned_by: session.userId,
   });
   if (error) return fail(error.message);
+
+  await notify({
+    recipientId: input.profileId,
+    kind: "escalado",
+    title: "Você foi escalado",
+    body: "Toque para confirmar sua presença.",
+    link: `/escalas/${input.eventId}`,
+    teamId: input.teamId,
+    eventId: input.eventId,
+  });
 
   revalidatePath(`/escalas/${input.eventId}`);
   revalidatePath("/escalas");
@@ -381,6 +406,14 @@ export async function criarInteresse(
   if (error) {
     return fail(error.message.includes("duplicate") ? "Você já sinalizou interesse aí." : error.message);
   }
+  const leaders = await teamLeaderIds(teamId);
+  await notifyMany(leaders, {
+    kind: "interesse_servir",
+    title: "Novo interesse em servir",
+    body: `${session.profile.full_name || "Alguém"} quer servir na sua equipe.`,
+    link: "/inicio",
+    teamId,
+  });
   revalidatePath("/inicio");
   return ok;
 }
@@ -530,6 +563,14 @@ export async function aprovarProfilePendente(input: AprovarProfileInput): Promis
     );
     if (mErr) return fail(mErr.message);
   }
+
+  await notify({
+    recipientId: input.profileId,
+    kind: "cadastro_aprovado",
+    title: "Bem-vindo! Seu acesso foi liberado",
+    body: "Você já pode ver suas escalas e servir.",
+    link: "/inicio",
+  });
 
   revalidatePath("/pessoas");
   revalidatePath("/inicio");

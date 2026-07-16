@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Bell, Check, CircleDashed, Sparkles, CalendarClock, UserCheck, Cake, ChevronLeft } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
+import { MarkAllRead } from "@/components/mark-all-read";
 import { cn } from "@/lib/utils";
 import { getSession } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
@@ -53,6 +54,7 @@ export default async function NotificacoesPage() {
     .order("created_at", { ascending: false })
     .limit(50);
   const notifs = data ?? [];
+  const hasUnread = notifs.some((n) => !n.read_at);
 
   return (
     <div className="pb-4">
@@ -69,6 +71,7 @@ export default async function NotificacoesPage() {
       </header>
 
       <div className="space-y-2.5 py-4">
+        {hasUnread ? <MarkAllRead /> : null}
         {notifs.length === 0 ? (
           <EmptyState
             icon={<Bell className="size-7" />}

@@ -1209,6 +1209,18 @@ export type Database = {
         Args: { p_assignment: string; p_motivo: string }
         Returns: undefined
       }
+      notificar: {
+        Args: {
+          p_recipient: string
+          p_kind: Database["public"]["Enums"]["notification_kind"]
+          p_title: string
+          p_body?: string
+          p_link?: string
+          p_team?: string
+          p_event?: string
+        }
+        Returns: undefined
+      }
       solicitar_entrada: {
         Args: {
           p_full_name: string

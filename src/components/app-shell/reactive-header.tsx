@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useRef } from "react";
-import { Bell } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
+import { NotificationBell } from "./notification-bell";
 
 /**
  * Cabeçalho reativo à rolagem: entre 0–70px de scroll o título grande encolhe
@@ -15,7 +15,6 @@ export function ReactiveHeader({
   title,
   subtitle,
   userName,
-  unread = 0,
 }: {
   title: string;
   subtitle?: string;
@@ -64,18 +63,7 @@ export function ReactiveHeader({
           </div>
           {subtitle ? <div className="mt-0.5 truncate text-sm text-muted-foreground">{subtitle}</div> : null}
         </div>
-        <Link
-          href="/notificacoes"
-          aria-label="Notificações"
-          className="press relative grid size-[42px] shrink-0 place-items-center rounded-full bg-primary/[0.06] text-foreground"
-        >
-          <Bell className="size-[21px]" />
-          {unread > 0 ? (
-            <span className="absolute right-1 top-1 grid min-w-[17px] place-items-center rounded-full border-2 border-background bg-primary px-1 text-[10px] font-extrabold text-primary-foreground">
-              {unread}
-            </span>
-          ) : null}
-        </Link>
+        <NotificationBell />
         <Link href="/perfil" aria-label="Perfil" className="press-sm shrink-0">
           <Avatar name={userName} className="size-[42px] border border-border/90 text-[15px] font-extrabold" />
         </Link>
