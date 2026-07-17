@@ -35,7 +35,7 @@ export default async function PessoasPage() {
 
   return (
     <>
-      <TopBar title="Pessoas" subtitle="Convites, aprovações e equipes" userName={session.profile.full_name || "?"} />
+      <TopBar title="Pessoas" subtitle="Convide e organize a galera" userName={session.profile.full_name || "?"} />
       <div className="animate-fade-in space-y-6 py-3">
         <ConvidarForm teams={teamOpts} />
 

@@ -19,7 +19,7 @@ export default async function EquipesPage() {
         <ArrowLeft className="size-4" /> Perfil
       </Link>
       <div>
-        <h1 className="text-2xl font-semibold">Equipes &amp; posições</h1>
+        <h1 className="text-2xl font-semibold">Monte a equipe</h1>
         <p className="text-muted-foreground">
           {session.role === "admin"
             ? "Crie equipes e defina as funções de cada ministério."

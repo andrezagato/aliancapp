@@ -13,6 +13,7 @@ import {
   aprovarJoinRequest,
   recusarJoinRequest,
   aprovarProfilePendente,
+  excluirPessoa,
 } from "@/lib/actions";
 import type { InviteTeamInput } from "@/lib/types";
 
@@ -230,6 +231,7 @@ export function JoinRequestActions({ joinId }: { joinId: string }) {
 export function PendingProfileActions({ profileId, teams }: { profileId: string; teams: TeamOpt[] }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [confirmReject, setConfirmReject] = useState(false);
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [pickedTeams, setPickedTeams] = useState<InviteTeamInput[]>([]);
@@ -248,9 +250,40 @@ export function PendingProfileActions({ profileId, teams }: { profileId: string;
 
   if (!open) {
     return (
-      <Button size="sm" onClick={() => setOpen(true)}>
-        Aprovar
-      </Button>
+      <div className="flex flex-col items-end gap-1">
+        {confirmReject ? (
+          <div className="flex gap-2">
+            <Button size="sm" variant="ghost" onClick={() => setConfirmReject(false)} disabled={pending}>
+              Cancelar
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              disabled={pending}
+              onClick={() =>
+                start(async () => {
+                  setError(null);
+                  const r = await excluirPessoa(profileId);
+                  if (!r.ok) setError(r.error ?? "Erro");
+                  else router.refresh();
+                })
+              }
+            >
+              Confirmar recusa
+            </Button>
+          </div>
+        ) : (
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" onClick={() => setConfirmReject(true)} disabled={pending}>
+              Recusar
+            </Button>
+            <Button size="sm" onClick={() => setOpen(true)}>
+              Aprovar
+            </Button>
+          </div>
+        )}
+        {error ? <p className="text-xs text-destructive">{error}</p> : null}
+      </div>
     );
   }
 

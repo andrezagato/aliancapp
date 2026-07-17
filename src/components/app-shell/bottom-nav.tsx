@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, CalendarDays, CalendarX2, User, Users } from "lucide-react";
+import { Home, CalendarDays, ClipboardList, User, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { EffectiveRole } from "@/lib/auth";
 
@@ -14,12 +14,13 @@ const base = [
 export function BottomNav({ role }: { role: EffectiveRole }) {
   const pathname = usePathname();
 
-  const contextual =
-    role === "admin"
-      ? { href: "/pessoas", label: "Pessoas", icon: Users }
-      : { href: "/disponibilidade", label: "Livre?", icon: CalendarX2 };
-
-  const items = [...base, contextual, { href: "/perfil", label: "Perfil", icon: User }];
+  // Cronograma (Planning Center) pra todos; Pessoas só pra admin.
+  const items = [
+    ...base,
+    { href: "/cronograma", label: "Cronograma", icon: ClipboardList },
+    ...(role === "admin" ? [{ href: "/pessoas", label: "Pessoas", icon: Users }] : []),
+    { href: "/perfil", label: "Perfil", icon: User },
+  ];
 
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border/80 bg-card/85 backdrop-blur-lg pb-safe">

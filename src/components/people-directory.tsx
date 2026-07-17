@@ -2,13 +2,13 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Search, ChevronDown, Crown, X, Plus } from "lucide-react";
+import { Search, ChevronDown, Crown, X, Plus, ShieldCheck, Trash2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
 import { TeamDot } from "@/components/coverage-badge";
 import { cn, displayName } from "@/lib/utils";
-import { adicionarMembro, removerMembro, definirPapelMembro } from "@/lib/actions";
+import { adicionarMembro, removerMembro, definirPapelMembro, definirAdmin, excluirPessoa } from "@/lib/actions";
 import type { MemberRow } from "@/lib/data";
 
 type TeamOpt = { id: string; name: string; color: string };
@@ -137,14 +137,21 @@ function PersonRow({
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
+  const [err, setErr] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const inTeam = new Set(person.teams.map((t) => t.teamId));
   const addable = teams.filter((t) => !inTeam.has(t.id));
 
-  function run(fn: () => Promise<{ ok: boolean }>) {
+  function run(fn: () => Promise<{ ok: boolean; error?: string }>) {
     start(async () => {
       const r = await fn();
-      if (r.ok) router.refresh();
+      if (r.ok) {
+        setErr(null);
+        router.refresh();
+      } else {
+        setErr(r.error ?? "Não foi possível concluir.");
+      }
     });
   }
 
@@ -176,6 +183,23 @@ function PersonRow({
 
       {open ? (
         <div className="mt-3 space-y-3 rounded-xl border border-border bg-muted/30 p-3">
+          <div className="space-y-1.5">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Acesso</p>
+            <button
+              disabled={pending}
+              onClick={() => run(() => definirAdmin(person.id, person.systemRole !== "admin"))}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold disabled:opacity-50",
+                person.systemRole === "admin"
+                  ? "border-primary/40 bg-primary/10 text-primary hover:bg-primary/15"
+                  : "border-dashed border-border text-muted-foreground hover:border-primary/50 hover:text-primary",
+              )}
+            >
+              <ShieldCheck className="size-3.5" />
+              {person.systemRole === "admin" ? "Remover admin da igreja" : "Tornar admin da igreja"}
+            </button>
+          </div>
+
           {person.teams.length > 0 ? (
             <div className="space-y-2">
               <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Equipes</p>
@@ -231,6 +255,40 @@ function PersonRow({
           ) : (
             <p className="text-xs text-muted-foreground">Já está em todas as equipes.</p>
           )}
+
+          {err ? <p className="text-xs font-medium text-destructive">{err}</p> : null}
+
+          <div className="border-t border-border/60 pt-2.5">
+            {confirmDelete ? (
+              <div className="flex items-center gap-2">
+                <span className="flex-1 text-xs text-muted-foreground">
+                  Excluir {displayName(person.nickname, person.fullName)} de vez?
+                </span>
+                <button
+                  disabled={pending}
+                  onClick={() => setConfirmDelete(false)}
+                  className="rounded-full px-3 py-1 text-xs font-medium text-muted-foreground hover:bg-muted disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  disabled={pending}
+                  onClick={() => run(() => excluirPessoa(person.id))}
+                  className="rounded-full bg-destructive px-3 py-1 text-xs font-semibold text-destructive-foreground hover:brightness-110 disabled:opacity-50"
+                >
+                  Excluir
+                </button>
+              </div>
+            ) : (
+              <button
+                disabled={pending}
+                onClick={() => setConfirmDelete(true)}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-destructive hover:underline disabled:opacity-50"
+              >
+                <Trash2 className="size-3.5" /> Excluir pessoa
+              </button>
+            )}
+          </div>
         </div>
       ) : null}
     </div>

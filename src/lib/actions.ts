@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getSession, canManageTeam } from "@/lib/auth";
-import { getEligibleMembers, type EligibleMember } from "@/lib/data";
+import { getEligibleMembers, getEventDetail, type EligibleMember, type DetailTeam } from "@/lib/data";
 import { notify, notifyMany, teamLeaderIds } from "@/lib/notify";
 import { sendEmail, conviteEmail, escaladoEmail, siteUrl } from "@/lib/email";
 import { churchDateISO, fmtEventWhen } from "@/lib/format";
@@ -763,6 +763,103 @@ export async function removerMembro(membershipId: string, teamId: string): Promi
   if (error) return fail(error.message);
   revalidatePath("/equipes");
   return ok;
+}
+
+// =============================================================================
+// ADMINISTRADOR DA IGREJA (promover / rebaixar) — só admin
+// =============================================================================
+export async function definirAdmin(profileId: string, makeAdmin: boolean): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  if (session.role !== "admin") return fail("Só o administrador pode mudar isso.");
+  const supabase = await createClient();
+
+  if (!makeAdmin) {
+    if (profileId === session.userId) return fail("Você não pode remover seu próprio acesso de admin.");
+    const churchId = session.profile.church_id;
+    if (!churchId) return fail("Igreja não encontrada.");
+    const { count } = await supabase
+      .from("profiles")
+      .select("id", { count: "exact", head: true })
+      .eq("church_id", churchId)
+      .eq("system_role", "admin");
+    if ((count ?? 0) <= 1) return fail("Precisa haver ao menos um administrador na igreja.");
+  }
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({ system_role: makeAdmin ? "admin" : "member" })
+    .eq("id", profileId);
+  if (error) return fail(error.message);
+  revalidatePath("/pessoas");
+  revalidatePath("/inicio");
+  return ok;
+}
+
+/**
+ * Exclui uma pessoa da igreja (recusar pendente OU remover ativo). Hard delete
+ * do profile: memberships/interesses/avisos caem em cascata e as escalas dela
+ * viram vaga aberta (FKs SET NULL). O login (auth.users) permanece, mas sem
+ * profile a pessoa não acessa e não reaparece na fila.
+ */
+export async function excluirPessoa(profileId: string): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  if (session.role !== "admin") return fail("Só o administrador pode excluir pessoas.");
+  if (profileId === session.userId) return fail("Você não pode excluir a si mesmo.");
+  const supabase = await createClient();
+
+  const { data: target } = await supabase
+    .from("profiles")
+    .select("system_role")
+    .eq("id", profileId)
+    .maybeSingle();
+  if (!target) return fail("Pessoa não encontrada.");
+
+  if (target.system_role === "admin") {
+    const churchId = session.profile.church_id;
+    if (churchId) {
+      const { count } = await supabase
+        .from("profiles")
+        .select("id", { count: "exact", head: true })
+        .eq("church_id", churchId)
+        .eq("system_role", "admin");
+      if ((count ?? 0) <= 1) return fail("Não dá pra excluir o último administrador.");
+    }
+  }
+
+  const { error } = await supabase.from("profiles").delete().eq("id", profileId);
+  if (error) return fail(error.message);
+  revalidatePath("/pessoas");
+  revalidatePath("/inicio");
+  return ok;
+}
+
+// =============================================================================
+// DETALHE DO EVENTO PRO MODAL (líder/admin edita a escala sem sair da home)
+// =============================================================================
+export type EventoModalData = {
+  ok: boolean;
+  title?: string;
+  startsAt?: string;
+  canCheckin?: boolean;
+  teams?: DetailTeam[];
+  error?: string;
+};
+
+export async function carregarEventoParaModal(eventId: string): Promise<EventoModalData> {
+  const session = await getSession();
+  if (!session) return { ok: false, error: "Sessão expirada." };
+  const ev = await getEventDetail(session, eventId);
+  if (!ev) return { ok: false, error: "Evento não encontrado." };
+  const canCheckin = churchDateISO(ev.starts_at) <= churchDateISO(new Date().toISOString());
+  return {
+    ok: true,
+    title: ev.title,
+    startsAt: ev.starts_at,
+    canCheckin,
+    teams: ev.teams.filter((t) => t.canManage),
+  };
 }
 
 // =============================================================================

@@ -3,13 +3,11 @@ import {
   MapPin,
   CalendarDays,
   ChevronRight,
-  CircleDashed,
-  Clock,
   Sparkles,
   Cake,
   UserPlus,
   Plus,
-  AlertTriangle,
+  Clock,
   CheckCircle2,
 } from "lucide-react";
 import { HomeShell } from "@/components/app-shell/home-shell";
@@ -29,7 +27,10 @@ import {
   getSwapsAwaitingMe,
   getEventsAwaitingMyConfirmation,
   getMyOpenInterests,
+  getMyNextResponsibleEvent,
   listTeamsWithPositions,
+  listEventsInRange,
+  listUpcomingEvents,
   type MyAssignment,
   type EventListItem,
   type MyResponsibleEvent,
@@ -42,6 +43,11 @@ import { CheckinButton } from "@/components/slot-controls";
 import { SwapInbox } from "@/components/swap-inbox";
 import { InteresseButton, InteresseResolveButtons } from "@/components/interesse-controls";
 import { VolunteerHome } from "@/components/home/volunteer-home";
+import { NextEventHero } from "@/components/home/next-event-hero";
+import { AdminMonthOverview } from "@/components/home/admin-month-overview";
+import { LeaderMonthBoard } from "@/components/home/leader-month-board";
+
+const pad = (n: number) => String(n).padStart(2, "0");
 
 function greeting() {
   const h = Number(new Intl.DateTimeFormat("pt-BR", { hour: "numeric", hour12: false, timeZone: "America/Sao_Paulo" }).format(new Date()));
@@ -54,11 +60,12 @@ export default async function InicioPage() {
   const session = await getSession();
   if (!session) return null;
 
-  const [swaps, respEvents, myInterests, teamsWithPos] = await Promise.all([
+  const [swaps, respEvents, myInterests, teamsWithPos, myResponsibleEvent] = await Promise.all([
     getSwapsAwaitingMe(session),
     getEventsAwaitingMyConfirmation(session),
     getMyOpenInterests(session),
     listTeamsWithPositions(),
+    getMyNextResponsibleEvent(session),
   ]);
   const first = session.profile.full_name?.split(/\s+/)[0] || "Olá";
   const lead = session.profile.teams.filter((t) => t.role === "leader").map((t) => t.name);
@@ -70,6 +77,9 @@ export default async function InicioPage() {
         : session.profile.teams.map((t) => t.name).join(", ") || "Voluntário";
 
   const userName = session.profile.full_name || "?";
+  const respHero = myResponsibleEvent ? (
+    <NextEventHero ev={myResponsibleEvent} kicker="Você é o responsável" caption="confirmados" />
+  ) : null;
 
   // Voluntário: experiência "Aconchego" completa (cabeçalho reativo,
   // pull-to-refresh, herói, swipe). Os blocos extras entram como children.
@@ -77,6 +87,7 @@ export default async function InicioPage() {
     const mine = await getMyUpcomingAssignments(session);
     return (
       <VolunteerHome title={`${greeting()}, ${first}`} subtitle={roleLabel} userName={userName} assignments={mine}>
+        {respHero}
         <SwapInbox items={swaps} />
         <ResponsibleConfirm events={respEvents} />
         <Servir teams={teamsWithPos} interests={myInterests} />
@@ -85,10 +96,12 @@ export default async function InicioPage() {
     );
   }
 
-  // Admin: home reorganizada — herói no topo, pendências, resumo clicável abaixo.
+  // Admin: abre com o calendário do mês, ações principais e a lista de eventos
+  // com o responsável de cada um.
   if (session.role === "admin") {
     return (
       <HomeShell title={`${greeting()}, ${first}`} subtitle={roleLabel} userName={userName}>
+        {respHero}
         <AdminSection swaps={swaps} respEvents={respEvents} />
         <Servir teams={teamsWithPos} interests={myInterests} />
         <Birthdays />
@@ -96,12 +109,13 @@ export default async function InicioPage() {
     );
   }
 
-  // Líder: casca "Aconchego" (cabeçalho reativo + pull-to-refresh).
+  // Líder: foco no próximo culto da equipe e nas próximas escalas.
   return (
     <HomeShell title={`${greeting()}, ${first}`} subtitle={roleLabel} userName={userName}>
+      {respHero}
       <SwapInbox items={swaps} />
       <ResponsibleConfirm events={respEvents} />
-      <LeaderSection />
+      <LeaderSection hideHeroForEventId={myResponsibleEvent?.id ?? null} />
       <Servir teams={teamsWithPos} interests={myInterests} />
       <Birthdays />
     </HomeShell>
@@ -191,23 +205,50 @@ function MyScheduleList({ mine, title }: { mine: MyAssignment[]; title: string }
 // -----------------------------------------------------------------------------
 // LÍDER
 // -----------------------------------------------------------------------------
-async function LeaderSection() {
+async function LeaderSection({ hideHeroForEventId }: { hideHeroForEventId: string | null }) {
   const session = (await getSession())!;
-  const [home, mine] = await Promise.all([getLeaderHome(session), getMyUpcomingAssignments(session)]);
+  const leadIds = session.profile.teams.filter((t) => t.role === "leader").map((t) => t.id);
+
+  const todayISO = churchDateISO(new Date().toISOString());
+  const y = Number(todayISO.slice(0, 4));
+  const m = Number(todayISO.slice(5, 7));
+  const fromIso = new Date(`${y}-${pad(m)}-01T00:00:00-03:00`).toISOString();
+  const ny = m === 12 ? y + 1 : y;
+  const nm = m === 12 ? 1 : m + 1;
+  const toIso = new Date(`${ny}-${pad(nm)}-01T00:00:00-03:00`).toISOString();
+
+  const [home, mine, monthRaw] = await Promise.all([
+    getLeaderHome(session),
+    getMyUpcomingAssignments(session),
+    listEventsInRange(session, fromIso, toIso),
+  ]);
+
+  const monthEvents = monthRaw
+    .map((ev) => ({ ...ev, teams: ev.teams.filter((t) => leadIds.includes(t.teamId)) }))
+    .filter((ev) => ev.teams.length > 0);
+  const calendarDayISO: Record<string, string> = Object.fromEntries(
+    monthEvents.map((e) => [e.id, churchDateISO(e.starts_at)]),
+  );
+
+  const rawNext = home.events[0] ?? null;
+  const nextTeamEvent = rawNext && rawNext.id !== hideHeroForEventId ? rawNext : null;
 
   return (
     <>
-      <div className="grid grid-cols-3 gap-3">
-        <StatTile icon={<CircleDashed className="size-5" />} value={home.openVacancies} label="Vagas abertas" tone="primary" />
-        <StatTile icon={<Clock className="size-5" />} value={home.awaitingConfirmation} label="Aguardando" tone="warning" />
-        <StatTile icon={<Sparkles className="size-5" />} value={home.interests.length} label="Interesses" tone="accent" />
-      </div>
+      {nextTeamEvent ? <NextEventHero ev={nextTeamEvent} kicker="Próximo da sua equipe" caption="confirmados" /> : null}
 
-      <EventsWithCoverage events={home.events} title="Próximos eventos" emptyHint="Nenhum evento à frente. Peça ao admin para criar o próximo culto." />
+      <LeaderMonthBoard
+        year={y}
+        month={m}
+        calendarEvents={monthEvents}
+        calendarDayISO={calendarDayISO}
+        todayISO={todayISO}
+        listEvents={home.events}
+      />
 
       {home.interests.length > 0 ? (
         <section>
-          <h3 className="mb-2 px-1 text-base font-semibold">Interesse em servir</h3>
+          <h3 className="mb-2 px-1 text-base font-semibold">Quem quer servir na sua equipe</h3>
           <Card>
             <ul className="divide-y divide-border">
               {home.interests.map((i) => (
@@ -233,7 +274,7 @@ async function LeaderSection() {
         </section>
       ) : null}
 
-      {mine.length > 0 ? <MyScheduleList mine={mine} title="Suas escalas" /> : null}
+      {mine.length > 0 ? <MyScheduleList mine={mine} title="Confirme sua escala" /> : null}
     </>
   );
 }
@@ -249,178 +290,85 @@ async function AdminSection({
   respEvents: MyResponsibleEvent[];
 }) {
   const session = (await getSession())!;
-  const home = await getAdminHome(session);
+
+  const todayISO = churchDateISO(new Date().toISOString());
+  const y = Number(todayISO.slice(0, 4));
+  const m = Number(todayISO.slice(5, 7));
+  const fromIso = new Date(`${y}-${pad(m)}-01T00:00:00-03:00`).toISOString();
+  const ny = m === 12 ? y + 1 : y;
+  const nm = m === 12 ? 1 : m + 1;
+  const toIso = new Date(`${ny}-${pad(nm)}-01T00:00:00-03:00`).toISOString();
+
+  const [home, monthEvents, upcoming] = await Promise.all([
+    getAdminHome(session),
+    listEventsInRange(session, fromIso, toIso),
+    listUpcomingEvents(session, 8),
+  ]);
+  const eventDayISO: Record<string, string> = Object.fromEntries(
+    monthEvents.map((e) => [e.id, churchDateISO(e.starts_at)]),
+  );
 
   return (
     <>
-      {/* 1. Herói — o próximo culto é a âncora da tela */}
-      {home.nextEvent ? <NextEventCard ev={home.nextEvent} /> : null}
+      {/* Calendário do mês — visão geral (toque num dia p/ ver os eventos) */}
+      <section>
+        <h3 className="mb-2 px-1 text-base font-semibold">Veja o calendário do mês</h3>
+        <AdminMonthOverview year={y} month={m} events={monthEvents} eventDayISO={eventDayISO} todayISO={todayISO} />
+      </section>
 
-      {/* 2. Ações principais */}
+      {/* Ações principais do admin */}
       <div className="grid grid-cols-2 gap-3">
         <Link href="/escalas/novo" className={cn(buttonVariants(), "w-full")}>
           <Plus className="size-4" /> Criar evento
         </Link>
         <Link href="/pessoas" className={cn(buttonVariants({ variant: "outline" }), "w-full")}>
-          <UserPlus className="size-4" /> Convidar
+          <UserPlus className="size-4" /> Convidar alguém
         </Link>
       </div>
 
-      {/* 3. Precisa de você — pendências acionáveis */}
+      {/* Aprovações pendentes — acionável */}
+      {home.pendingJoinRequests > 0 ? (
+        <Link
+          href="/pessoas"
+          className="flex items-center gap-3 rounded-2xl border border-warning/30 bg-warning/10 p-3.5"
+        >
+          <span className="inline-flex size-9 items-center justify-center rounded-full bg-warning/15 text-warning">
+            <UserPlus className="size-5" />
+          </span>
+          <span className="flex-1 text-sm font-medium">
+            {home.pendingJoinRequests} {home.pendingJoinRequests > 1 ? "pessoas querem" : "pessoa quer"} entrar — toque
+            para aprovar
+          </span>
+          <ChevronRight className="size-5 shrink-0 text-muted-foreground" />
+        </Link>
+      ) : null}
+
+      {/* Pendências acionáveis */}
       <SwapInbox items={swaps} />
       <ResponsibleConfirm events={respEvents} />
 
-      {home.coverageHoles.length > 0 ? (
-        <section>
-          <h3 className="mb-2 px-1 text-base font-semibold">Precisam de escala</h3>
-          <Card>
-            <ul className="divide-y divide-border">
-              {home.coverageHoles.map((h) => (
-                <li key={h.eventId}>
-                  <Link href={`/escalas/${h.eventId}`} className="flex items-center gap-3 p-4 hover:bg-muted/50">
-                    <span className="inline-flex size-10 items-center justify-center rounded-full bg-destructive/12 text-destructive">
-                      <AlertTriangle className="size-5" />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate font-medium">{h.title}</p>
-                      <p className="text-sm text-muted-foreground">{fmtEventWhen(h.startsAt)}</p>
-                    </div>
-                    <Badge variant="danger">{h.missing} vaga{h.missing > 1 ? "s" : ""}</Badge>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </Card>
-        </section>
-      ) : null}
-
-      {home.awaitingResponsible.length > 0 ? (
-        <section>
-          <h3 className="mb-2 px-1 text-base font-semibold">Aguardando confirmação do responsável</h3>
-          <Card>
-            <ul className="divide-y divide-border">
-              {home.awaitingResponsible.map((e) => (
-                <li key={e.eventId} className="flex items-center gap-3 p-4">
-                  <span className="inline-flex size-10 items-center justify-center rounded-full bg-warning/12 text-warning">
-                    <Clock className="size-5" />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium">{e.title}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {e.responsibleName ? `${e.responsibleName} · ` : ""}
-                      {fmtEventWhen(e.startsAt)}
-                    </p>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </Card>
-        </section>
-      ) : null}
-
-      {/* 4. Resumo — atalhos clicáveis (não pedem ação, ficam por último) */}
-      <section>
-        <h3 className="mb-2 px-1 text-sm font-semibold text-muted-foreground">Resumo</h3>
-        <div className="grid grid-cols-3 gap-3">
-          <Link href="/pessoas" className="contents">
-            <StatTile icon={<UserPlus className="size-5" />} value={home.pendingJoinRequests} label="Aprovações" tone="warning" />
-          </Link>
-          <Link href="/escalas" className="contents">
-            <StatTile icon={<CalendarDays className="size-5" />} value={home.upcomingCount} label="Eventos" tone="primary" />
-          </Link>
-          <Link href="/escalas" className="contents">
-            <StatTile icon={<AlertTriangle className="size-5" />} value={home.coverageHoles.length} label="Sem escala" tone="accent" />
-          </Link>
-        </div>
-      </section>
+      {/* Próximos eventos com o responsável de cada um */}
+      <AdminUpcomingList events={upcoming} />
     </>
   );
 }
 
-// -----------------------------------------------------------------------------
-// COMPARTILHADOS
-// -----------------------------------------------------------------------------
-function NextEventCard({ ev }: { ev: EventListItem }) {
-  const pct = ev.neededTotal > 0 ? Math.round((ev.assignedTotal / ev.neededTotal) * 100) : 100;
-  return (
-    <div className="relative overflow-hidden rounded-[22px] bg-gradient-to-br from-primary to-[hsl(349_74%_19%)] p-5 text-primary-foreground shadow-lift">
-      <div
-        className="pointer-events-none absolute -right-10 -top-10 size-40 rounded-full opacity-70"
-        style={{ background: "radial-gradient(circle, hsl(var(--accent) / 0.45), transparent 70%)" }}
-      />
-      <div className="relative">
-        <p className="text-xs font-semibold uppercase tracking-wider text-accent">Próximo culto</p>
-        <h2 className="mt-1 text-2xl font-bold text-white">{ev.title}</h2>
-        <p className="mt-0.5 text-sm text-primary-foreground/80">
-          <span className="capitalize">{fmtEventWhen(ev.starts_at)}</span>
-          {ev.location ? ` · ${ev.location}` : ""}
-        </p>
-
-        <div className="mt-4 flex items-center gap-3">
-          <div
-            className="grid size-14 place-items-center rounded-full"
-            style={{ background: `conic-gradient(hsl(var(--accent)) ${pct}%, hsl(0 0% 100% / 0.18) 0)` }}
-          >
-            <span className="grid size-10 place-items-center rounded-full bg-[hsl(349_74%_17%)] text-xs font-bold tabular-nums">
-              {ev.assignedTotal}/{ev.neededTotal}
-            </span>
-          </div>
-          <p className="text-xs leading-tight text-primary-foreground/80">
-            confirmados
-            <br />
-            na sua equipe
-          </p>
-          <Link href={`/escalas/${ev.id}`} className={cn(buttonVariants({ variant: "accent", size: "sm" }), "ml-auto press")}>
-            Abrir escala
-          </Link>
-        </div>
-
-        {ev.teams.length > 0 ? (
-          <div className="mt-4 flex flex-wrap gap-1.5">
-            {ev.teams.map((t) => (
-              <span
-                key={t.teamId}
-                className="inline-flex items-center gap-1.5 rounded-full bg-white/12 px-2.5 py-1 text-xs font-medium"
-              >
-                <span
-                  className={cn(
-                    "size-2 rounded-full",
-                    t.tone === "full" ? "bg-success" : t.tone === "partial" ? "bg-warning" : "bg-destructive",
-                  )}
-                  style={t.tone === "empty" ? { backgroundColor: "hsl(6 80% 66%)" } : undefined}
-                />
-                {t.name} {t.assigned}/{t.needed}
-              </span>
-            ))}
-          </div>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-function EventsWithCoverage({
-  events,
-  title,
-  emptyHint,
-}: {
-  events: EventListItem[];
-  title: string;
-  emptyHint: string;
-}) {
+function AdminUpcomingList({ events }: { events: EventListItem[] }) {
   if (events.length === 0) {
     return (
       <Card className="border-dashed">
         <CardContent className="flex flex-col items-center gap-2 px-6 py-8 text-center">
           <CheckCircle2 className="size-8 text-success" />
-          <p className="max-w-xs text-balance text-sm text-muted-foreground">{emptyHint}</p>
+          <p className="max-w-xs text-balance text-sm text-muted-foreground">
+            Nenhum evento à frente. Que tal criar o próximo culto?
+          </p>
         </CardContent>
       </Card>
     );
   }
   return (
     <section>
-      <h3 className="mb-2 px-1 text-base font-semibold">{title}</h3>
+      <h3 className="mb-2 px-1 text-base font-semibold">Próximos eventos</h3>
       <div className="space-y-3">
         {events.map((ev) => (
           <Card key={ev.id}>
@@ -430,11 +378,22 @@ function EventsWithCoverage({
                 <ChevronRight className="size-5 shrink-0 text-muted-foreground" />
               </div>
               <p className="text-sm text-muted-foreground">{fmtEventWhen(ev.starts_at)}</p>
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {ev.teams.map((t) => (
-                  <CoverageBadge key={t.teamId} tone={t.tone} label={`${t.name} ${t.assigned}/${t.needed}`} />
-                ))}
-              </div>
+              <p className="mt-0.5 text-sm">
+                {ev.responsibleName ? (
+                  <span className="text-muted-foreground">
+                    Responsável: <span className="font-medium text-foreground">{ev.responsibleName}</span>
+                  </span>
+                ) : (
+                  <span className="font-medium text-warning">Sem responsável ainda</span>
+                )}
+              </p>
+              {ev.teams.length > 0 ? (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {ev.teams.map((t) => (
+                    <CoverageBadge key={t.teamId} tone={t.tone} label={`${t.name} ${t.assigned}/${t.needed}`} />
+                  ))}
+                </div>
+              ) : null}
             </Link>
           </Card>
         ))}
@@ -443,6 +402,9 @@ function EventsWithCoverage({
   );
 }
 
+// -----------------------------------------------------------------------------
+// COMPARTILHADOS
+// -----------------------------------------------------------------------------
 function ResponsibleConfirm({ events }: { events: MyResponsibleEvent[] }) {
   if (events.length === 0) return null;
   return (
@@ -513,33 +475,5 @@ async function Birthdays() {
         </ul>
       </Card>
     </section>
-  );
-}
-
-function StatTile({
-  icon,
-  value,
-  label,
-  tone,
-}: {
-  icon: React.ReactNode;
-  value: number;
-  label: string;
-  tone: "primary" | "warning" | "accent";
-}) {
-  const toneClass =
-    tone === "primary"
-      ? "text-primary bg-primary/10"
-      : tone === "warning"
-        ? "text-warning bg-warning/12"
-        : "text-accent bg-accent/12";
-  return (
-    <Card>
-      <CardContent className="flex flex-col items-center gap-1 p-3 text-center">
-        <span className={`inline-flex size-9 items-center justify-center rounded-full ${toneClass}`}>{icon}</span>
-        <span className="font-display text-2xl font-extrabold leading-none">{value}</span>
-        <span className="text-[11px] leading-tight text-muted-foreground">{label}</span>
-      </CardContent>
-    </Card>
   );
 }

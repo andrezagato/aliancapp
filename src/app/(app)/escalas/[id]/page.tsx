@@ -32,7 +32,6 @@ export default async function EventoPage({ params }: { params: Promise<{ id: str
   const nowISO = new Date().toISOString();
   const canCheckin = churchDateISO(ev.starts_at) <= churchDateISO(nowISO);
   const kicker = churchDateISO(ev.starts_at) === churchDateISO(nowISO) ? "Acontece hoje" : "Próximo culto";
-  const hasMeta = !!(ev.responsibleName || session.role === "admin" || ev.notes);
   const profiles = session.role === "admin" ? await listChurchProfiles() : [];
   const manageTeams = ev.teams.filter((t) => t.canManage);
   const otherTeams = ev.teams.filter((t) => !t.canManage);
@@ -71,23 +70,19 @@ export default async function EventoPage({ params }: { params: Promise<{ id: str
         </div>
       </div>
 
-      {hasMeta ? (
-        <Card>
-          <CardContent className="space-y-2 p-4">
-            {ev.responsibleName || session.role === "admin" ? (
-              <ResponsavelControls
-                eventId={ev.id}
-                isAdmin={session.role === "admin"}
-                isResponsible={ev.isResponsible}
-                responsibleName={ev.responsibleName}
-                confirmedAt={ev.confirmedAt}
-                profiles={profiles}
-              />
-            ) : null}
-            {ev.notes ? <p className="text-sm text-muted-foreground">{ev.notes}</p> : null}
-          </CardContent>
-        </Card>
-      ) : null}
+      <Card>
+        <CardContent className="space-y-2 p-4">
+          <ResponsavelControls
+            eventId={ev.id}
+            isAdmin={session.role === "admin"}
+            isResponsible={ev.isResponsible}
+            responsibleName={ev.responsibleName}
+            confirmedAt={ev.confirmedAt}
+            profiles={profiles}
+          />
+          {ev.notes ? <p className="text-sm text-muted-foreground">{ev.notes}</p> : null}
+        </CardContent>
+      </Card>
 
       {ev.teams.length === 0 ? (
         <Card className="border-dashed">

@@ -205,6 +205,8 @@ export type EventListItem = {
   starts_at: string;
   location: string | null;
   seriesId: string | null;
+  responsibleId: string | null;
+  responsibleName: string | null;
   teams: EventTeamCoverage[];
   overallTone: CoverageTone;
   neededTotal: number;
@@ -217,6 +219,8 @@ type EventRowLite = {
   starts_at: string;
   location: string | null;
   series_id: string | null;
+  responsible_id?: string | null;
+  responsible?: { full_name: string } | null;
 };
 
 async function assembleEventList(session: Session, events: EventRowLite[]): Promise<EventListItem[]> {
@@ -272,6 +276,8 @@ async function assembleEventList(session: Session, events: EventRowLite[]): Prom
       starts_at: ev.starts_at,
       location: ev.location,
       seriesId: ev.series_id,
+      responsibleId: ev.responsible_id ?? null,
+      responsibleName: ev.responsible?.full_name ?? null,
       teams: teamCov,
       overallTone: coverageTone(neededTotal, assignedTotal),
       neededTotal,
@@ -284,7 +290,7 @@ export async function listUpcomingEvents(session: Session, limit = 50): Promise<
   const supabase = await createClient();
   const { data: events } = await supabase
     .from("events")
-    .select("id, title, starts_at, location, series_id")
+    .select("id, title, starts_at, location, series_id, responsible_id, responsible:profiles!events_responsible_id_fkey ( full_name )")
     .gte("starts_at", upcomingCutoffIso())
     .order("starts_at", { ascending: true })
     .limit(limit);
@@ -299,7 +305,7 @@ export async function listEventsInRange(
   const supabase = await createClient();
   const { data: events } = await supabase
     .from("events")
-    .select("id, title, starts_at, location, series_id")
+    .select("id, title, starts_at, location, series_id, responsible_id, responsible:profiles!events_responsible_id_fkey ( full_name )")
     .gte("starts_at", fromIso)
     .lt("starts_at", toIso)
     .order("starts_at", { ascending: true });
@@ -1092,6 +1098,20 @@ export async function getEventsAwaitingMyConfirmation(session: Session): Promise
     startsAt: e.starts_at,
     location: e.location,
   }));
+}
+
+/** Próximo evento (com cobertura) do qual sou o responsável — alimenta o herói do responsável. */
+export async function getMyNextResponsibleEvent(session: Session): Promise<EventListItem | null> {
+  const supabase = await createClient();
+  const { data: events } = await supabase
+    .from("events")
+    .select("id, title, starts_at, location, series_id, responsible_id, responsible:profiles!events_responsible_id_fkey ( full_name )")
+    .eq("responsible_id", session.userId)
+    .gte("starts_at", upcomingCutoffIso())
+    .order("starts_at", { ascending: true })
+    .limit(1);
+  const list = await assembleEventList(session, (events ?? []) as EventRowLite[]);
+  return list[0] ?? null;
 }
 
 export type MyInterest = {

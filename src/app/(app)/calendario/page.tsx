@@ -3,31 +3,17 @@ import { ChevronLeft, ChevronRight, List, MapPin } from "lucide-react";
 import { TopBar } from "@/components/app-shell/top-bar";
 import { Card } from "@/components/ui/card";
 import { CoverageBadge } from "@/components/coverage-badge";
-import { cn } from "@/lib/utils";
+import { MonthCalendar } from "@/components/month-calendar";
 import { getSession } from "@/lib/auth";
 import { listEventsInRange, type EventListItem } from "@/lib/data";
 import { churchDateISO, fmtTime } from "@/lib/format";
-import type { CoverageTone } from "@/lib/coverage";
 
 const pad = (n: number) => String(n).padStart(2, "0");
-const WEEKDAYS = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
-
-const DOT: Record<CoverageTone, string> = {
-  empty: "bg-destructive",
-  partial: "bg-warning",
-  full: "bg-success",
-};
 
 function monthLabel(y: number, m: number): string {
   return new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric", timeZone: "UTC" }).format(
     new Date(Date.UTC(y, m - 1, 1)),
   );
-}
-
-function worstTone(events: EventListItem[]): CoverageTone {
-  if (events.some((e) => e.overallTone === "empty")) return "empty";
-  if (events.some((e) => e.overallTone === "partial")) return "partial";
-  return "full";
 }
 
 export default async function CalendarioPage({
@@ -50,23 +36,20 @@ export default async function CalendarioPage({
   const toIso = new Date(`${ny}-${pad(nm)}-01T00:00:00-03:00`).toISOString();
 
   const events = await listEventsInRange(session, fromIso, toIso);
+  const eventDayISO: Record<string, string> = Object.fromEntries(
+    events.map((e) => [e.id, churchDateISO(e.starts_at)]),
+  );
 
-  // Agrupa por dia do mês.
+  // Agrupa por dia do mês (pra lista abaixo).
   const byDay = new Map<number, EventListItem[]>();
   for (const ev of events) {
-    const d = churchDateISO(ev.starts_at);
+    const d = eventDayISO[ev.id];
     if (!d.startsWith(`${y}-${pad(m)}`)) continue;
     const day = Number(d.slice(8, 10));
-    (byDay.get(day) ?? byDay.set(day, []).get(day)!).push(ev);
+    const arr = byDay.get(day) ?? [];
+    arr.push(ev);
+    byDay.set(day, arr);
   }
-
-  const daysInMonth = new Date(y, m, 0).getDate();
-  const startWeekday = new Date(Date.UTC(y, m - 1, 1)).getUTCDay();
-  const cells: (number | null)[] = [
-    ...Array(startWeekday).fill(null),
-    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
-  ];
-  const todayDay = todayISO.startsWith(`${y}-${pad(m)}`) ? Number(todayISO.slice(8, 10)) : -1;
 
   const prev = m === 1 ? `${y - 1}-12` : `${y}-${pad(m - 1)}`;
   const next = m === 12 ? `${y + 1}-01` : `${y}-${pad(m + 1)}`;
@@ -75,7 +58,7 @@ export default async function CalendarioPage({
 
   return (
     <>
-      <TopBar title="Calendário" subtitle="Visão do mês" userName={session.profile.full_name || "?"} />
+      <TopBar title="Calendário" subtitle="Veja o mês inteiro" userName={session.profile.full_name || "?"} />
       <div className="animate-fade-in space-y-4 py-3">
         <div className="flex items-center justify-between">
           <Link href={`/calendario?m=${prev}`} aria-label="Mês anterior" className="inline-flex size-9 items-center justify-center rounded-full hover:bg-muted">
@@ -87,36 +70,7 @@ export default async function CalendarioPage({
           </Link>
         </div>
 
-        <Card className="p-3">
-          <div className="grid grid-cols-7 gap-1 text-center">
-            {WEEKDAYS.map((w) => (
-              <div key={w} className="pb-1 text-[11px] font-medium text-muted-foreground">{w}</div>
-            ))}
-            {cells.map((day, i) => {
-              if (day === null) return <div key={`e${i}`} />;
-              const dayEvents = byDay.get(day);
-              const tone = dayEvents ? worstTone(dayEvents) : null;
-              const isToday = day === todayDay;
-              const cellInner = (
-                <div
-                  className={cn(
-                    "flex aspect-square flex-col items-center justify-center rounded-xl text-sm",
-                    isToday && "ring-2 ring-primary/40",
-                    dayEvents ? "font-semibold" : "text-muted-foreground",
-                  )}
-                >
-                  {day}
-                  {tone ? <span className={cn("mt-0.5 size-1.5 rounded-full", DOT[tone])} /> : null}
-                </div>
-              );
-              return dayEvents ? (
-                <a key={day} href={`#d-${day}`} className="hover:bg-muted/60 rounded-xl">{cellInner}</a>
-              ) : (
-                <div key={day}>{cellInner}</div>
-              );
-            })}
-          </div>
-        </Card>
+        <MonthCalendar year={y} month={m} events={events} eventDayISO={eventDayISO} todayISO={todayISO} />
 
         <Link href="/escalas" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
           <List className="size-4" /> Ver em lista

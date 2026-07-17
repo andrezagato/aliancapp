@@ -87,7 +87,7 @@ export function NovoEventoForm({
         <CardContent className="space-y-5 p-5">
           {templates.length > 0 ? (
             <div className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Começar de um modelo</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Comece de um modelo</p>
               <div className="grid gap-2 sm:grid-cols-2">
                 {templates.map((t) => (
                   <button

@@ -13,7 +13,6 @@ export default async function PerfilPage() {
   const session = await getSession();
   if (!session) return null;
   const p = session.profile;
-  const isVol = session.role === "volunteer";
   const isManager = session.role !== "volunteer";
 
   const roleLabel =
@@ -96,14 +95,12 @@ export default async function PerfilPage() {
           </li>
           <ProfileRow href="/historico" icon={<History className="size-[18px]" />} tone="primary" label="Histórico de escalas" />
           <ProfileRow href="/notificacoes" icon={<Bell className="size-[18px]" />} tone="accent" label="Notificações" />
-          {isVol ? (
-            <ProfileRow
-              href="/disponibilidade"
-              icon={<CalendarOff className="size-[18px]" />}
-              tone="success"
-              label="Disponibilidade"
-            />
-          ) : null}
+          <ProfileRow
+            href="/disponibilidade"
+            icon={<CalendarOff className="size-[18px]" />}
+            tone="success"
+            label="Datas indisponíveis"
+          />
           {isManager ? (
             <ProfileRow href="/equipes" icon={<Users className="size-[18px]" />} tone="primary" label="Equipes e posições" />
           ) : null}
