@@ -6,6 +6,7 @@ import { UserPlus, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { TeamDot } from "@/components/coverage-badge";
+import { Modal } from "@/components/modal";
 import { cn } from "@/lib/utils";
 import {
   criarConvite,
@@ -194,17 +195,67 @@ export function ConvidarForm({ teams }: { teams: TeamOpt[] }) {
 }
 
 // -----------------------------------------------------------------------------
+// Modal de aprovação (escolhe equipes/papel antes de liberar) — compartilhado
+// -----------------------------------------------------------------------------
+function AprovarModal({
+  open,
+  onClose,
+  teams,
+  pending,
+  error,
+  onConfirm,
+}: {
+  open: boolean;
+  onClose: () => void;
+  teams: TeamOpt[];
+  pending: boolean;
+  error: string | null;
+  onConfirm: (picked: InviteTeamInput[]) => void;
+}) {
+  const [picked, setPicked] = useState<InviteTeamInput[]>([]);
+  return (
+    <Modal open={open} onClose={() => !pending && onClose()} sheet title="Aprovar entrada">
+      <p className="mt-1 text-sm text-muted-foreground">Escolha as equipes e quem é líder — dá pra ajustar depois.</p>
+      <div className="mt-3">
+        <TeamPicker teams={teams} value={picked} onChange={setPicked} />
+      </div>
+      {error ? <p className="mt-2 text-sm text-destructive">{error}</p> : null}
+      <div className="mt-4 flex gap-2">
+        <Button variant="ghost" className="flex-1" onClick={onClose} disabled={pending}>
+          Cancelar
+        </Button>
+        <Button className="flex-1" onClick={() => onConfirm(picked)} disabled={pending}>
+          {pending ? "Aprovando…" : "Confirmar entrada"}
+        </Button>
+      </div>
+    </Modal>
+  );
+}
+
+// -----------------------------------------------------------------------------
 // Aprovar / recusar auto-cadastro (join_request)
 // -----------------------------------------------------------------------------
-export function JoinRequestActions({ joinId }: { joinId: string }) {
+export function JoinRequestActions({ joinId, teams }: { joinId: string; teams: TeamOpt[] }) {
   const router = useRouter();
+  const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
-  function run(fn: () => Promise<{ ok: boolean; error?: string }>) {
+  function approve(picked: InviteTeamInput[]) {
     setError(null);
     start(async () => {
-      const r = await fn();
+      const r = await aprovarJoinRequest(joinId, picked);
+      if (!r.ok) setError(r.error ?? "Erro");
+      else {
+        setOpen(false);
+        router.refresh();
+      }
+    });
+  }
+  function reject() {
+    setError(null);
+    start(async () => {
+      const r = await recusarJoinRequest(joinId);
       if (!r.ok) setError(r.error ?? "Erro");
       else router.refresh();
     });
@@ -213,14 +264,15 @@ export function JoinRequestActions({ joinId }: { joinId: string }) {
   return (
     <div className="flex flex-col items-end gap-1">
       <div className="flex gap-2">
-        <Button size="sm" variant="outline" onClick={() => run(() => recusarJoinRequest(joinId))} disabled={pending}>
+        <Button size="sm" variant="outline" onClick={reject} disabled={pending}>
           Recusar
         </Button>
-        <Button size="sm" onClick={() => run(() => aprovarJoinRequest(joinId))} disabled={pending}>
+        <Button size="sm" onClick={() => setOpen(true)} disabled={pending}>
           Aprovar
         </Button>
       </div>
-      {error ? <p className="text-xs text-destructive">{error}</p> : null}
+      {error && !open ? <p className="text-xs text-destructive">{error}</p> : null}
+      <AprovarModal open={open} onClose={() => setOpen(false)} teams={teams} pending={pending} error={open ? error : null} onConfirm={approve} />
     </div>
   );
 }
@@ -234,12 +286,11 @@ export function PendingProfileActions({ profileId, teams }: { profileId: string;
   const [confirmReject, setConfirmReject] = useState(false);
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [pickedTeams, setPickedTeams] = useState<InviteTeamInput[]>([]);
 
-  function approve() {
+  function approve(picked: InviteTeamInput[]) {
     setError(null);
     start(async () => {
-      const r = await aprovarProfilePendente({ profileId, teams: pickedTeams });
+      const r = await aprovarProfilePendente({ profileId, teams: picked });
       if (!r.ok) setError(r.error);
       else {
         setOpen(false);
@@ -247,59 +298,40 @@ export function PendingProfileActions({ profileId, teams }: { profileId: string;
       }
     });
   }
+  function reject() {
+    setError(null);
+    start(async () => {
+      const r = await excluirPessoa(profileId);
+      if (!r.ok) setError(r.error ?? "Erro");
+      else router.refresh();
+    });
+  }
 
-  if (!open) {
-    return (
-      <div className="flex flex-col items-end gap-1">
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <div className="flex gap-2">
         {confirmReject ? (
-          <div className="flex gap-2">
+          <>
             <Button size="sm" variant="ghost" onClick={() => setConfirmReject(false)} disabled={pending}>
               Cancelar
             </Button>
-            <Button
-              size="sm"
-              variant="destructive"
-              disabled={pending}
-              onClick={() =>
-                start(async () => {
-                  setError(null);
-                  const r = await excluirPessoa(profileId);
-                  if (!r.ok) setError(r.error ?? "Erro");
-                  else router.refresh();
-                })
-              }
-            >
+            <Button size="sm" variant="destructive" onClick={reject} disabled={pending}>
               Confirmar recusa
             </Button>
-          </div>
+          </>
         ) : (
-          <div className="flex gap-2">
+          <>
             <Button size="sm" variant="outline" onClick={() => setConfirmReject(true)} disabled={pending}>
               Recusar
             </Button>
             <Button size="sm" onClick={() => setOpen(true)}>
               Aprovar
             </Button>
-          </div>
+          </>
         )}
-        {error ? <p className="text-xs text-destructive">{error}</p> : null}
       </div>
-    );
-  }
-
-  return (
-    <div className="mt-3 w-full space-y-3 rounded-xl border border-border p-3">
-      <p className="text-sm font-medium">Em quais equipes?</p>
-      <TeamPicker teams={teams} value={pickedTeams} onChange={setPickedTeams} />
-      {error ? <p className="text-sm text-destructive">{error}</p> : null}
-      <div className="flex gap-2">
-        <Button size="sm" variant="ghost" className="flex-1" onClick={() => setOpen(false)} disabled={pending}>
-          Cancelar
-        </Button>
-        <Button size="sm" className="flex-1" onClick={approve} disabled={pending}>
-          {pending ? "Aprovando…" : "Confirmar entrada"}
-        </Button>
-      </div>
+      {error && !open ? <p className="text-xs text-destructive">{error}</p> : null}
+      <AprovarModal open={open} onClose={() => setOpen(false)} teams={teams} pending={pending} error={open ? error : null} onConfirm={approve} />
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Mail, Phone, Cake, Users, History, Bell, CalendarOff, ChevronRight } from "lucide-react";
+import { Mail, Phone, Cake, History, Bell, CalendarOff, ChevronRight } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar } from "@/components/ui/avatar";
 import { SignOutButton } from "@/components/sign-out-button";
@@ -13,7 +13,6 @@ export default async function PerfilPage() {
   const session = await getSession();
   if (!session) return null;
   const p = session.profile;
-  const isManager = session.role !== "volunteer";
 
   const roleLabel =
     session.role === "admin" ? "Administrador" : session.role === "leader" ? "Líder" : "Voluntário";
@@ -101,9 +100,6 @@ export default async function PerfilPage() {
             tone="success"
             label="Datas indisponíveis"
           />
-          {isManager ? (
-            <ProfileRow href="/equipes" icon={<Users className="size-[18px]" />} tone="primary" label="Equipes e posições" />
-          ) : null}
           <li>
             <SignOutButton
               variant="ghost"

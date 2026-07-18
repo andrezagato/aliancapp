@@ -14,11 +14,11 @@ const base = [
 export function BottomNav({ role }: { role: EffectiveRole }) {
   const pathname = usePathname();
 
-  // Cronograma (Planning Center) pra todos; Pessoas só pra admin.
+  // Cronograma (Planning Center) pra todos; Equipes pra quem gerencia (admin/líder).
   const items = [
     ...base,
     { href: "/cronograma", label: "Cronograma", icon: ClipboardList },
-    ...(role === "admin" ? [{ href: "/pessoas", label: "Pessoas", icon: Users }] : []),
+    ...(role !== "volunteer" ? [{ href: "/equipes", label: "Equipes", icon: Users }] : []),
     { href: "/perfil", label: "Perfil", icon: User },
   ];
 

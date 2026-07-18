@@ -14,6 +14,7 @@ import type {
   CriarModeloInput,
   EscalarInput,
   AprovarProfileInput,
+  InviteTeamInput,
 } from "@/lib/types";
 
 const ok: ActionResult = { ok: true };
@@ -60,7 +61,7 @@ export async function atualizarApelido(nickname: string): Promise<ActionResult> 
   const { error } = await supabase.from("profiles").update({ nickname: value || null }).eq("id", session.userId);
   if (error) return fail(error.message);
   revalidatePath("/perfil");
-  revalidatePath("/pessoas");
+  revalidatePath("/equipes");
   return ok;
 }
 
@@ -74,7 +75,7 @@ export async function atualizarNome(fullName: string): Promise<ActionResult> {
   const { error } = await supabase.from("profiles").update({ full_name: value }).eq("id", session.userId);
   if (error) return fail(error.message);
   revalidatePath("/perfil");
-  revalidatePath("/pessoas");
+  revalidatePath("/equipes");
   return ok;
 }
 
@@ -525,7 +526,7 @@ export async function criarConvite(input: CriarConviteInput): Promise<ActionResu
   });
   await sendEmail({ to: email, subject: convite.subject, html: convite.html });
 
-  revalidatePath("/pessoas");
+  revalidatePath("/equipes");
   return ok;
 }
 
@@ -535,12 +536,12 @@ export async function cancelarConvite(inviteId: string): Promise<ActionResult> {
   const supabase = await createClient();
   const { error } = await supabase.from("invites").update({ status: "cancelado" }).eq("id", inviteId);
   if (error) return fail(error.message);
-  revalidatePath("/pessoas");
+  revalidatePath("/equipes");
   return ok;
 }
 
 /** Aprova um auto-cadastro (pré-login) transformando-o em convite. */
-export async function aprovarJoinRequest(joinId: string): Promise<ActionResult> {
+export async function aprovarJoinRequest(joinId: string, teams: InviteTeamInput[] = []): Promise<ActionResult> {
   const session = await getSession();
   if (!session) return fail("Sessão expirada.");
   if (session.role !== "admin") return fail("Só o administrador aprova cadastros.");
@@ -562,18 +563,32 @@ export async function aprovarJoinRequest(joinId: string): Promise<ActionResult> 
     .ilike("email", email)
     .eq("status", "pendente")
     .maybeSingle();
-  if (!existing) {
-    const { error } = await supabase.from("invites").insert({
-      church_id: session.profile.church_id,
-      email,
-      full_name: jr.full_name,
-      created_by: session.userId,
-    });
-    if (error) return fail(error.message);
+  let inviteId = existing?.id ?? null;
+  if (!inviteId) {
+    const { data: inv, error } = await supabase
+      .from("invites")
+      .insert({
+        church_id: session.profile.church_id,
+        email,
+        full_name: jr.full_name,
+        created_by: session.userId,
+      })
+      .select("id")
+      .single();
+    if (error || !inv) return fail(error?.message || "Não consegui criar o convite.");
+    inviteId = inv.id;
   }
+
+  const picked = teams.filter((t) => t.teamId);
+  if (inviteId && picked.length > 0) {
+    await supabase.from("invite_teams").insert(
+      picked.map((t) => ({ invite_id: inviteId, team_id: t.teamId, role: t.role })),
+    );
+  }
+
   await supabase.from("join_requests").update({ status: "aprovado", resolved_by: session.userId }).eq("id", joinId);
 
-  revalidatePath("/pessoas");
+  revalidatePath("/equipes");
   revalidatePath("/inicio");
   return ok;
 }
@@ -587,7 +602,7 @@ export async function recusarJoinRequest(joinId: string): Promise<ActionResult> 
     .update({ status: "recusado", resolved_by: session.userId })
     .eq("id", joinId);
   if (error) return fail(error.message);
-  revalidatePath("/pessoas");
+  revalidatePath("/equipes");
   return ok;
 }
 
@@ -621,7 +636,7 @@ export async function aprovarProfilePendente(input: AprovarProfileInput): Promis
     link: "/inicio",
   });
 
-  revalidatePath("/pessoas");
+  revalidatePath("/equipes");
   revalidatePath("/inicio");
   return ok;
 }
@@ -791,7 +806,7 @@ export async function definirAdmin(profileId: string, makeAdmin: boolean): Promi
     .update({ system_role: makeAdmin ? "admin" : "member" })
     .eq("id", profileId);
   if (error) return fail(error.message);
-  revalidatePath("/pessoas");
+  revalidatePath("/equipes");
   revalidatePath("/inicio");
   return ok;
 }
@@ -830,7 +845,7 @@ export async function excluirPessoa(profileId: string): Promise<ActionResult> {
 
   const { error } = await supabase.from("profiles").delete().eq("id", profileId);
   if (error) return fail(error.message);
-  revalidatePath("/pessoas");
+  revalidatePath("/equipes");
   revalidatePath("/inicio");
   return ok;
 }

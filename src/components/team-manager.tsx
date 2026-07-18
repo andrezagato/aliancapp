@@ -1,13 +1,14 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Check, X, Pencil, Archive, UserPlus, Crown } from "lucide-react";
+import { Plus, Check, X, Pencil, Archive, UserPlus, Crown, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar } from "@/components/ui/avatar";
 import { Modal } from "@/components/modal";
 import { TeamDot } from "@/components/coverage-badge";
+import { PessoaConfigModal, type TeamOpt } from "@/components/pessoa-config-modal";
 import { cn } from "@/lib/utils";
 import {
   criarEquipe,
@@ -15,10 +16,8 @@ import {
   renomearPosicao,
   arquivarPosicao,
   adicionarMembro,
-  definirPapelMembro,
-  removerMembro,
 } from "@/lib/actions";
-import type { ManageableTeam } from "@/lib/data";
+import type { ManageableTeam, MemberRow } from "@/lib/data";
 
 type Profile = { id: string; name: string; avatarUrl: string | null };
 
@@ -30,18 +29,42 @@ const SUGESTOES = [
   "Mesa de som", "Projeção", "Câmera", "Recepção", "Professor", "Auxiliar",
 ];
 
+/**
+ * Hub Equipes: um bloco por equipe (membros + posições). Tocar num membro abre
+ * o PessoaConfigModal (equipes/papel/admin/excluir). Admin também cria equipes e
+ * vê o bloco "Sem equipe". Layout responsivo: 1 coluna no celular, 2 no md+.
+ */
 export function TeamManager({
   teams,
+  members,
   allProfiles,
+  isAdmin,
+  meId,
   canCreateTeam,
 }: {
   teams: ManageableTeam[];
+  members: MemberRow[];
   allProfiles: Profile[];
+  isAdmin: boolean;
+  meId: string;
   canCreateTeam: boolean;
 }) {
+  const [openId, setOpenId] = useState<string | null>(null);
+  const manageTeamOpts: TeamOpt[] = useMemo(
+    () => teams.map((t) => ({ id: t.id, name: t.name, color: t.color })),
+    [teams],
+  );
+  const byId = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
+  const noTeam = useMemo(
+    () => members.filter((m) => m.status === "ativo" && m.teams.length === 0),
+    [members],
+  );
+  const openPerson = openId ? byId.get(openId) ?? null : null;
+
   return (
     <div className="space-y-4">
       {canCreateTeam ? <NovaEquipe /> : null}
+
       {teams.length === 0 ? (
         <Card className="border-dashed">
           <CardContent className="px-6 py-10 text-center text-sm text-muted-foreground">
@@ -51,9 +74,66 @@ export function TeamManager({
           </CardContent>
         </Card>
       ) : (
-        teams.map((team) => <TeamCard key={team.id} team={team} allProfiles={allProfiles} />)
+        <div className="grid gap-4 md:grid-cols-2">
+          {teams.map((team) => (
+            <TeamCard key={team.id} team={team} allProfiles={allProfiles} onOpenPerson={setOpenId} />
+          ))}
+        </div>
       )}
+
+      {isAdmin && noTeam.length > 0 ? (
+        <Card>
+          <div className="flex items-center gap-2 border-b border-border p-4">
+            <span className="size-3 rounded-full bg-muted-foreground/40" />
+            <h2 className="text-lg font-semibold">Sem equipe</h2>
+            <span className="ml-auto text-sm text-muted-foreground">{noTeam.length}</span>
+          </div>
+          <ul className="divide-y divide-border">
+            {noTeam.map((p) => (
+              <li key={p.id}>
+                <PersonButton name={p.fullName} avatarUrl={p.avatarUrl} onClick={() => setOpenId(p.id)} />
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
+
+      {openPerson ? (
+        <PessoaConfigModal
+          open
+          onClose={() => setOpenId(null)}
+          person={openPerson}
+          manageTeams={manageTeamOpts}
+          isAdmin={isAdmin}
+          isSelf={openPerson.id === meId}
+        />
+      ) : null}
     </div>
+  );
+}
+
+function PersonButton({
+  name,
+  avatarUrl,
+  role,
+  onClick,
+}: {
+  name: string;
+  avatarUrl: string | null;
+  role?: "leader" | "volunteer";
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="press-sm flex w-full items-center gap-3 p-3 pl-4 text-left hover:bg-muted/40"
+    >
+      <Avatar name={name} src={avatarUrl} className="size-8" />
+      <span className="min-w-0 flex-1 truncate text-sm font-medium">{name}</span>
+      {role === "leader" ? <Crown className="size-4 shrink-0 text-primary" /> : null}
+      <ChevronRight className="size-4 shrink-0 text-muted-foreground/50" />
+    </button>
   );
 }
 
@@ -97,18 +177,45 @@ function NovaEquipe() {
   );
 }
 
-function TeamCard({ team, allProfiles }: { team: ManageableTeam; allProfiles: Profile[] }) {
+function TeamCard({
+  team,
+  allProfiles,
+  onOpenPerson,
+}: {
+  team: ManageableTeam;
+  allProfiles: Profile[];
+  onOpenPerson: (profileId: string) => void;
+}) {
   return (
-    <Card>
+    <Card className="self-start">
       <div className="flex items-center gap-2 border-b border-border p-4">
         <TeamDot color={team.color} className="size-3" />
         <h2 className="text-lg font-semibold">{team.name}</h2>
+        <span className="ml-auto text-sm text-muted-foreground">{team.members.length}</span>
       </div>
 
-      {/* Membros */}
+      {/* Membros — tocar abre o modal de configuração */}
       <div className="border-b border-border">
         <p className="px-4 pt-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">Membros</p>
-        <MembersSection team={team} allProfiles={allProfiles} />
+        {team.members.length === 0 ? (
+          <p className="px-4 py-2 text-sm text-muted-foreground">Ninguém na equipe ainda.</p>
+        ) : (
+          <ul className="divide-y divide-border">
+            {team.members.map((m) => (
+              <li key={m.membershipId}>
+                <PersonButton
+                  name={m.name}
+                  avatarUrl={m.avatarUrl}
+                  role={m.role}
+                  onClick={() => onOpenPerson(m.profileId)}
+                />
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="p-3">
+          <AddMemberButton team={team} allProfiles={allProfiles} />
+        </div>
       </div>
 
       {/* Posições */}
@@ -127,125 +234,21 @@ function TeamCard({ team, allProfiles }: { team: ManageableTeam; allProfiles: Pr
   );
 }
 
-// -----------------------------------------------------------------------------
-// Membros
-// -----------------------------------------------------------------------------
-function MembersSection({ team, allProfiles }: { team: ManageableTeam; allProfiles: Profile[] }) {
+function AddMemberButton({ team, allProfiles }: { team: ManageableTeam; allProfiles: Profile[] }) {
   const [adding, setAdding] = useState(false);
   const memberIds = new Set(team.members.map((m) => m.profileId));
   const addable = allProfiles.filter((p) => !memberIds.has(p.id));
-
   return (
-    <div>
-      {team.members.length === 0 ? (
-        <p className="px-4 py-2 text-sm text-muted-foreground">Ninguém na equipe ainda.</p>
-      ) : (
-        <ul className="divide-y divide-border">
-          {team.members.map((m) => (
-            <li key={m.membershipId} className="flex items-center gap-3 p-3 pl-4">
-              <Avatar name={m.name} src={m.avatarUrl} className="size-8" />
-              <span className="min-w-0 flex-1 truncate text-sm font-medium">{m.name}</span>
-              <RoleToggle membershipId={m.membershipId} teamId={team.id} role={m.role} />
-              <RemoveMemberButton membershipId={m.membershipId} teamId={team.id} />
-            </li>
-          ))}
-        </ul>
-      )}
-      <div className="p-3">
-        <button
-          type="button"
-          onClick={() => setAdding(true)}
-          className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
-        >
-          <UserPlus className="size-4" /> Adicionar pessoa
-        </button>
-      </div>
+    <>
+      <button
+        type="button"
+        onClick={() => setAdding(true)}
+        className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+      >
+        <UserPlus className="size-4" /> Adicionar pessoa
+      </button>
       <AddMemberModal open={adding} onClose={() => setAdding(false)} teamId={team.id} addable={addable} />
-    </div>
-  );
-}
-
-function RoleToggle({
-  membershipId,
-  teamId,
-  role,
-}: {
-  membershipId: string;
-  teamId: string;
-  role: "leader" | "volunteer";
-}) {
-  const router = useRouter();
-  const [pending, start] = useTransition();
-
-  function set(next: "leader" | "volunteer") {
-    if (next === role) return;
-    start(async () => {
-      const r = await definirPapelMembro(membershipId, teamId, next);
-      if (r.ok) router.refresh();
-    });
-  }
-
-  return (
-    <div className="flex overflow-hidden rounded-full border border-border text-xs">
-      {(["volunteer", "leader"] as const).map((r) => (
-        <button
-          key={r}
-          type="button"
-          disabled={pending}
-          onClick={() => set(r)}
-          className={cn(
-            "px-2.5 py-1 font-medium disabled:opacity-60",
-            role === r ? "bg-primary text-primary-foreground" : "text-muted-foreground",
-          )}
-        >
-          {r === "leader" ? (
-            <span className="inline-flex items-center gap-1">
-              <Crown className="size-3" /> Líder
-            </span>
-          ) : (
-            "Voluntário"
-          )}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function RemoveMemberButton({ membershipId, teamId }: { membershipId: string; teamId: string }) {
-  const router = useRouter();
-  const [pending, start] = useTransition();
-  const [confirming, setConfirming] = useState(false);
-
-  function remove() {
-    start(async () => {
-      const r = await removerMembro(membershipId, teamId);
-      if (r.ok) router.refresh();
-      setConfirming(false);
-    });
-  }
-
-  if (confirming) {
-    return (
-      <div className="flex items-center gap-1">
-        <Button size="sm" variant="destructive" onClick={remove} disabled={pending}>
-          {pending ? "…" : "Tirar"}
-        </Button>
-        <Button size="sm" variant="ghost" onClick={() => setConfirming(false)} disabled={pending}>
-          Não
-        </Button>
-      </div>
-    );
-  }
-
-  return (
-    <button
-      type="button"
-      onClick={() => setConfirming(true)}
-      aria-label="Remover da equipe"
-      className="inline-flex size-8 items-center justify-center rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-    >
-      <X className="size-4" />
-    </button>
+    </>
   );
 }
 
@@ -273,47 +276,37 @@ function AddMemberModal({
   }
 
   return (
-    <Modal open={open} onClose={() => !pending && onClose()}>
-      <div className="flex max-h-[80dvh] flex-col rounded-2xl border border-border bg-card shadow-lift">
-        <div className="border-b border-border p-4">
-          <h3 className="text-lg font-semibold">Adicionar pessoa</h3>
-          <input
-            autoFocus
-            className={cn(inputClass, "mt-2")}
-            placeholder="Buscar por nome…"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-          />
-        </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-2">
-          {filtered.length === 0 ? (
-            <p className="p-4 text-center text-sm text-muted-foreground">
-              {addable.length === 0 ? "Todo mundo já está na equipe." : "Ninguém encontrado."}
-            </p>
-          ) : (
-            <ul className="space-y-1">
-              {filtered.map((p) => (
-                <li key={p.id}>
-                  <button
-                    type="button"
-                    disabled={pending}
-                    onClick={() => add(p.id)}
-                    className="flex w-full items-center gap-3 rounded-xl p-2.5 text-left hover:bg-muted disabled:opacity-50"
-                  >
-                    <Avatar name={p.name} src={p.avatarUrl} className="size-8" />
-                    <span className="min-w-0 flex-1 truncate text-sm font-medium">{p.name}</span>
-                    <Plus className="size-4 text-primary" />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-        <div className="border-t border-border p-3">
-          <Button variant="ghost" className="w-full" onClick={onClose} disabled={pending}>
-            Fechar
-          </Button>
-        </div>
+    <Modal open={open} onClose={() => !pending && onClose()} sheet title="Adicionar pessoa">
+      <input
+        autoFocus
+        className={cn(inputClass, "mt-1")}
+        placeholder="Buscar por nome…"
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+      />
+      <div className="mt-2 max-h-[55dvh] overflow-y-auto">
+        {filtered.length === 0 ? (
+          <p className="p-4 text-center text-sm text-muted-foreground">
+            {addable.length === 0 ? "Todo mundo já está na equipe." : "Ninguém encontrado."}
+          </p>
+        ) : (
+          <ul className="space-y-1">
+            {filtered.map((p) => (
+              <li key={p.id}>
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() => add(p.id)}
+                  className="flex w-full items-center gap-3 rounded-xl p-2.5 text-left hover:bg-muted disabled:opacity-50"
+                >
+                  <Avatar name={p.name} src={p.avatarUrl} className="size-8" />
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium">{p.name}</span>
+                  <Plus className="size-4 text-primary" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </Modal>
   );
@@ -322,15 +315,7 @@ function AddMemberModal({
 // -----------------------------------------------------------------------------
 // Posições
 // -----------------------------------------------------------------------------
-function PositionItem({
-  positionId,
-  teamId,
-  name,
-}: {
-  positionId: string;
-  teamId: string;
-  name: string;
-}) {
+function PositionItem({ positionId, teamId, name }: { positionId: string; teamId: string; name: string }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [editing, setEditing] = useState(false);
