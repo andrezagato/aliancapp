@@ -9,6 +9,7 @@ import {
   Plus,
   Clock,
   CheckCircle2,
+  AlertTriangle,
 } from "lucide-react";
 import { HomeShell } from "@/components/app-shell/home-shell";
 import { Card, CardContent } from "@/components/ui/card";
@@ -243,8 +244,22 @@ async function LeaderSection({ hideHeroForEventId }: { hideHeroForEventId: strin
         calendarEvents={monthEvents}
         calendarDayISO={calendarDayISO}
         todayISO={todayISO}
-        listEvents={home.events}
       />
+
+      {home.openVacancies > 0 ? (
+        <Link
+          href="/escalas"
+          className="flex items-center gap-3 rounded-2xl border border-warning/30 bg-warning/10 p-3.5"
+        >
+          <span className="inline-flex size-9 items-center justify-center rounded-full bg-warning/15 text-warning">
+            <AlertTriangle className="size-5" />
+          </span>
+          <span className="flex-1 text-sm font-medium">
+            Alguns próximos eventos da sua equipe precisam da sua atenção
+          </span>
+          <ChevronRight className="size-5 shrink-0 text-muted-foreground" />
+        </Link>
+      ) : null}
 
       {home.interests.length > 0 ? (
         <section>

@@ -1,14 +1,12 @@
 import Link from "next/link";
-import { CalendarDays, ChevronRight, MapPin, Plus } from "lucide-react";
+import { CalendarDays, Plus } from "lucide-react";
 import { TopBar } from "@/components/app-shell/top-bar";
-import { Card } from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
-import { CoverageBadge } from "@/components/coverage-badge";
+import { EscalasList } from "@/components/escalas-list";
 import { cn } from "@/lib/utils";
 import { getSession } from "@/lib/auth";
 import { listUpcomingEvents } from "@/lib/data";
-import { fmtEventDate, fmtTime } from "@/lib/format";
 
 export default async function EscalasPage() {
   const session = await getSession();
@@ -40,38 +38,7 @@ export default async function EscalasPage() {
             }
           />
         ) : (
-          <div className="space-y-3">
-            {events.map((ev) => (
-              <Card key={ev.id}>
-                <Link href={`/escalas/${ev.id}`} className="press-sm block p-4">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="font-medium">{ev.title}</p>
-                      <p className="text-sm capitalize text-muted-foreground">{fmtEventDate(ev.starts_at)}</p>
-                      <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-                        <span className="inline-flex items-center gap-1">
-                          <CalendarDays className="size-3" /> {fmtTime(ev.starts_at)}
-                        </span>
-                        {ev.location ? (
-                          <span className="inline-flex items-center gap-1">
-                            <MapPin className="size-3" /> {ev.location}
-                          </span>
-                        ) : null}
-                      </p>
-                    </div>
-                    <ChevronRight className="mt-1 size-5 shrink-0 text-muted-foreground" />
-                  </div>
-                  {ev.teams.length > 0 ? (
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {ev.teams.map((t) => (
-                        <CoverageBadge key={t.teamId} tone={t.tone} label={`${t.name} ${t.assigned}/${t.needed}`} />
-                      ))}
-                    </div>
-                  ) : null}
-                </Link>
-              </Card>
-            ))}
-          </div>
+          <EscalasList events={events} asModal={session.role === "leader"} />
         )}
       </div>
     </>
