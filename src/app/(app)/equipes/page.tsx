@@ -63,7 +63,7 @@ export default async function EquipesPage() {
                 <h3 className="mb-2 px-1 text-base font-semibold">
                   Querem entrar · {joins.length + pendingProfiles.length}
                 </h3>
-                <div className="grid gap-3 md:grid-cols-2">
+                <div className="grid gap-3 lg:grid-cols-2">
                   {joins.map((j) => (
                     <Card key={`j-${j.id}`}>
                       <CardContent className="p-4">
@@ -89,10 +89,12 @@ export default async function EquipesPage() {
                         <div className="flex items-center gap-3">
                           <Avatar name={m.fullName} src={m.avatarUrl} />
                           <div className="min-w-0 flex-1">
-                            <p className="font-medium">{m.fullName}</p>
+                            <p className="truncate font-medium">{m.fullName}</p>
                             <Badge variant="neutral" className="mt-0.5">Já logou · aguardando</Badge>
                             {m.email ? <p className="mt-1 truncate text-sm text-muted-foreground">{m.email}</p> : null}
                           </div>
+                        </div>
+                        <div className="mt-3 flex justify-end border-t border-border/70 pt-3">
                           <PendingProfileActions profileId={m.id} teams={teamOpts} />
                         </div>
                       </CardContent>

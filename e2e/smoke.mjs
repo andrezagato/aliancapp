@@ -55,17 +55,28 @@ console.log(`\nLÍDER (${LEADER})`);
     await page.screenshot({ path: `${DIR}/lider-inicio.png`, fullPage: true });
     const nav = page.locator("nav");
     check((await nav.getByText("Cronograma").count()) > 0, "aba Cronograma no menu");
+    check((await nav.getByText("Equipes").count()) > 0, "aba Equipes no menu");
     check((await nav.getByText("Livre?").count()) === 0, '"Livre?" removido do menu');
     check((await page.getByText("Dias que sua equipe serve").count()) > 0, "calendário da equipe presente");
-    // abre o modal editável (read-only) a partir da lista
-    const card = page.locator('section:has(h3:has-text("Próximos cultos da equipe")) button').first();
-    if ((await card.count()) > 0) {
-      await card.click();
+    // abre o modal editável tocando num dia marcado do calendário
+    const day = page.locator('section:has(h3:has-text("Dias que sua equipe serve")) button').first();
+    if ((await day.count()) > 0) {
+      await day.click();
       await page.getByRole("dialog").waitFor({ state: "visible", timeout: 8000 });
       await page.waitForTimeout(700);
-      check(true, "modal do evento abre");
+      check(true, "modal do evento abre pelo calendário");
       await page.screenshot({ path: `${DIR}/lider-modal.png`, fullPage: true });
+      await page.keyboard.press("Escape");
+      await page.waitForTimeout(300);
     }
+    // hub Equipes do líder
+    await page.goto(`${BASE}/equipes`, { waitUntil: "networkidle" });
+    await page.waitForTimeout(600);
+    check(
+      (await page.getByText("MEMBROS").count()) > 0 || (await page.getByText("não lidera").count()) > 0,
+      "hub Equipes do líder carrega",
+    );
+    await page.screenshot({ path: `${DIR}/lider-equipes.png`, fullPage: true });
   } catch (e) {
     check(false, "líder: " + e.message);
     await page.screenshot({ path: `${DIR}/lider-erro.png`, fullPage: true }).catch(() => {});

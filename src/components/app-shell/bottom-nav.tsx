@@ -24,7 +24,7 @@ export function BottomNav({ role }: { role: EffectiveRole }) {
 
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border/80 bg-card/85 backdrop-blur-lg pb-safe">
-      <div className="mx-auto flex max-w-[520px] items-stretch justify-around px-2 pt-1.5">
+      <div className="mx-auto flex max-w-[520px] items-stretch justify-around px-2 pt-1.5 lg:max-w-[720px]">
         {items.map(({ href, label, icon: Icon }) => {
           const active = pathname === href || pathname.startsWith(href + "/");
           return (

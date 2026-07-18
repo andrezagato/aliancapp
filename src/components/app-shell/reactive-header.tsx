@@ -56,7 +56,7 @@ export function ReactiveHeader({
       >
         {title}
       </div>
-      <div className="relative mx-auto flex max-w-[520px] items-center gap-3 px-5 pb-3.5 pt-2">
+      <div className="relative mx-auto flex max-w-[520px] items-center gap-3 px-5 pb-3.5 pt-2 lg:max-w-[720px]">
         <div ref={big} className="min-w-0 flex-1 origin-top-left">
           <div className="truncate font-display text-[26px] font-extrabold leading-[1.04] tracking-tight text-foreground">
             {title}

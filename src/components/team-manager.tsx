@@ -74,7 +74,7 @@ export function TeamManager({
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4 lg:grid-cols-2">
           {teams.map((team) => (
             <TeamCard key={team.id} team={team} allProfiles={allProfiles} onOpenPerson={setOpenId} />
           ))}

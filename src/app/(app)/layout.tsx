@@ -11,7 +11,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <ToastProvider>
       <div className="min-h-dvh">
-        <main className="mx-auto max-w-[520px] px-5 pb-28 pt-2">{children}</main>
+        <main className="mx-auto max-w-[520px] px-5 pb-28 pt-2 lg:max-w-[720px]">{children}</main>
         <BottomNav role={session.role} />
       </div>
     </ToastProvider>
