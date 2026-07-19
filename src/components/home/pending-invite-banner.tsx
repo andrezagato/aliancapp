@@ -2,7 +2,7 @@
 
 import { BellRing } from "lucide-react";
 import type { MyAssignment } from "@/lib/data";
-import { fmtEventWhen } from "@/lib/format";
+import { fmtEventWhen, fmtTime } from "@/lib/format";
 
 /**
  * Banner de convites de escala aguardando resposta. Fica no topo da home do
@@ -48,6 +48,9 @@ export function PendingInviteBanner({
               <p className="truncate text-[12.5px] capitalize text-muted-foreground">
                 {fmtEventWhen(a.startsAt)} · {a.teamName}
               </p>
+              {a.callAt ? (
+                <p className="truncate text-[12px] font-bold text-primary">Chega às {fmtTime(a.callAt)}</p>
+              ) : null}
             </div>
             <button
               onClick={() => onRespond(a)}

@@ -39,6 +39,9 @@ export function TodayCard({
       <p className="text-[13.5px] text-accent-foreground/80">
         {a.teamName} · {a.positionName}
       </p>
+      {a.callAt && !a.checkedIn ? (
+        <p className="mt-1 text-[13px] font-bold text-primary">⏰ Equipe chega às {fmtTime(a.callAt)}</p>
+      ) : null}
 
       <div className="mt-3.5">
         {a.checkedIn ? (

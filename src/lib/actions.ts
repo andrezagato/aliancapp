@@ -59,6 +59,17 @@ function saoPauloToIso(date: string, time: string): string {
   return d.toISOString();
 }
 
+/** Distância em metros entre duas coordenadas (haversine). */
+function distanceM(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371000;
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
 // =============================================================================
 // ONBOARDING: solicitar entrada (auto-cadastro público — sem sessão)
 // Passa pelo server (mesma origem) em vez de fetch direto do navegador ao
@@ -486,8 +497,10 @@ export async function criarEventoAvulso(input: CriarEventoInput): Promise<Action
   if (!input.title.trim()) return fail("Dê um título ao evento.");
 
   let startsAt: string;
+  let callAt: string | null = null;
   try {
     startsAt = saoPauloToIso(input.date, input.time || "18:00");
+    if (input.callTime) callAt = saoPauloToIso(input.date, input.callTime);
   } catch {
     return fail("Data ou horário inválidos.");
   }
@@ -502,6 +515,7 @@ export async function criarEventoAvulso(input: CriarEventoInput): Promise<Action
       church_id: session.profile.church_id,
       title: input.title.trim(),
       starts_at: startsAt,
+      call_time: callAt,
       location: input.location?.trim() || null,
       notes: input.notes?.trim() || null,
       created_by: session.userId,
@@ -671,6 +685,48 @@ export async function resolverEventoSolicitado(
   revalidatePath("/escalas");
   revalidatePath("/inicio");
   return { ok: true, eventId: createdEventId ?? undefined };
+}
+
+/** Admin define/limpa o call time (chegada da equipe) de um evento. */
+export async function definirCallTime(eventId: string, date: string, time: string): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  if (session.role !== "admin") return fail("Só o administrador define o horário de chegada.");
+  let callAt: string | null = null;
+  if (time.trim()) {
+    try {
+      callAt = saoPauloToIso(date, time);
+    } catch {
+      return fail("Horário inválido.");
+    }
+  }
+  const supabase = await createClient();
+  const { error } = await supabase.from("events").update({ call_time: callAt }).eq("id", eventId);
+  if (error) return fail(error.message);
+  revalidatePath(`/escalas/${eventId}`);
+  revalidatePath("/inicio");
+  return ok;
+}
+
+/** Admin define a localização da igreja (pro selo de check-in por GPS). */
+export async function definirLocalIgreja(
+  lat: number | null,
+  lng: number | null,
+  radiusM: number,
+): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  if (session.role !== "admin") return fail("Só o administrador define o local da igreja.");
+  if (!session.profile.church_id) return fail("Sua conta não está ligada a uma igreja.");
+  const radius = Math.max(50, Math.min(2000, Math.round(radiusM || 200)));
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("churches")
+    .update({ latitude: lat, longitude: lng, checkin_radius_m: radius })
+    .eq("id", session.profile.church_id);
+  if (error) return fail(error.message);
+  revalidatePath("/equipes");
+  return ok;
 }
 
 /** Admin adiciona outra equipe a um evento já criado (copia as posições da equipe). */
@@ -1348,6 +1404,8 @@ export async function fazerCheckin(
   assignmentId: string,
   teamId: string,
   eventId: string,
+  lat?: number | null,
+  lng?: number | null,
 ): Promise<ActionResult & { unlocked?: UnlockedBadge[] }> {
   const session = await getSession();
   if (!session) return fail("Sessão expirada.");
@@ -1355,9 +1413,23 @@ export async function fazerCheckin(
   const { data: a } = await supabase.from("assignments").select("profile_id").eq("id", assignmentId).maybeSingle();
   const isSelf = a?.profile_id === session.userId;
   if (!isSelf && !canManageTeam(session, teamId)) return fail("Sem permissão.");
+
+  // Selo de local (opcional): confere se está no raio da igreja. Nunca trava o check-in.
+  let atLocation: boolean | null = null;
+  if (typeof lat === "number" && typeof lng === "number" && session.profile.church_id) {
+    const { data: ch } = await supabase
+      .from("churches")
+      .select("latitude, longitude, checkin_radius_m")
+      .eq("id", session.profile.church_id)
+      .maybeSingle();
+    if (ch && ch.latitude != null && ch.longitude != null) {
+      atLocation = distanceM(lat, lng, ch.latitude, ch.longitude) <= (ch.checkin_radius_m ?? 200);
+    }
+  }
+
   const { error } = await supabase
     .from("checkins")
-    .insert({ assignment_id: assignmentId, checked_by: session.userId });
+    .insert({ assignment_id: assignmentId, checked_by: session.userId, at_location: atLocation });
   if (error && !error.message.includes("duplicate")) return fail(error.message);
   await logActivity({ profileId: a?.profile_id ?? session.userId, actorId: session.userId, kind: "checkin", eventId, teamId });
   // Conquistas do próprio (quando o líder marca por outro, a pessoa desbloqueia ao abrir o app).

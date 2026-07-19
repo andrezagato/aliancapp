@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeftRight, BadgeCheck, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { fazerCheckin, desfazerCheckin, resolverTroca } from "@/lib/actions";
+import { getCoords } from "@/lib/geo-client";
 
 // -----------------------------------------------------------------------------
 // Check-in (presença no dia)
@@ -29,9 +30,13 @@ export function CheckinButton({
 
   function toggle(next: boolean) {
     start(async () => {
-      const r = next
-        ? await fazerCheckin(assignmentId, teamId, eventId)
-        : await desfazerCheckin(assignmentId, teamId, eventId);
+      let r;
+      if (next) {
+        const coords = await getCoords();
+        r = await fazerCheckin(assignmentId, teamId, eventId, coords?.lat ?? null, coords?.lng ?? null);
+      } else {
+        r = await desfazerCheckin(assignmentId, teamId, eventId);
+      }
       if (r.ok) router.refresh();
     });
   }

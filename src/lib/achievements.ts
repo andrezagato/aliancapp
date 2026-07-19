@@ -17,7 +17,8 @@ export type BadgeMetric =
   | "interesses"
   | "maratona"
   | "pontual"
-  | "feedbacks";
+  | "feedbacks"
+  | "no_local";
 
 export type Badge = {
   code: string;
@@ -60,6 +61,8 @@ export const BADGES: Badge[] = [
   { code: "maratona_5", emoji: "🏃", title: "Fôlego de sobra", desc: "Serviu 5 vezes num mês só.", metric: "maratona", target: 5 },
   { code: "feedback_1", emoji: "💬", title: "Voz que importa", desc: "Deu feedback de um culto.", metric: "feedbacks", target: 1 },
   { code: "feedback_5", emoji: "📊", title: "Termômetro do culto", desc: "Deu feedback de 5 cultos.", metric: "feedbacks", target: 5 },
+  { code: "no_local_1", emoji: "📍", title: "Presença no local", desc: "Fez check-in dentro da igreja.", metric: "no_local", target: 1 },
+  { code: "no_local_5", emoji: "🗺️", title: "Sempre no ponto", desc: "5 check-ins confirmados no local.", metric: "no_local", target: 5 },
 ];
 
 export type UnlockedBadge = { code: string; emoji: string; title: string; desc: string };

@@ -19,6 +19,7 @@ import { getEventDetail, listChurchProfiles, type DetailPosition, type DetailTea
 import { CheckinButton, SwapPending } from "@/components/slot-controls";
 import { EventTeams } from "@/components/event/event-teams";
 import { ResponsavelControls } from "@/components/responsavel-controls";
+import { CallTimeControl } from "@/components/call-time-control";
 import { fmtEventDate, fmtTime, churchDateISO } from "@/lib/format";
 
 export default async function EventoPage({ params }: { params: Promise<{ id: string }> }) {
@@ -35,6 +36,14 @@ export default async function EventoPage({ params }: { params: Promise<{ id: str
   const profiles = session.role === "admin" ? await listChurchProfiles() : [];
   const manageTeams = ev.teams.filter((t) => t.canManage);
   const otherTeams = ev.teams.filter((t) => !t.canManage);
+  const callHHMM = ev.callTime
+    ? new Intl.DateTimeFormat("pt-BR", {
+        timeZone: "America/Sao_Paulo",
+        hour: "2-digit",
+        minute: "2-digit",
+        hourCycle: "h23",
+      }).format(new Date(ev.callTime))
+    : "";
 
   return (
     <div className="space-y-3.5 pb-4">
@@ -61,6 +70,11 @@ export default async function EventoPage({ params }: { params: Promise<{ id: str
               <Clock className="size-3.5 text-accent" /> {fmtTime(ev.starts_at)}
               {ev.ends_at ? ` – ${fmtTime(ev.ends_at)}` : ""}
             </span>
+            {ev.callTime ? (
+              <span className="inline-flex items-center gap-1.5 font-semibold text-accent">
+                Equipe às {fmtTime(ev.callTime)}
+              </span>
+            ) : null}
             {ev.location ? (
               <span className="inline-flex items-center gap-1.5">
                 <MapPin className="size-3.5 text-accent" /> {ev.location}
@@ -81,6 +95,11 @@ export default async function EventoPage({ params }: { params: Promise<{ id: str
             profiles={profiles}
           />
           {ev.notes ? <p className="text-sm text-muted-foreground">{ev.notes}</p> : null}
+          {session.role === "admin" ? (
+            <div className="border-t border-border/60 pt-2">
+              <CallTimeControl eventId={ev.id} date={churchDateISO(ev.starts_at)} current={callHHMM} />
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 

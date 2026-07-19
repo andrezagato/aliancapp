@@ -17,12 +17,14 @@ import { getSession } from "@/lib/auth";
 import {
   getManageableTeams,
   getResolvedInterests,
+  getChurchLocation,
   listMembers,
   listChurchProfiles,
   listPendingJoinRequests,
   listInvites,
   listTeams,
 } from "@/lib/data";
+import { ChurchLocationCard } from "@/components/church-location-card";
 
 export default async function EquipesPage() {
   const session = await getSession();
@@ -39,10 +41,11 @@ export default async function EquipesPage() {
   ]);
 
   // Aprovações/convites só pro admin.
-  const [joins, invites, allTeams] = await Promise.all([
+  const [joins, invites, allTeams, churchLoc] = await Promise.all([
     isAdmin ? listPendingJoinRequests() : Promise.resolve([]),
     isAdmin ? listInvites() : Promise.resolve([]),
     isAdmin ? listTeams() : Promise.resolve([]),
+    isAdmin ? getChurchLocation(session) : Promise.resolve(null),
   ]);
   const teamOpts: TeamOpt[] = allTeams.map((t) => ({ id: t.id, name: t.name, color: t.color }));
   const pendingProfiles = members.filter((m) => m.status === "pendente");
@@ -138,6 +141,7 @@ export default async function EquipesPage() {
                 </Card>
               </section>
             ) : null}
+            <ChurchLocationCard location={churchLoc} />
           </>
         ) : null}
 

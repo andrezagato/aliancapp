@@ -441,7 +441,7 @@ async function computeJourneyMetrics(
 
   const { data: aRows } = await supabase
     .from("assignments")
-    .select("id, status, team_id, created_at, responded_at, events!inner ( starts_at )")
+    .select("id, status, team_id, created_at, responded_at, events!inner ( starts_at, call_time )")
     .eq("profile_id", userId);
   const rows = (aRows ?? []) as {
     id: string;
@@ -449,7 +449,7 @@ async function computeJourneyMetrics(
     team_id: string;
     created_at: string;
     responded_at: string | null;
-    events: { starts_at: string } | null;
+    events: { starts_at: string; call_time: string | null } | null;
   }[];
 
   const past = rows
@@ -480,18 +480,23 @@ async function computeJourneyMetrics(
     meses = Math.max(0, Math.floor((Date.now() - first) / (30 * 24 * 60 * 60 * 1000)));
   }
 
-  // Check-ins + pontualidade (chegou até 10min depois do início do culto).
+  // Check-ins + pontualidade (chegou até 10min depois do call time — ou do início, se não houver call).
   let checkin = 0;
   let pontual = 0;
-  const startsById = new Map(rows.filter((r) => r.events).map((r) => [r.id, r.events!.starts_at]));
+  let noLocal = 0;
+  const refById = new Map(rows.filter((r) => r.events).map((r) => [r.id, r.events!.call_time ?? r.events!.starts_at]));
   const ids = rows.map((r) => r.id);
   if (ids.length > 0) {
-    const { data: c } = await supabase.from("checkins").select("assignment_id, checked_at").in("assignment_id", ids);
-    const cks = (c ?? []) as { assignment_id: string; checked_at: string }[];
+    const { data: c } = await supabase
+      .from("checkins")
+      .select("assignment_id, checked_at, at_location")
+      .in("assignment_id", ids);
+    const cks = (c ?? []) as { assignment_id: string; checked_at: string; at_location: boolean | null }[];
     checkin = cks.length;
+    noLocal = cks.filter((ck) => ck.at_location === true).length;
     const GRACE = 10 * 60 * 1000;
     pontual = cks.filter((ck) => {
-      const s = startsById.get(ck.assignment_id);
+      const s = refById.get(ck.assignment_id);
       return s ? new Date(ck.checked_at).getTime() <= new Date(s).getTime() + GRACE : false;
     }).length;
   }
@@ -535,6 +540,7 @@ async function computeJourneyMetrics(
     maratona,
     pontual,
     feedbacks,
+    no_local: noLocal,
   };
 }
 
@@ -792,6 +798,20 @@ export async function getTeamAchievements(session: Session): Promise<TeamAchieve
   return out;
 }
 
+// Localização da igreja (pro selo de check-in por GPS).
+export type ChurchLocation = { latitude: number | null; longitude: number | null; radiusM: number };
+export async function getChurchLocation(session: Session): Promise<ChurchLocation | null> {
+  if (!session.profile.church_id) return null;
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("churches")
+    .select("latitude, longitude, checkin_radius_m")
+    .eq("id", session.profile.church_id)
+    .maybeSingle();
+  if (!data) return null;
+  return { latitude: data.latitude, longitude: data.longitude, radiusM: data.checkin_radius_m ?? 200 };
+}
+
 // =============================================================================
 // DETALHE DO EVENTO (agrupado por equipe -> posição -> vagas)
 // =============================================================================
@@ -845,6 +865,7 @@ export type EventDetail = {
   isResponsible: boolean;
   confirmedAt: string | null;
   confirmedByName: string | null;
+  callTime: string | null;
   teams: DetailTeam[];
   addableTeams: { id: string; name: string; color: string }[];
 };
@@ -854,7 +875,7 @@ export async function getEventDetail(session: Session, eventId: string): Promise
   const { data: ev } = await supabase
     .from("events")
     .select(
-      "id, title, starts_at, ends_at, location, notes, series_id, responsible_id, confirmed_at, responsible:profiles!events_responsible_id_fkey ( full_name ), confirmer:profiles!events_confirmed_by_fkey ( full_name )",
+      "id, title, starts_at, ends_at, call_time, location, notes, series_id, responsible_id, confirmed_at, responsible:profiles!events_responsible_id_fkey ( full_name ), confirmer:profiles!events_confirmed_by_fkey ( full_name )",
     )
     .eq("id", eventId)
     .maybeSingle();
@@ -1028,6 +1049,7 @@ export async function getEventDetail(session: Session, eventId: string): Promise
     isResponsible: ev.responsible_id === session.userId,
     confirmedAt: ev.confirmed_at,
     confirmedByName: confirmer?.full_name ?? null,
+    callTime: ev.call_time,
     teams: detailTeams,
     addableTeams:
       session.role === "admin"
@@ -1161,6 +1183,7 @@ export type MyAssignment = {
   teamId: string;
   teamName: string;
   teamColor: string;
+  callAt: string | null;
   checkedIn: boolean;
 };
 
@@ -1170,7 +1193,7 @@ export async function getMyUpcomingAssignments(session: Session): Promise<MyAssi
     .from("assignments")
     .select(
       `id, status, decline_reason, team_id,
-       events!inner ( id, title, starts_at, location ),
+       events!inner ( id, title, starts_at, location, call_time ),
        positions ( name ),
        teams ( name, color )`,
     )
@@ -1183,7 +1206,7 @@ export async function getMyUpcomingAssignments(session: Session): Promise<MyAssi
     status: AssignmentStatus;
     decline_reason: string | null;
     team_id: string;
-    events: { id: string; title: string; starts_at: string; location: string | null } | null;
+    events: { id: string; title: string; starts_at: string; location: string | null; call_time: string | null } | null;
     positions: { name: string } | null;
     teams: { name: string; color: string } | null;
   }[];
@@ -1206,6 +1229,7 @@ export async function getMyUpcomingAssignments(session: Session): Promise<MyAssi
       eventTitle: r.events!.title,
       startsAt: r.events!.starts_at,
       location: r.events!.location,
+      callAt: r.events!.call_time,
       positionName: r.positions?.name || "Posição",
       teamId: r.team_id,
       teamName: r.teams?.name || "Equipe",

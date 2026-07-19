@@ -1,7 +1,7 @@
 "use client";
 
 import type { MyAssignment } from "@/lib/data";
-import { fmtEventWhen } from "@/lib/format";
+import { fmtEventWhen, fmtTime } from "@/lib/format";
 import { DrawnCheck } from "./drawn-check";
 
 /**
@@ -34,6 +34,9 @@ export function NextScheduleHero({
         <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-accent">Sua próxima escala</p>
         <h2 className="mt-1 font-display text-[29px] font-extrabold leading-[1.04] text-white">{a.eventTitle}</h2>
         <p className="mt-1 text-sm capitalize text-primary-foreground/85">{fmtEventWhen(a.startsAt)}</p>
+        {a.callAt ? (
+          <p className="mt-0.5 text-[12.5px] font-bold text-accent">Equipe chega às {fmtTime(a.callAt)}</p>
+        ) : null}
 
         <div className="mt-3 flex flex-wrap gap-1.5">
           <span className="inline-flex items-center gap-1.5 rounded-full bg-white/[0.13] px-2.5 py-1 text-[12.5px] font-medium">

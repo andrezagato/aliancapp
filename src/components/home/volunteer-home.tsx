@@ -19,6 +19,7 @@ import {
   listMembrosParaTroca,
 } from "@/lib/actions";
 import { AchievementCelebration } from "@/components/achievement-celebration";
+import { getCoords } from "@/lib/geo-client";
 import type { UnlockedBadge } from "@/lib/achievements";
 import { TodayCard } from "./today-card";
 import { NextScheduleHero } from "./next-schedule-hero";
@@ -82,7 +83,8 @@ export function VolunteerHome({
     patch(a.assignmentId, { checkedIn: true });
     showToast("Check-in feito. Bom culto!");
     startTransition(async () => {
-      const r = await fazerCheckin(a.assignmentId, a.teamId, a.eventId);
+      const coords = await getCoords();
+      const r = await fazerCheckin(a.assignmentId, a.teamId, a.eventId, coords?.lat ?? null, coords?.lng ?? null);
       if (!r.ok) {
         patch(a.assignmentId, { checkedIn: false });
         showToast(r.error);

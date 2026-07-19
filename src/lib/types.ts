@@ -17,6 +17,7 @@ export type CriarEventoInput = {
   title: string;
   date: string; // yyyy-mm-dd
   time: string; // HH:mm
+  callTime?: string; // HH:mm — chegada da equipe (call time), opcional
   location?: string;
   notes?: string;
   teamIds: string[]; // o admin só sinaliza QUAIS equipes; o líder define posições/quantidades

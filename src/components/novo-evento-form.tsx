@@ -43,6 +43,7 @@ export function NovoEventoForm({
   const [title, setTitle] = useState("");
   const [date, setDate] = useState(nextSundayISO());
   const [time, setTime] = useState("18:00");
+  const [callTime, setCallTime] = useState("");
   const [location, setLocation] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
@@ -69,6 +70,7 @@ export function NovoEventoForm({
         title,
         date,
         time,
+        callTime: callTime || undefined,
         location,
         teamIds: [...selected],
       });
@@ -124,6 +126,9 @@ export function NovoEventoForm({
                 <input type="time" className={inputClass} value={time} onChange={(e) => setTime(e.target.value)} />
               </Field>
             </div>
+            <Field label="Chegada da equipe (call) — opcional">
+              <input type="time" className={inputClass} value={callTime} onChange={(e) => setCallTime(e.target.value)} />
+            </Field>
             <Field label="Local">
               <input className={inputClass} value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Ex.: Templo" />
             </Field>

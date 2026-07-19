@@ -212,18 +212,21 @@ export type Database = {
       checkins: {
         Row: {
           assignment_id: string
+          at_location: boolean | null
           checked_at: string
           checked_by: string | null
           id: string
         }
         Insert: {
           assignment_id: string
+          at_location?: boolean | null
           checked_at?: string
           checked_by?: string | null
           id?: string
         }
         Update: {
           assignment_id?: string
+          at_location?: boolean | null
           checked_at?: string
           checked_by?: string | null
           id?: string
@@ -254,26 +257,35 @@ export type Database = {
       }
       churches: {
         Row: {
+          checkin_radius_m: number
           created_at: string
           id: string
           join_code: string | null
+          latitude: number | null
           logo_url: string | null
+          longitude: number | null
           name: string
           timezone: string
         }
         Insert: {
+          checkin_radius_m?: number
           created_at?: string
           id?: string
           join_code?: string | null
+          latitude?: number | null
           logo_url?: string | null
+          longitude?: number | null
           name: string
           timezone?: string
         }
         Update: {
+          checkin_radius_m?: number
           created_at?: string
           id?: string
           join_code?: string | null
+          latitude?: number | null
           logo_url?: string | null
+          longitude?: number | null
           name?: string
           timezone?: string
         }
@@ -504,6 +516,7 @@ export type Database = {
       }
       events: {
         Row: {
+          call_time: string | null
           church_id: string
           confirmed_at: string | null
           confirmed_by: string | null
@@ -519,6 +532,7 @@ export type Database = {
           title: string
         }
         Insert: {
+          call_time?: string | null
           church_id: string
           confirmed_at?: string | null
           confirmed_by?: string | null
@@ -534,6 +548,7 @@ export type Database = {
           title: string
         }
         Update: {
+          call_time?: string | null
           church_id?: string
           confirmed_at?: string | null
           confirmed_by?: string | null
