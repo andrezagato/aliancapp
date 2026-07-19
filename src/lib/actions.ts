@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getSession, canManageTeam, type Session } from "@/lib/auth";
 import { getEligibleMembers, getEventDetail, syncAchievements, type EligibleMember, type DetailTeam } from "@/lib/data";
-import { BADGE_BY_CODE } from "@/lib/achievements";
+import { BADGE_BY_CODE, type UnlockedBadge } from "@/lib/achievements";
 import { notify, notifyMany, teamLeaderIds } from "@/lib/notify";
 import { sendEmail, conviteEmail, escaladoEmail, lembreteEmail, siteUrl } from "@/lib/email";
 import { churchDateISO, fmtEventWhen } from "@/lib/format";
@@ -26,10 +26,11 @@ const fail = (error: string): ActionResult => ({ ok: false, error });
  * Bônus — nunca derruba a ação principal (best-effort). A guarda de 3 evita
  * enxurrada no 1º cálculo (backfill), que a própria página Minha Jornada faz.
  */
-async function notificarConquistas(session: Session): Promise<void> {
+async function notificarConquistas(session: Session): Promise<UnlockedBadge[]> {
   try {
     const { newly } = await syncAchievements(session);
-    if (newly.length === 0 || newly.length > 3) return;
+    if (newly.length === 0 || newly.length > 3) return [];
+    const unlocked: UnlockedBadge[] = [];
     for (const code of newly) {
       const b = BADGE_BY_CODE[code];
       if (!b) continue;
@@ -40,9 +41,12 @@ async function notificarConquistas(session: Session): Promise<void> {
         body: `${b.emoji} ${b.title} — ${b.desc}`,
         link: "/jornada",
       });
+      unlocked.push({ code: b.code, emoji: b.emoji, title: b.title, desc: b.desc });
     }
+    return unlocked;
   } catch {
     /* conquistas são bônus */
+    return [];
   }
 }
 
@@ -159,7 +163,9 @@ export async function marcarNotificacoesLidas(): Promise<ActionResult> {
 // =============================================================================
 // VOLUNTÁRIO: confirmar / recusar (via RPC security definer)
 // =============================================================================
-export async function confirmarEscalacao(assignmentId: string): Promise<ActionResult> {
+export async function confirmarEscalacao(
+  assignmentId: string,
+): Promise<ActionResult & { unlocked?: UnlockedBadge[] }> {
   const session = await getSession();
   if (!session) return fail("Sessão expirada.");
   const supabase = await createClient();
@@ -176,10 +182,10 @@ export async function confirmarEscalacao(assignmentId: string): Promise<ActionRe
       eventId: ca.event_id,
     });
   }
-  await notificarConquistas(session);
+  const unlocked = await notificarConquistas(session);
   revalidatePath("/inicio");
   revalidatePath("/escalas");
-  return ok;
+  return { ok: true, unlocked };
 }
 
 export async function recusarEscalacao(assignmentId: string, motivo: string): Promise<ActionResult> {
@@ -1289,7 +1295,11 @@ export async function removerIndisponibilidade(id: string): Promise<ActionResult
 // =============================================================================
 // CHECK-IN (presença no dia — auto-declarada)
 // =============================================================================
-export async function fazerCheckin(assignmentId: string, teamId: string, eventId: string): Promise<ActionResult> {
+export async function fazerCheckin(
+  assignmentId: string,
+  teamId: string,
+  eventId: string,
+): Promise<ActionResult & { unlocked?: UnlockedBadge[] }> {
   const session = await getSession();
   if (!session) return fail("Sessão expirada.");
   const supabase = await createClient();
@@ -1301,9 +1311,9 @@ export async function fazerCheckin(assignmentId: string, teamId: string, eventId
     .insert({ assignment_id: assignmentId, checked_by: session.userId });
   if (error && !error.message.includes("duplicate")) return fail(error.message);
   // Conquistas do próprio (quando o líder marca por outro, a pessoa desbloqueia ao abrir o app).
-  if (isSelf) await notificarConquistas(session);
+  const unlocked = isSelf ? await notificarConquistas(session) : [];
   revalidatePath(`/escalas/${eventId}`);
-  return ok;
+  return { ok: true, unlocked };
 }
 
 export async function desfazerCheckin(assignmentId: string, teamId: string, eventId: string): Promise<ActionResult> {

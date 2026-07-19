@@ -18,6 +18,8 @@ import {
   pedirTroca,
   listMembrosParaTroca,
 } from "@/lib/actions";
+import { AchievementCelebration } from "@/components/achievement-celebration";
+import type { UnlockedBadge } from "@/lib/achievements";
 import { TodayCard } from "./today-card";
 import { NextScheduleHero } from "./next-schedule-hero";
 import { SwipeCard } from "./swipe-card";
@@ -48,6 +50,8 @@ export function VolunteerHome({
   const [items, setItems] = useState(assignments);
   useEffect(() => setItems(assignments), [assignments]);
 
+  const [celebrate, setCelebrate] = useState<UnlockedBadge[]>([]);
+
   // sheet único de resposta — confirmar OU recusar uma escala
   const [respond, setRespond] = useState<MyAssignment | null>(null);
   const [reason, setReason] = useState("");
@@ -68,6 +72,8 @@ export function VolunteerHome({
       if (!r.ok) {
         patch(a.assignmentId, { status: "convidado" });
         showToast(r.error);
+      } else if (r.unlocked && r.unlocked.length > 0) {
+        setCelebrate(r.unlocked);
       }
     });
   };
@@ -80,6 +86,8 @@ export function VolunteerHome({
       if (!r.ok) {
         patch(a.assignmentId, { checkedIn: false });
         showToast(r.error);
+      } else if (r.unlocked && r.unlocked.length > 0) {
+        setCelebrate(r.unlocked);
       }
     });
   };
@@ -309,6 +317,8 @@ export function VolunteerHome({
           </>
         ) : null}
       </Modal>
+
+      <AchievementCelebration badges={celebrate} onDone={() => setCelebrate([])} />
     </>
   );
 }

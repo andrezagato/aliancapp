@@ -32,6 +32,7 @@ import {
   getMyNextResponsibleEvent,
   getMyEventRequests,
   getTeamCare,
+  getTeamAchievements,
   listPendingEventRequests,
   listTeams,
   listTeamsWithPositions,
@@ -223,13 +224,14 @@ async function LeaderSection({ hideHeroForEventId }: { hideHeroForEventId: strin
   const nm = m === 12 ? 1 : m + 1;
   const toIso = new Date(`${ny}-${pad(nm)}-01T00:00:00-03:00`).toISOString();
 
-  const [home, mine, monthRaw, myEventRequests, teams, teamCare] = await Promise.all([
+  const [home, mine, monthRaw, myEventRequests, teams, teamCare, teamAchv] = await Promise.all([
     getLeaderHome(session),
     getMyUpcomingAssignments(session),
     listEventsInRange(session, fromIso, toIso),
     getMyEventRequests(session),
     listTeams(),
     getTeamCare(session),
+    getTeamAchievements(session),
   ]);
 
   const monthEvents = monthRaw
@@ -301,6 +303,37 @@ async function LeaderSection({ hideHeroForEventId }: { hideHeroForEventId: strin
             })}
           </div>
         </details>
+      ) : null}
+
+      {teamAchv.length > 0 ? (
+        <section>
+          <h3 className="mb-2 px-1 text-base font-semibold">Conquistas da equipe 🏆</h3>
+          <div className="space-y-2">
+            {teamAchv.map((t) => (
+              <div
+                key={t.teamName}
+                className="rounded-2xl border border-accent/40 bg-gradient-to-br from-accent/10 to-accent/20 p-4"
+              >
+                <p className="font-semibold">{t.teamName}</p>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-card px-2.5 py-1 text-xs font-semibold">
+                    🎯 {t.fullScales} {t.fullScales > 1 ? "escalas 100% cheias" : "escala 100% cheia"}
+                  </span>
+                  {t.streak >= 2 ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-card px-2.5 py-1 text-xs font-semibold">
+                      🔥 {t.streak} seguidas
+                    </span>
+                  ) : null}
+                  {t.thisMonthFull > 0 ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-card px-2.5 py-1 text-xs font-semibold">
+                      📅 {t.thisMonthFull} este mês
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
       ) : null}
 
       {home.interests.length > 0 ? (

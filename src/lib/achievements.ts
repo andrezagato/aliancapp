@@ -12,7 +12,10 @@ export type BadgeMetric =
   | "ministerios"
   | "salvou"
   | "rapida"
-  | "meses";
+  | "meses"
+  | "lider"
+  | "interesses"
+  | "maratona";
 
 export type Badge = {
   code: string;
@@ -43,7 +46,21 @@ export const BADGES: Badge[] = [
   { code: "resposta_rapida", emoji: "⚡", title: "Resposta relâmpago", desc: "Confirmou rapidinho 3 vezes.", metric: "rapida", target: 3 },
   { code: "voluntario_6m", emoji: "📅", title: "Meio ano de estrada", desc: "6 meses servindo.", metric: "meses", target: 6 },
   { code: "voluntario_1a", emoji: "🎂", title: "1 ano servindo!", desc: "Um ano de caminhada.", metric: "meses", target: 12 },
+  { code: "fiel_12", emoji: "🕯️", title: "Chama que não apaga", desc: "12 cultos seguidos!", metric: "streak", target: 12 },
+  { code: "multi_4", emoji: "🌈", title: "Curinga da igreja", desc: "Serviu em 4 ministérios.", metric: "ministerios", target: 4 },
+  { code: "explorador", emoji: "🧭", title: "Explorador", desc: "Sinalizou interesse em servir.", metric: "interesses", target: 1 },
+  { code: "lider", emoji: "👑", title: "Vestiu a camisa", desc: "Virou líder de uma equipe.", metric: "lider", target: 1 },
+  { code: "maratona_3", emoji: "🗓️", title: "Maratona do mês", desc: "Serviu 3 vezes num mês só.", metric: "maratona", target: 3 },
+  { code: "maratona_5", emoji: "🏃", title: "Fôlego de sobra", desc: "Serviu 5 vezes num mês só.", metric: "maratona", target: 5 },
 ];
+
+export type UnlockedBadge = { code: string; emoji: string; title: string; desc: string };
+
+/** Metadados prontos pra celebração (ou null se o código não existir). */
+export function unlockedBadge(code: string): UnlockedBadge | null {
+  const b = BADGE_BY_CODE[code];
+  return b ? { code: b.code, emoji: b.emoji, title: b.title, desc: b.desc } : null;
+}
 
 export const BADGE_BY_CODE: Record<string, Badge> = Object.fromEntries(BADGES.map((b) => [b.code, b]));
 

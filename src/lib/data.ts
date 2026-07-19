@@ -435,6 +435,7 @@ async function computeJourneyMetrics(
   supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string,
   active: boolean,
+  isLeader: boolean,
 ): Promise<JourneyMetrics> {
   const nowIso = new Date().toISOString();
 
@@ -495,6 +496,18 @@ async function computeJourneyMetrics(
     .not("substitute_accepted_at", "is", null);
   const salvou = (subs ?? []).length;
 
+  // Explorador: sinalizou interesse em servir em alguma equipe.
+  const { data: ints } = await supabase.from("service_interests").select("id").eq("profile_id", userId);
+  const interesses = (ints ?? []).length;
+
+  // Maratona: máximo de cultos servidos num mesmo mês.
+  const perMonth = new Map<string, number>();
+  for (const r of servedRows) {
+    const mk = churchDateISO(r.events!.starts_at).slice(0, 7);
+    perMonth.set(mk, (perMonth.get(mk) ?? 0) + 1);
+  }
+  const maratona = perMonth.size > 0 ? Math.max(...perMonth.values()) : 0;
+
   return {
     cadastro: active ? 1 : 0,
     escalado: rows.length,
@@ -505,6 +518,9 @@ async function computeJourneyMetrics(
     salvou,
     rapida,
     meses,
+    lider: isLeader ? 1 : 0,
+    interesses,
+    maratona,
   };
 }
 
@@ -532,7 +548,8 @@ export type Journey = {
 export async function syncAchievements(session: Session): Promise<{ metrics: JourneyMetrics; newly: string[] }> {
   const supabase = await createClient();
   const active = session.profile.status === "ativo";
-  const metrics = await computeJourneyMetrics(supabase, session.userId, active);
+  const isLeader = session.profile.teams.some((t) => t.role === "leader");
+  const metrics = await computeJourneyMetrics(supabase, session.userId, active, isLeader);
   const earned = earnedCodes(metrics);
 
   const { data: existingRows } = await supabase
@@ -658,6 +675,72 @@ export async function getTeamCare(session: Session): Promise<TeamCare[]> {
     care.members.sort((a, b) => b.served90 - a.served90 || (b.lastServedAt ?? "").localeCompare(a.lastServedAt ?? ""));
   }
   return [...byTeam.values()];
+}
+
+// Conquistas coletivas: cultos passados em que a equipe fechou a escala 100% CONFIRMADA.
+export type TeamAchievements = { teamName: string; fullScales: number; thisMonthFull: number; streak: number };
+
+export async function getTeamAchievements(session: Session): Promise<TeamAchievements[]> {
+  const leadIds = session.profile.teams.filter((t) => t.role === "leader").map((t) => t.id);
+  if (leadIds.length === 0) return [];
+  const supabase = await createClient();
+
+  const nowMs = Date.now();
+  const nowIso = new Date(nowMs).toISOString();
+  const since = new Date(nowMs - 180 * 24 * 60 * 60 * 1000).toISOString();
+  const monthStartIso = `${churchDateISO(nowIso).slice(0, 7)}-01`;
+
+  const { data: reqRows } = await supabase
+    .from("event_requirements")
+    .select("id, event_id, team_id, position_id, needed_count, status, events!inner ( starts_at )")
+    .in("team_id", leadIds)
+    .gte("events.starts_at", since)
+    .lt("events.starts_at", nowIso);
+  const reqs = (reqRows ?? []) as (ReqRow & { event_id: string; events: { starts_at: string } | null })[];
+  if (reqs.length === 0) return [];
+
+  const eventIds = [...new Set(reqs.map((r) => r.event_id))];
+  const { data: asgRows } = await supabase
+    .from("assignments")
+    .select("id, event_id, team_id, position_id, profile_id, status")
+    .in("event_id", eventIds)
+    .in("team_id", leadIds);
+  const asg = (asgRows ?? []) as (AssignRow & { event_id: string })[];
+
+  const startsById = new Map<string, string>();
+  for (const r of reqs) if (r.events) startsById.set(r.event_id, r.events.starts_at);
+
+  const teamsMeta = await listTeams();
+  const nameById = new Map(teamsMeta.map((t) => [t.id, t.name]));
+
+  const perTeam = new Map<string, { startsAt: string; full: boolean }[]>();
+  for (const evId of eventIds) {
+    const evReqs = reqs.filter((r) => r.event_id === evId);
+    const evAsg = asg.filter((a) => a.event_id === evId);
+    const cov = coverageByTeam(evReqs, evAsg);
+    for (const teamId of leadIds) {
+      const c = cov.get(teamId);
+      if (!c || c.needed === 0) continue;
+      const arr = perTeam.get(teamId) ?? [];
+      arr.push({ startsAt: startsById.get(evId) ?? "", full: c.confirmed >= c.needed });
+      perTeam.set(teamId, arr);
+    }
+  }
+
+  const out: TeamAchievements[] = [];
+  for (const [teamId, entries] of perTeam) {
+    entries.sort((a, b) => (a.startsAt < b.startsAt ? -1 : 1));
+    const fullScales = entries.filter((e) => e.full).length;
+    if (fullScales === 0) continue;
+    const thisMonthFull = entries.filter((e) => e.full && churchDateISO(e.startsAt) >= monthStartIso).length;
+    let streak = 0;
+    for (let k = entries.length - 1; k >= 0; k--) {
+      if (entries[k].full) streak++;
+      else break;
+    }
+    out.push({ teamName: nameById.get(teamId) ?? "Equipe", fullScales, thisMonthFull, streak });
+  }
+  return out;
 }
 
 // =============================================================================
