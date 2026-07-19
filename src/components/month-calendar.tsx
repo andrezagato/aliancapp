@@ -78,22 +78,23 @@ export function MonthCalendar({
         ))}
         {cells.map((day, i) => {
           if (day === null) return <div key={`e${i}`} />;
-          const dayEvents = byDay.get(day);
-          const tone = dayEvents ? worstTone(dayEvents) : null;
+          const dayEvents = byDay.get(day) ?? [];
+          const has = dayEvents.length > 0;
+          const tone = has ? worstTone(dayEvents) : null;
           const isToday = day === todayDay;
           const cellInner = (
             <div
               className={cn(
                 "flex aspect-square flex-col items-center justify-center rounded-xl text-sm",
                 isToday && "ring-2 ring-primary/40",
-                dayEvents ? "font-semibold" : "text-muted-foreground",
+                has ? "font-semibold" : "text-muted-foreground",
               )}
             >
               {day}
               {tone ? <span className={cn("mt-0.5 size-1.5 rounded-full", DOT[tone])} /> : null}
             </div>
           );
-          if (!dayEvents) return <div key={day}>{cellInner}</div>;
+          // Com onDayClick, TODO dia é clicável (mesmo vazio) — permite pedir/criar evento ali.
           if (onDayClick) {
             return (
               <button
@@ -106,6 +107,7 @@ export function MonthCalendar({
               </button>
             );
           }
+          if (!has) return <div key={day}>{cellInner}</div>;
           return (
             <a key={day} href={`#${anchorPrefix}-${day}`} className="rounded-xl hover:bg-muted/60">
               {cellInner}

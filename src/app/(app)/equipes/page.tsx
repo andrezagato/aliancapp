@@ -16,6 +16,7 @@ import { TeamManager } from "@/components/team-manager";
 import { getSession } from "@/lib/auth";
 import {
   getManageableTeams,
+  getResolvedInterests,
   listMembers,
   listChurchProfiles,
   listPendingJoinRequests,
@@ -30,10 +31,11 @@ export default async function EquipesPage() {
   if (session.role === "volunteer") redirect("/inicio");
   const isAdmin = session.role === "admin";
 
-  const [teams, members, profiles] = await Promise.all([
+  const [teams, members, profiles, resolvedInterests] = await Promise.all([
     getManageableTeams(session),
     listMembers(),
     listChurchProfiles(),
+    getResolvedInterests(session),
   ]);
 
   // Aprovações/convites só pro admin.
@@ -147,6 +149,35 @@ export default async function EquipesPage() {
           meId={session.userId}
           canCreateTeam={isAdmin}
         />
+
+        {resolvedInterests.length > 0 ? (
+          <details className="rounded-2xl border border-border bg-card">
+            <summary className="flex cursor-pointer items-center justify-between p-4 text-sm font-semibold">
+              Histórico de pedidos de servir
+              <span className="text-xs font-medium text-muted-foreground">{resolvedInterests.length}</span>
+            </summary>
+            <ul className="divide-y divide-border border-t border-border">
+              {resolvedInterests.map((i) => (
+                <li key={i.id} className="p-4 text-sm">
+                  <p className="flex flex-wrap items-center gap-1.5">
+                    <span className="font-medium">{i.personName}</span>
+                    <span className="text-muted-foreground">· {i.teamName}</span>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
+                        i.status === "atendido" ? "bg-success/15 text-success" : "bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      {i.status === "atendido" ? "Aceito" : "Recusado"}
+                    </span>
+                  </p>
+                  {i.resolvedNote ? (
+                    <p className="mt-0.5 text-[13px] italic text-muted-foreground">“{i.resolvedNote}”</p>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          </details>
+        ) : null}
       </div>
     </>
   );

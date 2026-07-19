@@ -59,16 +59,26 @@ export function NextScheduleHero({
             </button>
           </div>
         ) : (
-          <div className="mt-4 flex animate-pop items-center justify-between gap-2.5 rounded-[15px] bg-white/10 px-4 py-3">
-            <span className="inline-flex items-center gap-2.5 text-[15px] font-extrabold text-white">
-              <span className="grid size-[26px] place-items-center rounded-full bg-accent text-accent-foreground">
-                <DrawnCheck className="size-[15px]" strokeWidth={3} />
+          <div className="mt-4 animate-pop rounded-[15px] bg-white/10 px-4 py-3">
+            <div className="flex items-center justify-between gap-2.5">
+              <span className="inline-flex items-center gap-2.5 text-[15px] font-extrabold text-white">
+                <span className="grid size-[26px] place-items-center rounded-full bg-accent text-accent-foreground">
+                  <DrawnCheck className="size-[15px]" strokeWidth={3} />
+                </span>
+                {doneLabel}
               </span>
-              {doneLabel}
-            </span>
-            <button onClick={onOpen} className="press-sm text-[13.5px] font-bold text-accent">
-              Ver escala ›
-            </button>
+              <button onClick={onOpen} className="press-sm text-[13.5px] font-bold text-accent">
+                Ver escala ›
+              </button>
+            </div>
+            {a.status === "confirmado" ? (
+              <button
+                onClick={onCancel}
+                className="press-sm mt-2 text-[12.5px] font-semibold text-primary-foreground/70 underline underline-offset-2"
+              >
+                Surgiu um imprevisto? Não vou poder mais
+              </button>
+            ) : null}
           </div>
         )}
       </div>

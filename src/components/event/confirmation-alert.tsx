@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { AlertTriangle, BellRing } from "lucide-react";
 import { lembrarPendentes } from "@/lib/actions";
 import { useToast } from "@/components/ui/toast";
@@ -29,6 +29,16 @@ export function ConfirmationAlert({
   const [sent, setSent] = useState(false);
   const [busy, startTransition] = useTransition();
 
+  const storageKey = `sirvo:lembrete:${eventId}`;
+  // Trava por dia: se já lembrei hoje, não deixa disparar de novo (mesmo ao voltar à página).
+  useEffect(() => {
+    try {
+      if (localStorage.getItem(storageKey) === new Date().toISOString().slice(0, 10)) setSent(true);
+    } catch {
+      /* localStorage indisponível */
+    }
+  }, [storageKey]);
+
   if (pending <= 0) return null;
 
   const hoursTo = (new Date(startsAt).getTime() - Date.now()) / 36e5;
@@ -39,6 +49,11 @@ export function ConfirmationAlert({
       const r = await lembrarPendentes(eventId);
       if (r.ok) {
         setSent(true);
+        try {
+          localStorage.setItem(storageKey, new Date().toISOString().slice(0, 10));
+        } catch {
+          /* localStorage indisponível */
+        }
         showToast(`Lembrete enviado a ${pending} ${pending > 1 ? "pessoas" : "pessoa"}.`);
       } else {
         showToast(r.error);

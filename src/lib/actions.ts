@@ -79,6 +79,43 @@ export async function atualizarNome(fullName: string): Promise<ActionResult> {
   return ok;
 }
 
+// Telefone (WhatsApp): a própria pessoa edita o próprio.
+export async function atualizarTelefone(phone: string): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  const value = phone.trim();
+  const supabase = await createClient();
+  const { error } = await supabase.from("profiles").update({ phone: value || null }).eq("id", session.userId);
+  if (error) return fail(error.message);
+  revalidatePath("/perfil");
+  revalidatePath("/equipes");
+  return ok;
+}
+
+/** Admin corrige dados de qualquer pessoa (ex.: convite feito com nome/e-mail errado). */
+export async function atualizarPessoaAdmin(
+  profileId: string,
+  input: { fullName?: string; phone?: string; email?: string },
+): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  if (session.role !== "admin") return fail("Só o administrador edita dados de outras pessoas.");
+  const patch: { full_name?: string; phone?: string | null; email?: string | null } = {};
+  if (input.fullName !== undefined) {
+    const v = input.fullName.trim();
+    if (v.length < 2) return fail("Informe o nome.");
+    patch.full_name = v;
+  }
+  if (input.phone !== undefined) patch.phone = input.phone.trim() || null;
+  if (input.email !== undefined) patch.email = input.email.trim().toLowerCase() || null;
+  if (Object.keys(patch).length === 0) return ok;
+  const supabase = await createClient();
+  const { error } = await supabase.from("profiles").update(patch).eq("id", profileId);
+  if (error) return fail(error.message);
+  revalidatePath("/equipes");
+  return ok;
+}
+
 // Marca todas as notificações do usuário como lidas (limpa o sino).
 export async function marcarNotificacoesLidas(): Promise<ActionResult> {
   const session = await getSession();
@@ -426,6 +463,7 @@ export async function solicitarEvento(input: {
   time: string;
   location?: string;
   note?: string;
+  teamIds?: string[];
 }): Promise<ActionResult> {
   const session = await getSession();
   if (!session) return fail("Sessão expirada.");
@@ -448,6 +486,7 @@ export async function solicitarEvento(input: {
     desired_at: desiredAt,
     location: input.location?.trim() || null,
     note: input.note?.trim() || null,
+    team_ids: (input.teamIds ?? []).filter(Boolean),
     requested_by: session.userId,
   });
   if (error) return fail(error.message);
@@ -475,7 +514,7 @@ export async function resolverEventoSolicitado(
   id: string,
   aprovar: boolean,
   note: string,
-): Promise<ActionResult> {
+): Promise<ActionResult & { eventId?: string }> {
   const session = await getSession();
   if (!session) return fail("Sessão expirada.");
   if (session.role !== "admin") return fail("Só o administrador resolve pedidos de evento.");
@@ -483,7 +522,7 @@ export async function resolverEventoSolicitado(
 
   const { data: req } = await supabase
     .from("event_requests")
-    .select("id, title, desired_at, location, note, requested_by, church_id, status")
+    .select("id, title, desired_at, location, note, team_ids, requested_by, church_id, status")
     .eq("id", id)
     .maybeSingle();
   if (!req) return fail("Pedido não encontrado.");
@@ -505,6 +544,24 @@ export async function resolverEventoSolicitado(
       .single();
     if (error || !ev) return fail(error?.message || "Não consegui criar o evento.");
     createdEventId = ev.id;
+
+    // Semeia as posições das equipes pedidas (sugestão needed=1); o líder ajusta depois.
+    const teamIds = ((req.team_ids ?? []) as string[]).filter(Boolean);
+    if (teamIds.length > 0) {
+      const { data: positions } = await supabase
+        .from("positions")
+        .select("id, team_id")
+        .in("team_id", teamIds)
+        .is("archived_at", null);
+      const rows = (positions ?? []).map((p) => ({
+        event_id: ev.id,
+        team_id: p.team_id,
+        position_id: p.id,
+        needed_count: 1,
+        status: "needed" as const,
+      }));
+      if (rows.length > 0) await supabase.from("event_requirements").insert(rows);
+    }
   }
 
   const nota = note.trim();
@@ -531,7 +588,7 @@ export async function resolverEventoSolicitado(
   revalidatePath("/calendario");
   revalidatePath("/escalas");
   revalidatePath("/inicio");
-  return ok;
+  return { ok: true, eventId: createdEventId ?? undefined };
 }
 
 /** Admin adiciona outra equipe a um evento já criado (copia as posições da equipe). */

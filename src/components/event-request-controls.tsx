@@ -4,11 +4,14 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { CalendarPlus, MapPin } from "lucide-react";
 import { Modal } from "@/components/modal";
+import { TeamDot } from "@/components/coverage-badge";
 import { useToast } from "@/components/ui/toast";
 import { solicitarEvento, resolverEventoSolicitado } from "@/lib/actions";
 import { fmtEventWhen } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { PendingEventRequest } from "@/lib/data";
+
+export type TeamOption = { id: string; name: string; color: string };
 
 const inputCls =
   "w-full rounded-[14px] border border-border bg-card px-3.5 py-3 text-sm text-foreground outline-none focus:border-primary";
@@ -23,40 +26,113 @@ function Field({ label, className, children }: { label: string; className?: stri
 }
 
 // -----------------------------------------------------------------------------
-// Líder/admin sugere um evento
+// Formulário de sugestão de evento (reusado no botão e no calendário)
 // -----------------------------------------------------------------------------
-export function SugerirEventoButton() {
-  const router = useRouter();
+export function SugerirEventoForm({
+  teams,
+  initialDate = "",
+  onDone,
+}: {
+  teams: TeamOption[];
+  initialDate?: string;
+  onDone: () => void;
+}) {
   const { showToast } = useToast();
-  const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
-  const [date, setDate] = useState("");
+  const [date, setDate] = useState(initialDate);
   const [time, setTime] = useState("");
   const [location, setLocation] = useState("");
   const [note, setNote] = useState("");
+  const [teamIds, setTeamIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
+  const toggleTeam = (id: string) => setTeamIds((s) => (s.includes(id) ? s.filter((t) => t !== id) : [...s, id]));
   const canSubmit = title.trim().length > 1 && !!date;
 
   const submit = () => {
     setError(null);
     start(async () => {
-      const r = await solicitarEvento({ title, date, time, location, note });
+      const r = await solicitarEvento({ title, date, time, location, note, teamIds });
       if (r.ok) {
-        setOpen(false);
-        setTitle("");
-        setDate("");
-        setTime("");
-        setLocation("");
-        setNote("");
         showToast("Pedido enviado! A administração vai avaliar.");
-        router.refresh();
+        onDone();
       } else {
         setError(r.error);
       }
     });
   };
+
+  return (
+    <div className="space-y-3">
+      <Field label="Título">
+        <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex.: Ensaio geral" className={inputCls} />
+      </Field>
+      <div className="flex gap-2">
+        <Field label="Data" className="flex-1">
+          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} />
+        </Field>
+        <Field label="Hora" className="w-32">
+          <input type="time" value={time} onChange={(e) => setTime(e.target.value)} className={inputCls} />
+        </Field>
+      </div>
+      <Field label="Local (opcional)">
+        <input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Ex.: Templo" className={inputCls} />
+      </Field>
+
+      {teams.length > 0 ? (
+        <div>
+          <p className="mb-1.5 text-sm font-medium">Equipes que vão servir</p>
+          <div className="flex flex-wrap gap-2">
+            {teams.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => toggleTeam(t.id)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm",
+                  teamIds.includes(t.id)
+                    ? "border-primary bg-primary/5 text-primary"
+                    : "border-border text-muted-foreground",
+                )}
+              >
+                <TeamDot color={t.color} /> {t.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      <Field label="Observação (opcional)">
+        <textarea
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          rows={2}
+          placeholder="Algo que ajude a administração a decidir"
+          className={cn(inputCls, "resize-none")}
+        />
+      </Field>
+      {error ? <p className="text-sm text-destructive">{error}</p> : null}
+      <button
+        onClick={submit}
+        disabled={pending || !canSubmit}
+        className={cn(
+          "press h-[52px] w-full rounded-[15px] text-[15.5px] font-extrabold",
+          canSubmit ? "bg-primary text-primary-foreground" : "cursor-not-allowed bg-muted text-muted-foreground",
+        )}
+      >
+        {pending ? "Enviando…" : "Enviar pedido"}
+      </button>
+    </div>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// Botão que abre o formulário num modal
+// -----------------------------------------------------------------------------
+export function SugerirEventoButton({ teams }: { teams: TeamOption[] }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
 
   return (
     <>
@@ -74,42 +150,15 @@ export function SugerirEventoButton() {
         </div>
       </button>
 
-      <Modal open={open} onClose={() => !pending && setOpen(false)} sheet title="Sugerir evento">
-        <div className="mt-1 space-y-3">
-          <Field label="Título">
-            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex.: Ensaio geral" className={inputCls} />
-          </Field>
-          <div className="flex gap-2">
-            <Field label="Data" className="flex-1">
-              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} />
-            </Field>
-            <Field label="Hora" className="w-32">
-              <input type="time" value={time} onChange={(e) => setTime(e.target.value)} className={inputCls} />
-            </Field>
-          </div>
-          <Field label="Local (opcional)">
-            <input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Ex.: Templo" className={inputCls} />
-          </Field>
-          <Field label="Observação (opcional)">
-            <textarea
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              rows={2}
-              placeholder="Algo que ajude a administração a decidir"
-              className={cn(inputCls, "resize-none")}
-            />
-          </Field>
-          {error ? <p className="text-sm text-destructive">{error}</p> : null}
-          <button
-            onClick={submit}
-            disabled={pending || !canSubmit}
-            className={cn(
-              "press h-[52px] w-full rounded-[15px] text-[15.5px] font-extrabold",
-              canSubmit ? "bg-primary text-primary-foreground" : "cursor-not-allowed bg-muted text-muted-foreground",
-            )}
-          >
-            {pending ? "Enviando…" : "Enviar pedido"}
-          </button>
+      <Modal open={open} onClose={() => setOpen(false)} sheet title="Sugerir evento">
+        <div className="mt-1">
+          <SugerirEventoForm
+            teams={teams}
+            onDone={() => {
+              setOpen(false);
+              router.refresh();
+            }}
+          />
         </div>
       </Modal>
     </>
@@ -146,8 +195,13 @@ function EventRequestCard({ req }: { req: PendingEventRequest }) {
       if (r.ok) {
         setOpen(false);
         setNote("");
-        showToast(aprovar ? "Evento criado no calendário." : "Pedido recusado — avisamos quem pediu.");
-        router.refresh();
+        if (aprovar && r.eventId) {
+          showToast("Evento criado — ajuste as equipes.");
+          router.push(`/escalas/${r.eventId}`);
+        } else {
+          showToast(aprovar ? "Evento criado no calendário." : "Pedido recusado — avisamos quem pediu.");
+          router.refresh();
+        }
       } else {
         showToast(r.error);
       }
@@ -182,7 +236,7 @@ function EventRequestCard({ req }: { req: PendingEventRequest }) {
           {req.desiredAt ? <> · {fmtEventWhen(req.desiredAt)}</> : null} — pedido de {req.requesterName}.
         </p>
         <p className="mt-2 text-[13px] text-muted-foreground">
-          Ao aprovar, o evento entra no calendário (você define as equipes na escala depois).
+          Ao aprovar, o evento entra no calendário e você já cai na escala pra ajustar as equipes.
         </p>
         <textarea
           value={note}

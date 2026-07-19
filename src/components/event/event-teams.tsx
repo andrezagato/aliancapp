@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronDown, CircleSlash, BadgeCheck, Pencil, Check } from "lucide-react";
+import { ChevronDown, CircleSlash, BadgeCheck, Pencil, Check, MessageCircle } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +17,7 @@ import {
 } from "@/components/leader-controls";
 import { STATUS_META } from "@/lib/status";
 import { cn } from "@/lib/utils";
+import { fmtEventWhen } from "@/lib/format";
 import type { DetailTeam, DetailPosition } from "@/lib/data";
 
 const MODE_KEY = "sirvo:evt-mode";
@@ -143,7 +144,7 @@ export function EventTeams({
                 {team.positions.map((pos) => (
                   <li key={pos.positionId} className="p-4">
                     {mode === "edit" ? (
-                      <EditablePosition eventId={eventId} team={team} pos={pos} canCheckin={canCheckin} />
+                      <EditablePosition eventId={eventId} startsAt={startsAt} team={team} pos={pos} canCheckin={canCheckin} />
                     ) : (
                       <CompactPosition pos={pos} />
                     )}
@@ -224,11 +225,13 @@ function CompactPosition({ pos }: { pos: DetailPosition }) {
 // ---- modo Editar (controles completos, gestor) ----------------------------
 function EditablePosition({
   eventId,
+  startsAt,
   team,
   pos,
   canCheckin,
 }: {
   eventId: string;
+  startsAt: string;
   team: DetailTeam;
   pos: DetailPosition;
   canCheckin: boolean;
@@ -277,15 +280,25 @@ function EditablePosition({
                   <RemoveAssignmentButton assignmentId={person.assignmentId} eventId={eventId} teamId={team.teamId} />
                 </div>
 
-                {canCheckin && person.status !== "recusado" ? (
-                  <div className="pl-12">
-                    <CheckinButton
-                      assignmentId={person.assignmentId}
-                      teamId={team.teamId}
-                      eventId={eventId}
-                      checkedIn={person.checkedIn}
-                      canMark
-                    />
+                {person.status !== "recusado" && ((person.phone && !person.isMe) || canCheckin) ? (
+                  <div className="flex flex-wrap items-center gap-2 pl-12">
+                    {person.phone && !person.isMe ? (
+                      <WhatsAppButton
+                        phone={person.phone}
+                        name={person.name}
+                        teamName={team.name}
+                        startsAt={startsAt}
+                      />
+                    ) : null}
+                    {canCheckin ? (
+                      <CheckinButton
+                        assignmentId={person.assignmentId}
+                        teamId={team.teamId}
+                        eventId={eventId}
+                        checkedIn={person.checkedIn}
+                        canMark
+                      />
+                    ) : null}
                   </div>
                 ) : null}
 
@@ -318,5 +331,37 @@ function EditablePosition({
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Abre o WhatsApp DO PRÓPRIO líder já com a mensagem pronta pra pessoa (sem API
+ * oficial — é só um link wa.me). Assume que o telefone cadastrado é o do WhatsApp.
+ */
+function WhatsAppButton({
+  phone,
+  name,
+  teamName,
+  startsAt,
+}: {
+  phone: string;
+  name: string;
+  teamName: string;
+  startsAt: string;
+}) {
+  const digits = phone.replace(/\D/g, "");
+  if (digits.length < 10) return null;
+  const num = digits.startsWith("55") ? digits : `55${digits}`;
+  const first = name.split(/\s+/)[0];
+  const msg = `Oi ${first}! Passando pra confirmar sua presença na escala de ${teamName} (${fmtEventWhen(startsAt)}). Consegue? 🙏`;
+  return (
+    <a
+      href={`https://wa.me/${num}?text=${encodeURIComponent(msg)}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="press-sm inline-flex h-9 items-center gap-1.5 rounded-full border border-success/40 bg-success/10 px-3 text-sm font-bold text-success"
+    >
+      <MessageCircle className="size-4" /> WhatsApp
+    </a>
   );
 }

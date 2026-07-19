@@ -360,6 +360,71 @@ export async function listPendingEventRequests(): Promise<PendingEventRequest[]>
   }));
 }
 
+export type MyEventRequest = {
+  id: string;
+  title: string;
+  desiredAt: string | null;
+  status: "pendente" | "aprovado" | "recusado";
+};
+
+/** Pedidos de evento que EU fiz (pra acompanhar o status na home). */
+export async function getMyEventRequests(session: Session): Promise<MyEventRequest[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("event_requests")
+    .select("id, title, desired_at, status")
+    .eq("requested_by", session.userId)
+    .order("created_at", { ascending: false })
+    .limit(10);
+  return ((data ?? []) as {
+    id: string;
+    title: string;
+    desired_at: string | null;
+    status: "pendente" | "aprovado" | "recusado";
+  }[]).map((r) => ({ id: r.id, title: r.title, desiredAt: r.desired_at, status: r.status }));
+}
+
+export type ResolvedInterest = {
+  id: string;
+  personName: string;
+  teamName: string;
+  status: "atendido" | "arquivado";
+  resolvedNote: string | null;
+  resolvedAt: string | null;
+};
+
+/** Histórico de pedidos de servir já resolvidos das equipes que eu gerencio. */
+export async function getResolvedInterests(session: Session): Promise<ResolvedInterest[]> {
+  const supabase = await createClient();
+  let q = supabase
+    .from("service_interests")
+    .select(
+      "id, status, resolved_note, resolved_at, team_id, profile:profiles!service_interests_profile_id_fkey ( full_name ), team:teams ( name )",
+    )
+    .neq("status", "aberto");
+  if (session.role !== "admin") {
+    const leadIds = session.profile.teams.filter((t) => t.role === "leader").map((t) => t.id);
+    if (leadIds.length === 0) return [];
+    q = q.in("team_id", leadIds);
+  }
+  const { data } = await q.order("resolved_at", { ascending: false, nullsFirst: false }).limit(30);
+  return ((data ?? []) as {
+    id: string;
+    status: "atendido" | "arquivado";
+    resolved_note: string | null;
+    resolved_at: string | null;
+    profile: { full_name: string } | null;
+    team: { name: string } | null;
+  }[]).map((i) => ({
+    id: i.id,
+    personName: i.profile?.full_name || "Alguém",
+    teamName: i.team?.name || "Equipe",
+    status: i.status,
+    resolvedNote: i.resolved_note,
+    resolvedAt: i.resolved_at,
+  }));
+}
+
 // =============================================================================
 // DETALHE DO EVENTO (agrupado por equipe -> posição -> vagas)
 // =============================================================================
@@ -368,6 +433,7 @@ export type SlotPerson = {
   profileId: string | null;
   name: string;
   avatarUrl: string | null;
+  phone: string | null;
   status: AssignmentStatus;
   declineReason: string | null;
   isMe: boolean;
@@ -435,7 +501,7 @@ export async function getEventDetail(session: Session, eventId: string): Promise
     supabase
       .from("assignments")
       .select(
-        "id, team_id, position_id, profile_id, status, decline_reason, profile:profiles!assignments_profile_id_fkey ( full_name, avatar_url )",
+        "id, team_id, position_id, profile_id, status, decline_reason, profile:profiles!assignments_profile_id_fkey ( full_name, avatar_url, phone )",
       )
       .eq("event_id", eventId),
     listTeams(),
@@ -463,7 +529,7 @@ export async function getEventDetail(session: Session, eventId: string): Promise
     profile_id: string | null;
     status: AssignmentStatus;
     decline_reason: string | null;
-    profile: { full_name: string; avatar_url: string | null } | null;
+    profile: { full_name: string; avatar_url: string | null; phone: string | null } | null;
   }[];
 
   // Check-ins e trocas pendentes por escalação.
@@ -526,6 +592,7 @@ export async function getEventDetail(session: Session, eventId: string): Promise
           profileId: a.profile_id,
           name: a.profile?.full_name || "Alguém",
           avatarUrl: a.profile?.avatar_url ?? null,
+          phone: a.profile?.phone ?? null,
           status: a.status,
           declineReason: a.decline_reason,
           isMe: a.profile_id === session.userId,

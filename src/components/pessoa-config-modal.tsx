@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Crown, X, Plus, ShieldCheck, Trash2 } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
@@ -8,7 +8,14 @@ import { Badge } from "@/components/ui/badge";
 import { Modal } from "@/components/modal";
 import { TeamDot } from "@/components/coverage-badge";
 import { cn, displayName } from "@/lib/utils";
-import { adicionarMembro, removerMembro, definirPapelMembro, definirAdmin, excluirPessoa } from "@/lib/actions";
+import {
+  adicionarMembro,
+  removerMembro,
+  definirPapelMembro,
+  definirAdmin,
+  excluirPessoa,
+  atualizarPessoaAdmin,
+} from "@/lib/actions";
 import type { MemberRow } from "@/lib/data";
 
 export type TeamOpt = { id: string; name: string; color: string };
@@ -39,6 +46,17 @@ export function PessoaConfigModal({
   const [pending, start] = useTransition();
   const [err, setErr] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+
+  // Edição de dados (admin): nome/telefone/e-mail, pré-preenchidos com a pessoa.
+  const [nome, setNome] = useState(person.fullName);
+  const [phone, setPhone] = useState(person.phone ?? "");
+  const [email, setEmail] = useState(person.email ?? "");
+  useEffect(() => {
+    setNome(person.fullName);
+    setPhone(person.phone ?? "");
+    setEmail(person.email ?? "");
+  }, [person.id, person.fullName, person.phone, person.email]);
+  const dadosDirty = nome !== person.fullName || phone !== (person.phone ?? "") || email !== (person.email ?? "");
 
   const manageableIds = new Set(manageTeams.map((t) => t.id));
   const personTeamsInScope = person.teams.filter((t) => manageableIds.has(t.teamId));
@@ -71,6 +89,40 @@ export function PessoaConfigModal({
             {person.email ? <p className="truncate text-sm text-muted-foreground">{person.email}</p> : null}
           </div>
         </div>
+
+        {isAdmin ? (
+          <div className="space-y-2">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Dados</p>
+            <input
+              value={nome}
+              onChange={(e) => setNome(e.target.value)}
+              placeholder="Nome completo"
+              className="w-full rounded-[12px] border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary"
+            />
+            <input
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="Telefone (WhatsApp)"
+              className="w-full rounded-[12px] border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary"
+            />
+            <input
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              type="email"
+              placeholder="E-mail"
+              className="w-full rounded-[12px] border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary"
+            />
+            {dadosDirty ? (
+              <button
+                disabled={pending}
+                onClick={() => run(() => atualizarPessoaAdmin(person.id, { fullName: nome, phone, email }))}
+                className="press-sm rounded-full bg-primary px-4 py-1.5 text-xs font-bold text-primary-foreground disabled:opacity-50"
+              >
+                Salvar dados
+              </button>
+            ) : null}
+          </div>
+        ) : null}
 
         {isAdmin ? (
           <div className="space-y-1.5">

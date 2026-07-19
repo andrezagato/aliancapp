@@ -226,6 +226,7 @@ export type Database = {
           resolved_by: string | null
           resolved_event_id: string | null
           status: Database["public"]["Enums"]["event_request_status"]
+          team_ids: string[]
           title: string
         }
         Insert: {
@@ -239,6 +240,7 @@ export type Database = {
           resolved_by?: string | null
           resolved_event_id?: string | null
           status?: Database["public"]["Enums"]["event_request_status"]
+          team_ids?: string[]
           title: string
         }
         Update: {
@@ -252,6 +254,7 @@ export type Database = {
           resolved_by?: string | null
           resolved_event_id?: string | null
           status?: Database["public"]["Enums"]["event_request_status"]
+          team_ids?: string[]
           title?: string
         }
         Relationships: [

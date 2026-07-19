@@ -3,9 +3,9 @@ import { ChevronLeft, ChevronRight, List, MapPin } from "lucide-react";
 import { TopBar } from "@/components/app-shell/top-bar";
 import { Card } from "@/components/ui/card";
 import { CoverageBadge } from "@/components/coverage-badge";
-import { MonthCalendar } from "@/components/month-calendar";
+import { TeamCalendar } from "@/components/home/team-calendar";
 import { getSession } from "@/lib/auth";
-import { listEventsInRange, listPendingEventRequests, type EventListItem } from "@/lib/data";
+import { listEventsInRange, listPendingEventRequests, listTeams, type EventListItem } from "@/lib/data";
 import { EventRequestInbox, SugerirEventoButton } from "@/components/event-request-controls";
 import { churchDateISO, fmtTime } from "@/lib/format";
 
@@ -37,7 +37,8 @@ export default async function CalendarioPage({
   const toIso = new Date(`${ny}-${pad(nm)}-01T00:00:00-03:00`).toISOString();
 
   const events = await listEventsInRange(session, fromIso, toIso);
-  const canSuggest = session.role === "admin" || session.role === "leader";
+  const isLeader = session.role === "leader";
+  const teams = await listTeams();
   const pendingRequests = session.role === "admin" ? await listPendingEventRequests() : [];
   const eventDayISO: Record<string, string> = Object.fromEntries(
     events.map((e) => [e.id, churchDateISO(e.starts_at)]),
@@ -75,13 +76,21 @@ export default async function CalendarioPage({
           </Link>
         </div>
 
-        <MonthCalendar year={y} month={m} events={events} eventDayISO={eventDayISO} todayISO={todayISO} />
+        <TeamCalendar
+          year={y}
+          month={m}
+          events={events}
+          eventDayISO={eventDayISO}
+          todayISO={todayISO}
+          teams={teams}
+          canRequest={isLeader}
+        />
 
         <Link href="/escalas" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
           <List className="size-4" /> Ver em lista
         </Link>
 
-        {canSuggest ? <SugerirEventoButton /> : null}
+        {isLeader ? <SugerirEventoButton teams={teams} /> : null}
 
         {daysWithEvents.length === 0 ? (
           <p className="px-1 text-sm text-muted-foreground">Nenhum evento neste mês.</p>

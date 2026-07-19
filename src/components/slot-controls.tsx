@@ -57,21 +57,16 @@ export function CheckinButton({
       );
     }
     return (
-      <span className="inline-flex items-center gap-1.5">
-        <span className="inline-flex items-center gap-1 text-sm font-medium text-success">
+      <div className="inline-flex items-center gap-2">
+        <span className="inline-flex h-9 items-center gap-1 text-sm font-medium text-success">
           <BadgeCheck className="size-4" /> Presente
         </span>
         {canMark ? (
-          <button
-            type="button"
-            onClick={() => toggle(false)}
-            disabled={pending}
-            className="text-xs text-muted-foreground underline-offset-2 hover:underline"
-          >
-            desfazer
-          </button>
+          <Button size="sm" variant="ghost" onClick={() => toggle(false)} disabled={pending}>
+            Desfazer
+          </Button>
         ) : null}
-      </span>
+      </div>
     );
   }
 

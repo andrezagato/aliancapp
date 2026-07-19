@@ -46,12 +46,22 @@ export function TodayCard({
             <DrawnCheck className="size-[19px]" /> Presente
           </div>
         ) : canCheckin ? (
-          <button
-            onClick={onCheckin}
-            className="press flex h-[46px] w-full items-center justify-center gap-2 rounded-[14px] bg-primary text-[15px] font-extrabold text-primary-foreground"
-          >
-            <CheckCheck className="size-[18px]" strokeWidth={2.2} /> Fazer check-in
-          </button>
+          <div className="space-y-2">
+            <button
+              onClick={onCheckin}
+              className="press flex h-[46px] w-full items-center justify-center gap-2 rounded-[14px] bg-primary text-[15px] font-extrabold text-primary-foreground"
+            >
+              <CheckCheck className="size-[18px]" strokeWidth={2.2} /> Fazer check-in
+            </button>
+            {a.status === "confirmado" ? (
+              <button
+                onClick={onCancel}
+                className="press-sm w-full text-center text-[12.5px] font-semibold text-accent-foreground/70 underline underline-offset-2"
+              >
+                Surgiu um imprevisto? Não vou poder mais
+              </button>
+            ) : null}
+          </div>
         ) : pending ? (
           <div className="flex gap-2.5">
             <button

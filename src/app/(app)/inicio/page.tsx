@@ -10,6 +10,7 @@ import {
   Clock,
   CheckCircle2,
   AlertTriangle,
+  CalendarPlus,
 } from "lucide-react";
 import { HomeShell } from "@/components/app-shell/home-shell";
 import { Card, CardContent } from "@/components/ui/card";
@@ -29,6 +30,9 @@ import {
   getEventsAwaitingMyConfirmation,
   getMyOpenInterests,
   getMyNextResponsibleEvent,
+  getMyEventRequests,
+  listPendingEventRequests,
+  listTeams,
   listTeamsWithPositions,
   listEventsInRange,
   listUpcomingEvents,
@@ -46,7 +50,7 @@ import { InteresseButton, InteresseResolveButton } from "@/components/interesse-
 import { VolunteerHome } from "@/components/home/volunteer-home";
 import { NextEventHero } from "@/components/home/next-event-hero";
 import { AdminMonthOverview } from "@/components/home/admin-month-overview";
-import { LeaderMonthBoard } from "@/components/home/leader-month-board";
+import { TeamCalendar } from "@/components/home/team-calendar";
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
@@ -104,7 +108,6 @@ export default async function InicioPage() {
       <HomeShell title={`${greeting()}, ${first}`} subtitle={roleLabel} userName={userName}>
         {respHero}
         <AdminSection swaps={swaps} respEvents={respEvents} />
-        <Servir teams={teamsWithPos} interests={myInterests} />
         <Birthdays />
       </HomeShell>
     );
@@ -218,10 +221,12 @@ async function LeaderSection({ hideHeroForEventId }: { hideHeroForEventId: strin
   const nm = m === 12 ? 1 : m + 1;
   const toIso = new Date(`${ny}-${pad(nm)}-01T00:00:00-03:00`).toISOString();
 
-  const [home, mine, monthRaw] = await Promise.all([
+  const [home, mine, monthRaw, myEventRequests, teams] = await Promise.all([
     getLeaderHome(session),
     getMyUpcomingAssignments(session),
     listEventsInRange(session, fromIso, toIso),
+    getMyEventRequests(session),
+    listTeams(),
   ]);
 
   const monthEvents = monthRaw
@@ -238,28 +243,18 @@ async function LeaderSection({ hideHeroForEventId }: { hideHeroForEventId: strin
     <>
       {nextTeamEvent ? <NextEventHero ev={nextTeamEvent} kicker="Próximo da sua equipe" caption="confirmados" /> : null}
 
-      <LeaderMonthBoard
-        year={y}
-        month={m}
-        calendarEvents={monthEvents}
-        calendarDayISO={calendarDayISO}
-        todayISO={todayISO}
-      />
-
-      {home.openVacancies > 0 ? (
-        <Link
-          href="/escalas"
-          className="flex items-center gap-3 rounded-2xl border border-warning/30 bg-warning/10 p-3.5"
-        >
-          <span className="inline-flex size-9 items-center justify-center rounded-full bg-warning/15 text-warning">
-            <AlertTriangle className="size-5" />
-          </span>
-          <span className="flex-1 text-sm font-medium">
-            Alguns próximos eventos da sua equipe precisam da sua atenção
-          </span>
-          <ChevronRight className="size-5 shrink-0 text-muted-foreground" />
-        </Link>
-      ) : null}
+      <section>
+        <h3 className="mb-2 px-1 text-base font-semibold">Calendário da sua equipe</h3>
+        <TeamCalendar
+          year={y}
+          month={m}
+          events={monthEvents}
+          eventDayISO={calendarDayISO}
+          todayISO={todayISO}
+          teams={teams}
+          hint="Toque num dia pra ver a escala ou pedir um evento."
+        />
+      </section>
 
       {home.interests.length > 0 ? (
         <section>
@@ -294,33 +289,34 @@ async function LeaderSection({ hideHeroForEventId }: { hideHeroForEventId: strin
         </section>
       ) : null}
 
-      {home.resolvedInterests.length > 0 ? (
-        <details className="rounded-2xl border border-border bg-card">
-          <summary className="flex cursor-pointer items-center justify-between p-4 text-sm font-semibold">
-            Histórico de pedidos
-            <span className="text-xs font-medium text-muted-foreground">{home.resolvedInterests.length}</span>
-          </summary>
-          <ul className="divide-y divide-border border-t border-border">
-            {home.resolvedInterests.map((i) => (
-              <li key={i.id} className="p-4 text-sm">
-                <p className="flex flex-wrap items-center gap-1.5">
-                  <span className="font-medium">{i.personName}</span>
-                  <span className="text-muted-foreground">· {i.teamName}</span>
+      {myEventRequests.length > 0 ? (
+        <section>
+          <h3 className="mb-2 px-1 text-base font-semibold">Seus pedidos de evento</h3>
+          <Card>
+            <ul className="divide-y divide-border">
+              {myEventRequests.map((r) => (
+                <li key={r.id} className="flex items-center gap-3 p-4 text-sm">
+                  <CalendarPlus className="size-4 shrink-0 text-primary" />
+                  <span className="min-w-0 flex-1">
+                    <span className="font-medium">{r.title}</span>
+                    {r.desiredAt ? <span className="text-muted-foreground"> · {fmtEventWhen(r.desiredAt)}</span> : null}
+                  </span>
                   <span
-                    className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
-                      i.status === "atendido" ? "bg-success/15 text-success" : "bg-muted text-muted-foreground"
+                    className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold ${
+                      r.status === "aprovado"
+                        ? "bg-success/15 text-success"
+                        : r.status === "recusado"
+                          ? "bg-muted text-muted-foreground"
+                          : "bg-warning/15 text-warning"
                     }`}
                   >
-                    {i.status === "atendido" ? "Aceito" : "Recusado"}
+                    {r.status === "aprovado" ? "Aprovado" : r.status === "recusado" ? "Recusado" : "Aguardando"}
                   </span>
-                </p>
-                {i.resolvedNote ? (
-                  <p className="mt-0.5 text-[13px] italic text-muted-foreground">“{i.resolvedNote}”</p>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        </details>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        </section>
       ) : null}
 
       {mine.length > 0 ? <MyScheduleList mine={mine} title="Confirme sua escala" /> : null}
@@ -348,10 +344,11 @@ async function AdminSection({
   const nm = m === 12 ? 1 : m + 1;
   const toIso = new Date(`${ny}-${pad(nm)}-01T00:00:00-03:00`).toISOString();
 
-  const [home, monthEvents, upcoming] = await Promise.all([
+  const [home, monthEvents, upcoming, eventRequests] = await Promise.all([
     getAdminHome(session),
     listEventsInRange(session, fromIso, toIso),
     listUpcomingEvents(session, 8),
+    listPendingEventRequests(),
   ]);
   const eventDayISO: Record<string, string> = Object.fromEntries(
     monthEvents.map((e) => [e.id, churchDateISO(e.starts_at)]),
@@ -387,6 +384,21 @@ async function AdminSection({
           <span className="flex-1 text-sm font-medium">
             {home.pendingJoinRequests} {home.pendingJoinRequests > 1 ? "pessoas querem" : "pessoa quer"} entrar — toque
             para aprovar
+          </span>
+          <ChevronRight className="size-5 shrink-0 text-muted-foreground" />
+        </Link>
+      ) : null}
+
+      {eventRequests.length > 0 ? (
+        <Link
+          href="/calendario"
+          className="flex items-center gap-3 rounded-2xl border border-primary/30 bg-primary/10 p-3.5"
+        >
+          <span className="inline-flex size-9 items-center justify-center rounded-full bg-primary/15 text-primary">
+            <CalendarPlus className="size-5" />
+          </span>
+          <span className="flex-1 text-sm font-medium">
+            {eventRequests.length} {eventRequests.length > 1 ? "pedidos de evento" : "pedido de evento"} pra avaliar
           </span>
           <ChevronRight className="size-5 shrink-0 text-muted-foreground" />
         </Link>
