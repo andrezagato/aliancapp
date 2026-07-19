@@ -15,7 +15,9 @@ export type BadgeMetric =
   | "meses"
   | "lider"
   | "interesses"
-  | "maratona";
+  | "maratona"
+  | "pontual"
+  | "feedbacks";
 
 export type Badge = {
   code: string;
@@ -33,6 +35,10 @@ export const BADGES: Badge[] = [
   { code: "primeira_escala", emoji: "📌", title: "Primeira escala", desc: "Você foi escalado pela primeira vez.", metric: "escalado", target: 1 },
   { code: "serviu_1", emoji: "🌱", title: "Estreia no culto", desc: "Serviu pela primeira vez.", metric: "servido", target: 1 },
   { code: "primeiro_checkin", emoji: "✅", title: "Presente!", desc: "Fez seu primeiro check-in.", metric: "checkin", target: 1 },
+  { code: "checkin_5", emoji: "✋", title: "Marcou presença", desc: "5 check-ins feitos.", metric: "checkin", target: 5 },
+  { code: "checkin_10", emoji: "🙋", title: "Sempre por perto", desc: "10 check-ins feitos.", metric: "checkin", target: 10 },
+  { code: "pontual_1", emoji: "⏰", title: "No horário", desc: "Chegou no horário e fez check-in.", metric: "pontual", target: 1 },
+  { code: "pontual_5", emoji: "⏱️", title: "Pontualíssimo(a)", desc: "5 check-ins no horário.", metric: "pontual", target: 5 },
   { code: "serviu_5", emoji: "⭐", title: "Pegando o ritmo", desc: "5 cultos servidos.", metric: "servido", target: 5 },
   { code: "serviu_10", emoji: "🏅", title: "Dez de fé", desc: "10 cultos servidos.", metric: "servido", target: 10 },
   { code: "serviu_25", emoji: "🥈", title: "Veterano(a)", desc: "25 cultos servidos.", metric: "servido", target: 25 },
@@ -52,6 +58,8 @@ export const BADGES: Badge[] = [
   { code: "lider", emoji: "👑", title: "Vestiu a camisa", desc: "Virou líder de uma equipe.", metric: "lider", target: 1 },
   { code: "maratona_3", emoji: "🗓️", title: "Maratona do mês", desc: "Serviu 3 vezes num mês só.", metric: "maratona", target: 3 },
   { code: "maratona_5", emoji: "🏃", title: "Fôlego de sobra", desc: "Serviu 5 vezes num mês só.", metric: "maratona", target: 5 },
+  { code: "feedback_1", emoji: "💬", title: "Voz que importa", desc: "Deu feedback de um culto.", metric: "feedbacks", target: 1 },
+  { code: "feedback_5", emoji: "📊", title: "Termômetro do culto", desc: "Deu feedback de 5 cultos.", metric: "feedbacks", target: 5 },
 ];
 
 export type UnlockedBadge = { code: string; emoji: string; title: string; desc: string };

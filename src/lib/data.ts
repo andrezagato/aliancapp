@@ -480,13 +480,25 @@ async function computeJourneyMetrics(
     meses = Math.max(0, Math.floor((Date.now() - first) / (30 * 24 * 60 * 60 * 1000)));
   }
 
-  // Check-ins.
+  // Check-ins + pontualidade (chegou até 10min depois do início do culto).
   let checkin = 0;
+  let pontual = 0;
+  const startsById = new Map(rows.filter((r) => r.events).map((r) => [r.id, r.events!.starts_at]));
   const ids = rows.map((r) => r.id);
   if (ids.length > 0) {
-    const { data: c } = await supabase.from("checkins").select("assignment_id").in("assignment_id", ids);
-    checkin = (c ?? []).length;
+    const { data: c } = await supabase.from("checkins").select("assignment_id, checked_at").in("assignment_id", ids);
+    const cks = (c ?? []) as { assignment_id: string; checked_at: string }[];
+    checkin = cks.length;
+    const GRACE = 10 * 60 * 1000;
+    pontual = cks.filter((ck) => {
+      const s = startsById.get(ck.assignment_id);
+      return s ? new Date(ck.checked_at).getTime() <= new Date(s).getTime() + GRACE : false;
+    }).length;
   }
+
+  // Feedbacks dados (cada culto avaliado).
+  const { data: fb } = await supabase.from("event_feedback").select("id").eq("profile_id", userId);
+  const feedbacks = (fb ?? []).length;
 
   // "Salvou o culto": aceitou ser substituto numa troca.
   const { data: subs } = await supabase
@@ -521,6 +533,8 @@ async function computeJourneyMetrics(
     lider: isLeader ? 1 : 0,
     interesses,
     maratona,
+    pontual,
+    feedbacks,
   };
 }
 
@@ -595,6 +609,41 @@ export async function getMyJourney(session: Session): Promise<Journey> {
   });
 
   return { metrics, badges, unlockedCount: badges.filter((x) => x.unlocked).length };
+}
+
+// =============================================================================
+// FEEDBACK DO CULTO (privado — só a própria pessoa vê)
+// =============================================================================
+export type PendingFeedback = { eventId: string; title: string; startsAt: string };
+
+/** Cultos recentes (14 dias) que a pessoa serviu e ainda não avaliou. */
+export async function getPendingFeedback(session: Session): Promise<PendingFeedback[]> {
+  const supabase = await createClient();
+  const nowIso = new Date().toISOString();
+  const since = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
+  const { data } = await supabase
+    .from("assignments")
+    .select("event_id, status, events!inner ( title, starts_at )")
+    .eq("profile_id", session.userId)
+    .in("status", ["confirmado", "presente"])
+    .gte("events.starts_at", since)
+    .lt("events.starts_at", nowIso);
+  const rows = (data ?? []) as { event_id: string; events: { title: string; starts_at: string } | null }[];
+  const byEvent = new Map<string, { title: string; startsAt: string }>();
+  for (const r of rows) {
+    if (r.events && !byEvent.has(r.event_id)) byEvent.set(r.event_id, { title: r.events.title, startsAt: r.events.starts_at });
+  }
+  if (byEvent.size === 0) return [];
+  const { data: fb } = await supabase
+    .from("event_feedback")
+    .select("event_id")
+    .eq("profile_id", session.userId)
+    .in("event_id", [...byEvent.keys()]);
+  const done = new Set((fb ?? []).map((f) => f.event_id));
+  return [...byEvent.entries()]
+    .filter(([id]) => !done.has(id))
+    .map(([eventId, v]) => ({ eventId, title: v.title, startsAt: v.startsAt }))
+    .sort((a, b) => (a.startsAt < b.startsAt ? 1 : -1));
 }
 
 // =============================================================================

@@ -43,6 +43,42 @@ export type Database = {
           },
         ]
       }
+      activity_log: {
+        Row: {
+          actor_id: string | null
+          church_id: string | null
+          created_at: string
+          event_id: string | null
+          id: string
+          kind: string
+          meta: Json
+          profile_id: string | null
+          team_id: string | null
+        }
+        Insert: {
+          actor_id?: string | null
+          church_id?: string | null
+          created_at?: string
+          event_id?: string | null
+          id?: string
+          kind: string
+          meta?: Json
+          profile_id?: string | null
+          team_id?: string | null
+        }
+        Update: {
+          actor_id?: string | null
+          church_id?: string | null
+          created_at?: string
+          event_id?: string | null
+          id?: string
+          kind?: string
+          meta?: Json
+          profile_id?: string | null
+          team_id?: string | null
+        }
+        Relationships: []
+      }
       assignments: {
         Row: {
           assigned_by: string | null
@@ -242,6 +278,48 @@ export type Database = {
           timezone?: string
         }
         Relationships: []
+      }
+      event_feedback: {
+        Row: {
+          comment: string | null
+          created_at: string
+          event_id: string
+          id: string
+          profile_id: string
+          rating: number
+        }
+        Insert: {
+          comment?: string | null
+          created_at?: string
+          event_id: string
+          id?: string
+          profile_id: string
+          rating: number
+        }
+        Update: {
+          comment?: string | null
+          created_at?: string
+          event_id?: string
+          id?: string
+          profile_id?: string
+          rating?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_feedback_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_feedback_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       event_requests: {
         Row: {
@@ -1253,6 +1331,17 @@ export type Database = {
       is_team_leader: { Args: { t: string }; Returns: boolean }
       is_team_member: { Args: { t: string }; Returns: boolean }
       leads_team_of: { Args: { p: string }; Returns: boolean }
+      log_activity: {
+        Args: {
+          p_profile: string
+          p_actor: string
+          p_kind: string
+          p_event?: string
+          p_team?: string
+          p_meta?: Json
+        }
+        Returns: undefined
+      }
       recusar_escalacao: {
         Args: { p_assignment: string; p_motivo: string }
         Returns: undefined

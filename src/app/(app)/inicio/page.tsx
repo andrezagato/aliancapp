@@ -30,6 +30,7 @@ import {
   getEventsAwaitingMyConfirmation,
   getMyOpenInterests,
   getMyNextResponsibleEvent,
+  getPendingFeedback,
   getMyEventRequests,
   getTeamCare,
   getTeamAchievements,
@@ -50,6 +51,7 @@ import { CheckinButton } from "@/components/slot-controls";
 import { SwapInbox } from "@/components/swap-inbox";
 import { InteresseButton, InteresseResolveButton } from "@/components/interesse-controls";
 import { VolunteerHome } from "@/components/home/volunteer-home";
+import { FeedbackPrompt } from "@/components/feedback-prompt";
 import { NextEventHero } from "@/components/home/next-event-hero";
 import { AdminMonthOverview } from "@/components/home/admin-month-overview";
 import { TeamCalendar } from "@/components/home/team-calendar";
@@ -91,12 +93,16 @@ export default async function InicioPage() {
   // Voluntário: experiência "Aconchego" completa (cabeçalho reativo,
   // pull-to-refresh, herói, swipe). Os blocos extras entram como children.
   if (session.role === "volunteer") {
-    const mine = await getMyUpcomingAssignments(session);
+    const [mine, pendingFeedback] = await Promise.all([
+      getMyUpcomingAssignments(session),
+      getPendingFeedback(session),
+    ]);
     return (
       <VolunteerHome title={`${greeting()}, ${first}`} subtitle={roleLabel} userName={userName} assignments={mine}>
         {respHero}
         <SwapInbox items={swaps} />
         <ResponsibleConfirm events={respEvents} />
+        <FeedbackPrompt pending={pendingFeedback} />
         <Servir teams={teamsWithPos} interests={myInterests} />
         <JornadaTeaser />
         <Birthdays />

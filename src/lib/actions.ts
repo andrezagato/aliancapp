@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getSession, canManageTeam, type Session } from "@/lib/auth";
 import { getEligibleMembers, getEventDetail, syncAchievements, type EligibleMember, type DetailTeam } from "@/lib/data";
 import { BADGE_BY_CODE, type UnlockedBadge } from "@/lib/achievements";
+import { logActivity } from "@/lib/activity";
 import { notify, notifyMany, teamLeaderIds } from "@/lib/notify";
 import { sendEmail, conviteEmail, escaladoEmail, lembreteEmail, siteUrl } from "@/lib/email";
 import { churchDateISO, fmtEventWhen } from "@/lib/format";
@@ -182,6 +183,13 @@ export async function confirmarEscalacao(
       eventId: ca.event_id,
     });
   }
+  await logActivity({
+    profileId: session.userId,
+    actorId: session.userId,
+    kind: "confirmou",
+    eventId: ca?.event_id ?? null,
+    teamId: ca?.team_id ?? null,
+  });
   const unlocked = await notificarConquistas(session);
   revalidatePath("/inicio");
   revalidatePath("/escalas");
@@ -210,9 +218,42 @@ export async function recusarEscalacao(assignmentId: string, motivo: string): Pr
       eventId: ra.event_id,
     });
   }
+  await logActivity({
+    profileId: session.userId,
+    actorId: session.userId,
+    kind: "recusou",
+    eventId: ra?.event_id ?? null,
+    teamId: ra?.team_id ?? null,
+    meta: { motivo: reason },
+  });
   revalidatePath("/inicio");
   revalidatePath("/escalas");
   return ok;
+}
+
+// =============================================================================
+// VOLUNTÁRIO: feedback do culto (privado — só a própria pessoa vê)
+// =============================================================================
+export async function enviarFeedback(
+  eventId: string,
+  rating: number,
+  comment: string,
+): Promise<ActionResult & { unlocked?: UnlockedBadge[] }> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  if (rating < 1 || rating > 5) return fail("Escolha de 1 a 5 estrelas.");
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("event_feedback")
+    .upsert(
+      { profile_id: session.userId, event_id: eventId, rating, comment: comment.trim() || null },
+      { onConflict: "profile_id,event_id" },
+    );
+  if (error) return fail(error.message);
+  await logActivity({ profileId: session.userId, actorId: session.userId, kind: "feedback", eventId, meta: { rating } });
+  const unlocked = await notificarConquistas(session);
+  revalidatePath("/inicio");
+  return { ok: true, unlocked };
 }
 
 // =============================================================================
@@ -337,6 +378,14 @@ export async function escalarVoluntario(
     assigned_by: session.userId,
   });
   if (error) return fail(error.message);
+
+  await logActivity({
+    profileId: input.profileId,
+    actorId: session.userId,
+    kind: "escalado",
+    eventId: input.eventId,
+    teamId: input.teamId,
+  });
 
   await notify({
     recipientId: input.profileId,
@@ -1310,6 +1359,7 @@ export async function fazerCheckin(
     .from("checkins")
     .insert({ assignment_id: assignmentId, checked_by: session.userId });
   if (error && !error.message.includes("duplicate")) return fail(error.message);
+  await logActivity({ profileId: a?.profile_id ?? session.userId, actorId: session.userId, kind: "checkin", eventId, teamId });
   // Conquistas do próprio (quando o líder marca por outro, a pessoa desbloqueia ao abrir o app).
   const unlocked = isSelf ? await notificarConquistas(session) : [];
   revalidatePath(`/escalas/${eventId}`);
@@ -1382,6 +1432,15 @@ export async function pedirTroca(
     reason: motivo,
   });
   if (error) return fail(error.message);
+
+  await logActivity({
+    profileId: session.userId,
+    actorId: session.userId,
+    kind: "pediu_troca",
+    eventId: a.event_id,
+    teamId: a.team_id,
+    meta: { motivo, suggested: suggestedProfileId },
+  });
 
   const swapLink = `/escalas/${a.event_id}`;
   await notifyMany(await teamLeaderIds(a.team_id), {
@@ -1463,6 +1522,15 @@ export async function resolverTroca(swapId: string, aprovar: boolean, eventId: s
     .update({ status: aprovar ? "aprovada" : "recusada", resolved_by: session.userId })
     .eq("id", swapId);
   if (sErr) return fail(sErr.message);
+
+  await logActivity({
+    profileId: swap.requested_by,
+    actorId: session.userId,
+    kind: "resolveu_troca",
+    eventId,
+    teamId: a.team_id,
+    meta: { aprovar, substituto: swap.suggested_profile_id },
+  });
 
   await notify({
     recipientId: swap.requested_by,
