@@ -9,7 +9,7 @@ import { ReactiveHeader } from "@/components/app-shell/reactive-header";
 import { PullToRefresh } from "@/components/app-shell/pull-to-refresh";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
-import { churchDateISO } from "@/lib/format";
+import { churchDateISO, fmtEventWhen } from "@/lib/format";
 import type { MyAssignment } from "@/lib/data";
 import {
   confirmarEscalacao,
@@ -21,6 +21,7 @@ import {
 import { TodayCard } from "./today-card";
 import { NextScheduleHero } from "./next-schedule-hero";
 import { SwipeCard } from "./swipe-card";
+import { PendingInviteBanner } from "./pending-invite-banner";
 
 const REASONS = ["Viajando", "Trabalho", "Saúde", "Compromisso", "Outro"];
 type Sub = { profileId: string; name: string; avatarUrl: string | null };
@@ -47,9 +48,9 @@ export function VolunteerHome({
   const [items, setItems] = useState(assignments);
   useEffect(() => setItems(assignments), [assignments]);
 
-  // cancel sheet
-  const [cancel, setCancel] = useState<{ id: string; teamId: string } | null>(null);
-  const [reason, setReason] = useState<string | null>(null);
+  // sheet único de resposta — confirmar OU recusar uma escala
+  const [respond, setRespond] = useState<MyAssignment | null>(null);
+  const [reason, setReason] = useState("");
   const [subOpen, setSubOpen] = useState(false);
   const [subs, setSubs] = useState<Sub[] | null>(null);
   const [subLoading, setSubLoading] = useState(false);
@@ -83,43 +84,50 @@ export function VolunteerHome({
     });
   };
 
-  const openCancel = (a: MyAssignment) => {
-    setCancel({ id: a.assignmentId, teamId: a.teamId });
-    setReason(null);
+  const openRespond = (a: MyAssignment) => {
+    setRespond(a);
+    setReason("");
     setSelectedSub(null);
     setSubOpen(false);
     setSubs(null);
   };
-  const closeCancel = () => setCancel(null);
+  const closeRespond = () => setRespond(null);
+
+  const confirmFromModal = () => {
+    if (!respond) return;
+    confirm(respond);
+    closeRespond();
+  };
 
   const loadSubs = () => {
-    if (!cancel) return;
+    if (!respond) return;
     setSubOpen(true);
     if (subs) return;
     setSubLoading(true);
     startTransition(async () => {
-      const list = await listMembrosParaTroca(cancel.teamId);
+      const list = await listMembrosParaTroca(respond.teamId);
       setSubs(list);
       setSubLoading(false);
     });
   };
 
-  const submitCancel = () => {
-    if (!cancel || !reason) return;
-    const id = cancel.id;
+  const submitDecline = () => {
+    if (!respond || reason.trim().length < 3) return;
+    const id = respond.assignmentId;
     const sub = selectedSub;
-    closeCancel();
+    const motivo = reason.trim();
+    closeRespond();
     if (sub) {
       showToast("Pedido de troca enviado ao líder.");
       startTransition(async () => {
-        const r = await pedirTroca(id, reason, sub.profileId);
+        const r = await pedirTroca(id, motivo, sub.profileId);
         if (!r.ok) showToast(r.error);
       });
     } else {
       removeItem(id);
       showToast("Avisamos o líder. Obrigado por avisar.");
       startTransition(async () => {
-        const r = await recusarEscalacao(id, reason);
+        const r = await recusarEscalacao(id, motivo);
         if (!r.ok) {
           showToast(r.error);
           router.refresh();
@@ -128,16 +136,19 @@ export function VolunteerHome({
     }
   };
 
-  // derive today / hero / list (hero = próxima por data, estável entre estados)
+  // convites pendentes sobem pro topo; o resto (confirmado/presente) vira today/hero/lista
   const todaySP = churchDateISO(new Date().toISOString());
   const sorted = [...items].sort((a, b) => (a.startsAt < b.startsAt ? -1 : 1));
-  const today = sorted.find((a) => churchDateISO(a.startsAt) === todaySP) || null;
-  const upcoming = sorted.filter((a) => a !== today);
+  const pending = sorted.filter((a) => a.status === "convidado");
+  const rest = sorted.filter((a) => a.status !== "convidado");
+  const today = rest.find((a) => churchDateISO(a.startsAt) === todaySP) || null;
+  const upcoming = rest.filter((a) => a !== today);
   const hero = upcoming[0] || null;
   const list = upcoming.slice(1);
-  const nothing = !today && !hero && list.length === 0;
+  const nothing = pending.length === 0 && !today && !hero && list.length === 0;
 
   const open = (id: string) => router.push(`/escalas/${id}`);
+  const isPending = respond?.status === "convidado";
 
   return (
     <>
@@ -146,12 +157,14 @@ export function VolunteerHome({
 
       <PullToRefresh>
         <div className="space-y-4">
+          <PendingInviteBanner pending={pending} onRespond={openRespond} />
+
           {nothing ? <EmptyCard /> : null}
           {today ? (
-            <TodayCard a={today} onConfirm={() => confirm(today)} onCancel={() => openCancel(today)} onCheckin={() => checkin(today)} />
+            <TodayCard a={today} onConfirm={() => confirm(today)} onCancel={() => openRespond(today)} onCheckin={() => checkin(today)} />
           ) : null}
           {hero ? (
-            <NextScheduleHero a={hero} onConfirm={() => confirm(hero)} onCancel={() => openCancel(hero)} onOpen={() => open(hero.eventId)} />
+            <NextScheduleHero a={hero} onConfirm={() => confirm(hero)} onCancel={() => openRespond(hero)} onOpen={() => open(hero.eventId)} />
           ) : null}
 
           {list.length > 0 ? (
@@ -166,7 +179,7 @@ export function VolunteerHome({
                     key={a.assignmentId}
                     a={a}
                     onConfirm={() => confirm(a)}
-                    onCancel={() => openCancel(a)}
+                    onCancel={() => openRespond(a)}
                     onOpen={() => open(a.eventId)}
                   />
                 ))}
@@ -180,79 +193,121 @@ export function VolunteerHome({
         </div>
       </PullToRefresh>
 
-      <Modal open={!!cancel} onClose={closeCancel} sheet title="Não vai poder?">
-        <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
-          Avisar cedo ajuda o líder a achar alguém. Conta rapidinho o motivo.
-        </p>
-        <div className="mt-4 flex flex-wrap gap-2.5">
-          {REASONS.map((r) => (
-            <button
-              key={r}
-              onClick={() => setReason(r)}
-              className={cn(
-                "press rounded-full border px-3.5 py-2.5 text-sm font-bold",
-                reason === r ? "border-primary bg-primary text-primary-foreground" : "border-destructive/25 bg-card text-primary",
-              )}
-            >
-              {r}
-            </button>
-          ))}
-        </div>
+      <Modal open={!!respond} onClose={closeRespond} sheet title={isPending ? "Responder escala" : "Não vai poder?"}>
+        {respond ? (
+          <>
+            <div className="mt-1.5">
+              <p className="font-display text-base font-bold text-foreground">{respond.eventTitle}</p>
+              <p className="text-[13px] capitalize text-muted-foreground">
+                {fmtEventWhen(respond.startsAt)} · {respond.teamName}
+              </p>
+            </div>
 
-        <div className="mt-4">
-          {!subOpen ? (
-            <button
-              onClick={loadSubs}
-              className="press-sm flex w-full items-center gap-2.5 rounded-[14px] border border-border bg-card px-3.5 py-3 text-left"
-            >
-              <Users className="size-[18px] text-muted-foreground" />
-              <span className="flex-1 text-[13.5px] text-muted-foreground">
-                Sugerir substituto <span className="text-muted-foreground/60">(opcional)</span>
-              </span>
-              <span className="text-[13px] font-bold text-primary">Escolher ›</span>
-            </button>
-          ) : (
-            <div className="max-h-52 overflow-y-auto rounded-[14px] border border-border bg-card p-1.5">
-              {subLoading ? (
-                <p className="p-3 text-sm text-muted-foreground">Carregando…</p>
-              ) : subs && subs.length > 0 ? (
-                subs.map((s) => {
-                  const on = selectedSub?.profileId === s.profileId;
-                  return (
-                    <button
-                      key={s.profileId}
-                      onClick={() => setSelectedSub(on ? null : s)}
-                      className={cn(
-                        "press-sm flex w-full items-center gap-2.5 rounded-[11px] px-2.5 py-2 text-left",
-                        on && "bg-accent/20",
-                      )}
-                    >
-                      <Avatar name={s.name} src={s.avatarUrl} className="size-9" />
-                      <span className="flex-1 text-sm font-semibold">{s.name}</span>
-                      {on ? <Check className="size-4 text-primary" strokeWidth={2.6} /> : null}
-                    </button>
-                  );
-                })
+            {isPending ? (
+              <>
+                <button
+                  onClick={confirmFromModal}
+                  className="press mt-4 flex h-[52px] w-full items-center justify-center gap-2 rounded-[15px] bg-success text-[15.5px] font-extrabold text-white"
+                >
+                  <Check className="size-5" strokeWidth={2.8} /> Confirmar presença
+                </button>
+                <div className="my-4 flex items-center gap-3">
+                  <span className="h-px flex-1 bg-border" />
+                  <span className="text-[12px] font-semibold text-muted-foreground">ou, se não puder</span>
+                  <span className="h-px flex-1 bg-border" />
+                </div>
+              </>
+            ) : null}
+
+            <p className={cn("text-sm leading-relaxed text-muted-foreground", isPending ? "" : "mt-1.5")}>
+              {isPending
+                ? "Conta rapidinho o motivo — ajuda o líder a remanejar."
+                : "Avisar cedo ajuda o líder a achar alguém. Conta rapidinho o motivo."}
+            </p>
+
+            <div className="mt-3 flex flex-wrap gap-2.5">
+              {REASONS.map((r) => (
+                <button
+                  key={r}
+                  onClick={() => setReason(r === "Outro" ? "" : r)}
+                  className={cn(
+                    "press rounded-full border px-3.5 py-2.5 text-sm font-bold",
+                    reason === r && r !== "Outro"
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-destructive/25 bg-card text-primary",
+                  )}
+                >
+                  {r}
+                </button>
+              ))}
+            </div>
+
+            <textarea
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              rows={2}
+              placeholder="Escreva o motivo…"
+              className="mt-3 w-full resize-none rounded-[14px] border border-border bg-card px-3.5 py-3 text-sm text-foreground outline-none focus:border-primary"
+            />
+
+            <div className="mt-3">
+              {!subOpen ? (
+                <button
+                  onClick={loadSubs}
+                  className="press-sm flex w-full items-center gap-2.5 rounded-[14px] border border-border bg-card px-3.5 py-3 text-left"
+                >
+                  <Users className="size-[18px] text-muted-foreground" />
+                  <span className="flex-1 text-[13.5px] text-muted-foreground">
+                    Sugerir substituto <span className="text-muted-foreground/60">(opcional)</span>
+                  </span>
+                  <span className="text-[13px] font-bold text-primary">Escolher ›</span>
+                </button>
               ) : (
-                <p className="p-3 text-sm text-muted-foreground">Ninguém disponível pra sugerir agora.</p>
+                <div className="max-h-52 overflow-y-auto rounded-[14px] border border-border bg-card p-1.5">
+                  {subLoading ? (
+                    <p className="p-3 text-sm text-muted-foreground">Carregando…</p>
+                  ) : subs && subs.length > 0 ? (
+                    subs.map((s) => {
+                      const on = selectedSub?.profileId === s.profileId;
+                      return (
+                        <button
+                          key={s.profileId}
+                          onClick={() => setSelectedSub(on ? null : s)}
+                          className={cn(
+                            "press-sm flex w-full items-center gap-2.5 rounded-[11px] px-2.5 py-2 text-left",
+                            on && "bg-accent/20",
+                          )}
+                        >
+                          <Avatar name={s.name} src={s.avatarUrl} className="size-9" />
+                          <span className="flex-1 text-sm font-semibold">{s.name}</span>
+                          {on ? <Check className="size-4 text-primary" strokeWidth={2.6} /> : null}
+                        </button>
+                      );
+                    })
+                  ) : (
+                    <p className="p-3 text-sm text-muted-foreground">Ninguém disponível pra sugerir agora.</p>
+                  )}
+                </div>
               )}
             </div>
-          )}
-        </div>
 
-        <button
-          onClick={submitCancel}
-          disabled={!reason}
-          className={cn(
-            "press mt-4 h-[52px] w-full rounded-[15px] text-[15.5px] font-extrabold transition-opacity",
-            reason ? "bg-destructive text-destructive-foreground" : "cursor-not-allowed bg-muted text-muted-foreground",
-          )}
-        >
-          {selectedSub ? "Pedir troca" : "Avisar que não posso"}
-        </button>
-        <button onClick={closeCancel} className="mt-2 h-11 w-full text-[14.5px] font-bold text-muted-foreground">
-          Deixa, vou confirmar
-        </button>
+            <button
+              onClick={submitDecline}
+              disabled={reason.trim().length < 3}
+              className={cn(
+                "press mt-4 h-[52px] w-full rounded-[15px] text-[15.5px] font-extrabold transition-opacity",
+                reason.trim().length >= 3
+                  ? "bg-destructive text-destructive-foreground"
+                  : "cursor-not-allowed bg-muted text-muted-foreground",
+              )}
+            >
+              {selectedSub ? "Pedir troca" : "Não vou poder"}
+            </button>
+            <button onClick={closeRespond} className="mt-2 h-11 w-full text-[14.5px] font-bold text-muted-foreground">
+              {isPending ? "Fechar" : "Deixa, vou confirmar"}
+            </button>
+          </>
+        ) : null}
       </Modal>
     </>
   );

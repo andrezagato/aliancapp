@@ -18,6 +18,20 @@ export function coverageTone(needed: number, assigned: number): CoverageTone {
   return "empty";
 }
 
+/**
+ * Tom que reflete a PRONTIDÃO real do culto (não só se a vaga está ocupada):
+ * verde só quando tudo que é necessário está CONFIRMADO; âmbar quando há gente
+ * escalada mas ainda faltam confirmações; vermelho quando não há ninguém.
+ * Quem não confirmou não "conta" como pronto — é isso que evita o líder ver
+ * verde sem ninguém ter dito sim.
+ */
+export function confirmTone(needed: number, confirmed: number, assigned: number): CoverageTone {
+  if (needed <= 0) return "full";
+  if (confirmed >= needed) return "full";
+  if (assigned > 0) return "partial";
+  return "empty";
+}
+
 // ---- linhas cruas (subset das tabelas) que a agregação consome ----
 export type ReqRow = {
   id: string;

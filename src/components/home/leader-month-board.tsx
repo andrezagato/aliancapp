@@ -5,7 +5,8 @@ import { MonthCalendar } from "@/components/month-calendar";
 import { Modal } from "@/components/modal";
 import { CoverageBadge } from "@/components/coverage-badge";
 import { EventEscalaModal } from "@/components/event/event-escala-modal";
-import { fmtTime } from "@/lib/format";
+import { ConfirmationAlert } from "@/components/event/confirmation-alert";
+import { fmtTime, fmtEventWhen } from "@/lib/format";
 import type { EventListItem } from "@/lib/data";
 
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -36,8 +37,28 @@ export function LeaderMonthBoard({
     else setDayPick({ n, events: evs });
   };
 
+  const nowIso = new Date().toISOString();
+  const pendingSoon = calendarEvents
+    .filter((ev) => ev.starts_at >= nowIso && ev.assignedTotal - ev.confirmedTotal > 0)
+    .sort((a, b) => (a.starts_at < b.starts_at ? -1 : 1))
+    .slice(0, 3);
+
   return (
     <>
+      {pendingSoon.length > 0 ? (
+        <section className="space-y-2">
+          {pendingSoon.map((ev) => (
+            <ConfirmationAlert
+              key={ev.id}
+              eventId={ev.id}
+              startsAt={ev.starts_at}
+              pending={ev.assignedTotal - ev.confirmedTotal}
+              context={`${ev.title} · ${fmtEventWhen(ev.starts_at)}`}
+            />
+          ))}
+        </section>
+      ) : null}
+
       <section>
         <h3 className="mb-2 px-1 text-base font-semibold">Dias que sua equipe serve</h3>
         <MonthCalendar
@@ -73,7 +94,7 @@ export function LeaderMonthBoard({
                 <span className="block font-semibold">{ev.title}</span>
                 <span className="text-sm text-muted-foreground">{fmtTime(ev.starts_at)}</span>
               </span>
-              <CoverageBadge tone={ev.overallTone} label={`${ev.assignedTotal}/${ev.neededTotal}`} />
+              <CoverageBadge tone={ev.overallTone} label={`${ev.confirmedTotal}/${ev.neededTotal} confirmados`} />
             </button>
           ))}
         </div>

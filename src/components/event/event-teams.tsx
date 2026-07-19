@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { CoverageBadge, TeamDot } from "@/components/coverage-badge";
+import { ConfirmationAlert } from "@/components/event/confirmation-alert";
 import { AssignmentResponse } from "@/components/assignment-response";
 import { CheckinButton, SwapPending } from "@/components/slot-controls";
 import {
@@ -38,14 +39,17 @@ const SHORT: Record<string, string> = {
  */
 export function EventTeams({
   eventId,
+  startsAt,
   canCheckin,
   teams,
 }: {
   eventId: string;
+  startsAt: string;
   canCheckin: boolean;
   teams: DetailTeam[];
 }) {
   const multi = teams.length > 1;
+  const pendingConfirms = teams.reduce((s, t) => s + Math.max(t.assigned - t.confirmed, 0), 0);
   const [mode, setMode] = useState<"view" | "edit">("view");
   const [expanded, setExpanded] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(teams.map((t) => [t.teamId, !multi])),
@@ -82,6 +86,8 @@ export function EventTeams({
 
   return (
     <div className="space-y-3">
+      <ConfirmationAlert eventId={eventId} startsAt={startsAt} pending={pendingConfirms} />
+
       <div className="flex items-center justify-between px-1">
         {multi ? (
           <button onClick={() => setAll(!allExpanded)} className="press-sm text-sm font-bold text-primary">
@@ -108,7 +114,9 @@ export function EventTeams({
 
       {teams.map((team) => {
         const open = expanded[team.teamId];
-        const needsAction = team.positions.some((p) => p.openCount > 0 || p.filled.some((f) => f.swap));
+        const needsAction = team.positions.some(
+          (p) => p.openCount > 0 || p.filled.some((f) => f.swap || f.status === "convidado"),
+        );
         return (
           <Card key={team.teamId} className="overflow-hidden">
             <button
@@ -126,7 +134,7 @@ export function EventTeams({
                   !
                 </span>
               ) : null}
-              <CoverageBadge tone={team.tone} assigned={team.assigned} needed={team.needed} className="ml-auto" />
+              <CoverageBadge tone={team.tone} assigned={team.confirmed} needed={team.needed} className="ml-auto" />
               <ChevronDown className={cn("size-5 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")} />
             </button>
 
@@ -153,7 +161,8 @@ export function EventTeams({
 // ---- modo Ver (compacto) --------------------------------------------------
 function CompactPosition({ pos }: { pos: DetailPosition }) {
   const notApplicable = pos.status === "not_applicable";
-  const occ = pos.filled.filter((f) => f.status !== "recusado").length;
+  const confirmed = pos.filled.filter((f) => f.status === "confirmado" || f.status === "presente").length;
+  const waiting = pos.filled.filter((f) => f.status === "convidado").length;
 
   if (notApplicable) {
     return (
@@ -167,8 +176,11 @@ function CompactPosition({ pos }: { pos: DetailPosition }) {
     <div className="space-y-1.5">
       <div className="flex items-center justify-between">
         <span className="text-sm font-semibold">{pos.positionName}</span>
-        <span className="text-xs font-semibold text-muted-foreground tabular-nums">
-          {occ}/{pos.needed}
+        <span className="text-xs font-semibold tabular-nums">
+          <span className={cn(confirmed >= pos.needed ? "text-success" : "text-muted-foreground")}>
+            {confirmed}/{pos.needed}
+          </span>
+          {waiting > 0 ? <span className="text-warning"> · {waiting} aguardando</span> : null}
         </span>
       </div>
       {pos.filled.map((person) => {

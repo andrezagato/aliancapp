@@ -42,7 +42,7 @@ import {
 import { fmtEventWhen, fmtWeekdayShort, fmtDayMonthShort, fmtTime, fmtBirthday, churchDateISO } from "@/lib/format";
 import { CheckinButton } from "@/components/slot-controls";
 import { SwapInbox } from "@/components/swap-inbox";
-import { InteresseButton, InteresseResolveButtons } from "@/components/interesse-controls";
+import { InteresseButton, InteresseResolveButton } from "@/components/interesse-controls";
 import { VolunteerHome } from "@/components/home/volunteer-home";
 import { NextEventHero } from "@/components/home/next-event-hero";
 import { AdminMonthOverview } from "@/components/home/admin-month-overview";
@@ -279,7 +279,12 @@ async function LeaderSection({ hideHeroForEventId }: { hideHeroForEventId: strin
                     </p>
                     {i.note ? <p className="truncate text-sm text-muted-foreground">{i.note}</p> : null}
                     <div className="mt-1.5">
-                      <InteresseResolveButtons id={i.id} teamId={i.teamId} />
+                      <InteresseResolveButton
+                        id={i.id}
+                        teamId={i.teamId}
+                        personName={i.personName}
+                        teamName={i.teamName}
+                      />
                     </div>
                   </div>
                 </li>
@@ -287,6 +292,35 @@ async function LeaderSection({ hideHeroForEventId }: { hideHeroForEventId: strin
             </ul>
           </Card>
         </section>
+      ) : null}
+
+      {home.resolvedInterests.length > 0 ? (
+        <details className="rounded-2xl border border-border bg-card">
+          <summary className="flex cursor-pointer items-center justify-between p-4 text-sm font-semibold">
+            Histórico de pedidos
+            <span className="text-xs font-medium text-muted-foreground">{home.resolvedInterests.length}</span>
+          </summary>
+          <ul className="divide-y divide-border border-t border-border">
+            {home.resolvedInterests.map((i) => (
+              <li key={i.id} className="p-4 text-sm">
+                <p className="flex flex-wrap items-center gap-1.5">
+                  <span className="font-medium">{i.personName}</span>
+                  <span className="text-muted-foreground">· {i.teamName}</span>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
+                      i.status === "atendido" ? "bg-success/15 text-success" : "bg-muted text-muted-foreground"
+                    }`}
+                  >
+                    {i.status === "atendido" ? "Aceito" : "Recusado"}
+                  </span>
+                </p>
+                {i.resolvedNote ? (
+                  <p className="mt-0.5 text-[13px] italic text-muted-foreground">“{i.resolvedNote}”</p>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </details>
       ) : null}
 
       {mine.length > 0 ? <MyScheduleList mine={mine} title="Confirme sua escala" /> : null}

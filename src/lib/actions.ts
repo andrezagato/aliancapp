@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getSession, canManageTeam } from "@/lib/auth";
 import { getEligibleMembers, getEventDetail, type EligibleMember, type DetailTeam } from "@/lib/data";
 import { notify, notifyMany, teamLeaderIds } from "@/lib/notify";
-import { sendEmail, conviteEmail, escaladoEmail, siteUrl } from "@/lib/email";
+import { sendEmail, conviteEmail, escaladoEmail, lembreteEmail, siteUrl } from "@/lib/email";
 import { churchDateISO, fmtEventWhen } from "@/lib/format";
 import type {
   ActionResult,
@@ -140,6 +140,63 @@ export async function recusarEscalacao(assignmentId: string, motivo: string): Pr
       eventId: ra.event_id,
     });
   }
+  revalidatePath("/inicio");
+  revalidatePath("/escalas");
+  return ok;
+}
+
+// =============================================================================
+// LÍDER / ADMIN: lembrar quem ainda não confirmou
+// =============================================================================
+/**
+ * Cutuca (sino + e-mail) todos os escalados de um evento que ainda estão como
+ * "convidado" (não responderam), restrito às equipes que o solicitante gerencia.
+ */
+export async function lembrarPendentes(eventId: string): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  const supabase = await createClient();
+
+  const { data: rows, error } = await supabase
+    .from("assignments")
+    .select("profile_id, team_id, status")
+    .eq("event_id", eventId)
+    .eq("status", "convidado");
+  if (error) return fail(error.message);
+
+  const targets = (rows ?? [])
+    .filter((r) => r.profile_id && canManageTeam(session, r.team_id))
+    .map((r) => r.profile_id as string);
+  const ids = Array.from(new Set(targets));
+  if (ids.length === 0) return fail("Ninguém pra lembrar — todo mundo já respondeu.");
+
+  const { data: evInfo } = await supabase
+    .from("events")
+    .select("title, starts_at")
+    .eq("id", eventId)
+    .maybeSingle();
+  const titulo = evInfo?.title ?? "um culto";
+  const quando = fmtEventWhen(evInfo?.starts_at);
+
+  await notifyMany(ids, {
+    kind: "lembrete",
+    title: "Confirme sua escala",
+    body: `Você ainda não confirmou presença em ${titulo} (${quando}).`,
+    link: `/escalas/${eventId}`,
+    eventId,
+  });
+
+  try {
+    const { data: profs } = await supabase.from("profiles").select("email").in("id", ids);
+    const emails = (profs ?? []).map((p) => p.email).filter((e): e is string => !!e);
+    if (emails.length > 0) {
+      const em = lembreteEmail({ evento: titulo, quando, href: `${siteUrl()}/escalas/${eventId}` });
+      await sendEmail({ to: emails, subject: em.subject, html: em.html });
+    }
+  } catch {
+    /* best-effort — falha de e-mail não derruba o lembrete */
+  }
+
   revalidatePath("/inicio");
   revalidatePath("/escalas");
   return ok;
@@ -360,6 +417,123 @@ export async function criarEventoAvulso(input: CriarEventoInput): Promise<Action
   return { ok: true, eventId: ev.id };
 }
 
+// =============================================================================
+// PEDIDO DE EVENTO: líder sugere -> admin aprova (cria o evento)
+// =============================================================================
+export async function solicitarEvento(input: {
+  title: string;
+  date: string;
+  time: string;
+  location?: string;
+  note?: string;
+}): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  if (session.role !== "admin" && session.role !== "leader") return fail("Só líderes podem sugerir eventos.");
+  if (!session.profile.church_id) return fail("Sua conta não está ligada a uma igreja.");
+  const title = input.title.trim();
+  if (title.length < 2) return fail("Dê um título ao evento.");
+
+  let desiredAt: string;
+  try {
+    desiredAt = saoPauloToIso(input.date, input.time || "18:00");
+  } catch {
+    return fail("Data ou horário inválidos.");
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("event_requests").insert({
+    church_id: session.profile.church_id,
+    title,
+    desired_at: desiredAt,
+    location: input.location?.trim() || null,
+    note: input.note?.trim() || null,
+    requested_by: session.userId,
+  });
+  if (error) return fail(error.message);
+
+  const { data: admins } = await supabase
+    .from("profiles")
+    .select("id")
+    .eq("church_id", session.profile.church_id)
+    .eq("system_role", "admin");
+  await notifyMany(
+    (admins ?? []).map((a) => a.id),
+    {
+      kind: "evento_solicitado",
+      title: "Novo pedido de evento",
+      body: `${session.profile.full_name || "Um líder"} sugeriu: ${title} (${fmtEventWhen(desiredAt)}).`,
+      link: "/calendario",
+    },
+  );
+
+  revalidatePath("/calendario");
+  return ok;
+}
+
+export async function resolverEventoSolicitado(
+  id: string,
+  aprovar: boolean,
+  note: string,
+): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  if (session.role !== "admin") return fail("Só o administrador resolve pedidos de evento.");
+  const supabase = await createClient();
+
+  const { data: req } = await supabase
+    .from("event_requests")
+    .select("id, title, desired_at, location, note, requested_by, church_id, status")
+    .eq("id", id)
+    .maybeSingle();
+  if (!req) return fail("Pedido não encontrado.");
+  if (req.status !== "pendente") return fail("Esse pedido já foi resolvido.");
+
+  let createdEventId: string | null = null;
+  if (aprovar) {
+    const { data: ev, error } = await supabase
+      .from("events")
+      .insert({
+        church_id: req.church_id,
+        title: req.title,
+        starts_at: req.desired_at ?? new Date().toISOString(),
+        location: req.location,
+        notes: req.note,
+        created_by: session.userId,
+      })
+      .select("id")
+      .single();
+    if (error || !ev) return fail(error?.message || "Não consegui criar o evento.");
+    createdEventId = ev.id;
+  }
+
+  const nota = note.trim();
+  const { error: upErr } = await supabase
+    .from("event_requests")
+    .update({
+      status: aprovar ? "aprovado" : "recusado",
+      resolved_by: session.userId,
+      resolved_event_id: createdEventId,
+    })
+    .eq("id", id);
+  if (upErr) return fail(upErr.message);
+
+  await notify({
+    recipientId: req.requested_by,
+    kind: "evento_resolvido",
+    title: aprovar ? "Evento aprovado! ✅" : "Sobre seu pedido de evento",
+    body: aprovar
+      ? `"${req.title}" entrou no calendário.${nota ? ` ${nota}` : ""}`
+      : `"${req.title}" não foi aprovado agora.${nota ? ` ${nota}` : ""}`,
+    link: aprovar && createdEventId ? `/escalas/${createdEventId}` : "/calendario",
+  });
+
+  revalidatePath("/calendario");
+  revalidatePath("/escalas");
+  revalidatePath("/inicio");
+  return ok;
+}
+
 /** Admin adiciona outra equipe a um evento já criado (copia as posições da equipe). */
 export async function adicionarEquipeAoEvento(eventId: string, teamId: string): Promise<ActionResult> {
   const session = await getSession();
@@ -472,6 +646,70 @@ export async function resolverInteresse(
   const { error } = await supabase.from("service_interests").update({ status }).eq("id", id);
   if (error) return fail(error.message);
   revalidatePath("/inicio");
+  return ok;
+}
+
+/**
+ * Líder responde a um pedido de servir com uma mensagem: aceita (a pessoa entra
+ * na equipe) ou recusa. Grava quem/quando/o quê (histórico) e avisa o voluntário.
+ */
+export async function responderInteresse(
+  id: string,
+  teamId: string,
+  aceitar: boolean,
+  note: string,
+): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  if (!canManageTeam(session, teamId)) return fail("Sem permissão.");
+  const supabase = await createClient();
+
+  const { data: it } = await supabase
+    .from("service_interests")
+    .select("profile_id, team:teams ( name )")
+    .eq("id", id)
+    .maybeSingle();
+  if (!it) return fail("Pedido não encontrado.");
+
+  const nota = note.trim();
+  const { error } = await supabase
+    .from("service_interests")
+    .update({
+      status: aceitar ? "atendido" : "arquivado",
+      resolved_by: session.userId,
+      resolved_note: nota || null,
+      resolved_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+  if (error) return fail(error.message);
+
+  // No aceite, a pessoa entra na equipe (se ainda não estiver).
+  if (aceitar) {
+    const { data: exists } = await supabase
+      .from("memberships")
+      .select("id")
+      .eq("team_id", teamId)
+      .eq("profile_id", it.profile_id)
+      .maybeSingle();
+    if (!exists) {
+      await supabase.from("memberships").insert({ team_id: teamId, profile_id: it.profile_id, role: "volunteer" });
+    }
+  }
+
+  const teamName = (it as { team?: { name: string } | null }).team?.name || "a equipe";
+  await notify({
+    recipientId: it.profile_id,
+    kind: "interesse_resolvido",
+    title: aceitar ? "Pedido aceito! 🎉" : "Sobre seu pedido de servir",
+    body: aceitar
+      ? `Você agora faz parte de ${teamName}.${nota ? ` ${nota}` : ""}`
+      : `Sobre servir em ${teamName}: ${nota || "não deu certo agora, mas obrigado pelo interesse!"}`,
+    link: "/inicio",
+    teamId,
+  });
+
+  revalidatePath("/inicio");
+  revalidatePath("/equipes");
   return ok;
 }
 

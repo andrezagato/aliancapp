@@ -59,7 +59,7 @@ export function EventEscalaModal({
           ) : detail.teams.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">Você não gerencia equipes neste evento.</p>
           ) : (
-            <EventTeams eventId={event.id} canCheckin={!!detail.canCheckin} teams={detail.teams} />
+            <EventTeams eventId={event.id} startsAt={event.starts_at} canCheckin={!!detail.canCheckin} teams={detail.teams} />
           )}
           <div className="mt-4 border-t border-border/60 pt-3">
             <Link href={`/escalas/${event.id}`} className="text-sm font-semibold text-primary hover:underline">

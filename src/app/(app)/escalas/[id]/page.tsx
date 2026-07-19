@@ -93,7 +93,7 @@ export default async function EventoPage({ params }: { params: Promise<{ id: str
       ) : (
         <>
           {manageTeams.length > 0 ? (
-            <EventTeams eventId={ev.id} canCheckin={canCheckin} teams={manageTeams} />
+            <EventTeams eventId={ev.id} startsAt={ev.starts_at} canCheckin={canCheckin} teams={manageTeams} />
           ) : null}
           {otherTeams.map((team) => (
             <TeamBlock key={team.teamId} eventId={ev.id} team={team} canCheckin={canCheckin} />
@@ -126,7 +126,7 @@ function TeamBlock({
       <div className="flex items-center gap-2.5 border-b border-border p-4">
         <TeamDot color={team.color} className="size-3" />
         <h2 className="font-display text-[17px] font-bold">{team.name}</h2>
-        <CoverageBadge tone={team.tone} assigned={team.assigned} needed={team.needed} className="ml-auto" />
+        <CoverageBadge tone={team.tone} assigned={team.confirmed} needed={team.needed} className="ml-auto" />
       </div>
       <ul className="divide-y divide-border/70">
         {team.positions.map((pos) => (

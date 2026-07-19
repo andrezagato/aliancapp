@@ -139,3 +139,22 @@ export function escaladoEmail(opts: {
     }),
   };
 }
+
+/** Lembrete pra quem ainda não confirmou (disparado pelo líder). */
+export function lembreteEmail(opts: {
+  evento: string;
+  quando: string;
+  href: string;
+}): { subject: string; html: string } {
+  const evento = esc(opts.evento);
+  return {
+    subject: `${BRAND} — confirme sua presença: ${opts.evento}`,
+    html: layout({
+      title: "Falta você confirmar 🙏",
+      intro: `Você ainda não confirmou presença em <strong>${evento}</strong>${
+        opts.quando ? ` — ${esc(opts.quando)}` : ""
+      }. O líder está contando com você — toque abaixo para confirmar ou avisar que não vai poder.`,
+      cta: { label: "Confirmar agora", href: opts.href },
+    }),
+  };
+}

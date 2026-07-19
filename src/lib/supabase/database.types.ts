@@ -992,6 +992,9 @@ export type Database = {
           note: string | null
           position_id: string | null
           profile_id: string
+          resolved_at: string | null
+          resolved_by: string | null
+          resolved_note: string | null
           status: Database["public"]["Enums"]["interest_status"]
           team_id: string
         }
@@ -1001,6 +1004,9 @@ export type Database = {
           note?: string | null
           position_id?: string | null
           profile_id: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          resolved_note?: string | null
           status?: Database["public"]["Enums"]["interest_status"]
           team_id: string
         }
@@ -1010,6 +1016,9 @@ export type Database = {
           note?: string | null
           position_id?: string | null
           profile_id?: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          resolved_note?: string | null
           status?: Database["public"]["Enums"]["interest_status"]
           team_id?: string
         }
@@ -1024,6 +1033,13 @@ export type Database = {
           {
             foreignKeyName: "service_interests_profile_id_fkey"
             columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_interests_resolved_by_fkey"
+            columns: ["resolved_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -1259,6 +1275,8 @@ export type Database = {
         | "evento_solicitado"
         | "aniversario"
         | "cobertura"
+        | "interesse_resolvido"
+        | "evento_resolvido"
       profile_status: "pendente" | "ativo"
       requirement_status: "needed" | "not_applicable"
       swap_status: "pendente" | "aprovada" | "recusada"
@@ -1418,6 +1436,8 @@ export const Constants = {
         "evento_solicitado",
         "aniversario",
         "cobertura",
+        "interesse_resolvido",
+        "evento_resolvido",
       ],
       profile_status: ["pendente", "ativo"],
       requirement_status: ["needed", "not_applicable"],

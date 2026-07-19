@@ -64,7 +64,7 @@ export function AdminMonthOverview({
               {ev.teams.length > 0 ? (
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {ev.teams.map((t) => (
-                    <CoverageBadge key={t.teamId} tone={t.tone} label={`${t.name} ${t.assigned}/${t.needed}`} />
+                    <CoverageBadge key={t.teamId} tone={t.tone} label={`${t.name} ${t.confirmed}/${t.needed}`} />
                   ))}
                 </div>
               ) : null}

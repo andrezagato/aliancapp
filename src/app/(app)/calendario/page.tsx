@@ -5,7 +5,8 @@ import { Card } from "@/components/ui/card";
 import { CoverageBadge } from "@/components/coverage-badge";
 import { MonthCalendar } from "@/components/month-calendar";
 import { getSession } from "@/lib/auth";
-import { listEventsInRange, type EventListItem } from "@/lib/data";
+import { listEventsInRange, listPendingEventRequests, type EventListItem } from "@/lib/data";
+import { EventRequestInbox, SugerirEventoButton } from "@/components/event-request-controls";
 import { churchDateISO, fmtTime } from "@/lib/format";
 
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -36,6 +37,8 @@ export default async function CalendarioPage({
   const toIso = new Date(`${ny}-${pad(nm)}-01T00:00:00-03:00`).toISOString();
 
   const events = await listEventsInRange(session, fromIso, toIso);
+  const canSuggest = session.role === "admin" || session.role === "leader";
+  const pendingRequests = session.role === "admin" ? await listPendingEventRequests() : [];
   const eventDayISO: Record<string, string> = Object.fromEntries(
     events.map((e) => [e.id, churchDateISO(e.starts_at)]),
   );
@@ -60,6 +63,8 @@ export default async function CalendarioPage({
     <>
       <TopBar title="Calendário" subtitle="Veja o mês inteiro" userName={session.profile.full_name || "?"} />
       <div className="animate-fade-in space-y-4 py-3">
+        <EventRequestInbox requests={pendingRequests} />
+
         <div className="flex items-center justify-between">
           <Link href={`/calendario?m=${prev}`} aria-label="Mês anterior" className="inline-flex size-9 items-center justify-center rounded-full hover:bg-muted">
             <ChevronLeft className="size-5" />
@@ -75,6 +80,8 @@ export default async function CalendarioPage({
         <Link href="/escalas" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
           <List className="size-4" /> Ver em lista
         </Link>
+
+        {canSuggest ? <SugerirEventoButton /> : null}
 
         {daysWithEvents.length === 0 ? (
           <p className="px-1 text-sm text-muted-foreground">Nenhum evento neste mês.</p>
@@ -101,7 +108,7 @@ export default async function CalendarioPage({
                         {ev.teams.length > 0 ? (
                           <div className="mt-2 flex flex-wrap gap-1.5">
                             {ev.teams.map((t) => (
-                              <CoverageBadge key={t.teamId} tone={t.tone} label={`${t.name} ${t.assigned}/${t.needed}`} />
+                              <CoverageBadge key={t.teamId} tone={t.tone} label={`${t.name} ${t.confirmed}/${t.needed}`} />
                             ))}
                           </div>
                         ) : null}

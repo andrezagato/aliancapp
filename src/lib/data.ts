@@ -2,7 +2,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import {
   coverageByTeam,
-  coverageTone,
+  confirmTone,
   occupies,
   CONFIRMED,
   type CoverageTone,
@@ -55,13 +55,15 @@ export async function listTeams(): Promise<TeamMeta[]> {
   return data ?? [];
 }
 
-export type TeamWithPositions = TeamMeta & { positions: PositionMeta[] };
+export type TeamWithPositions = TeamMeta & { positions: PositionMeta[]; leaders: string[] };
 
 export async function listTeamsWithPositions(): Promise<TeamWithPositions[]> {
   const supabase = await createClient();
   const { data } = await supabase
     .from("teams")
-    .select("id, name, color, icon, sort_order, positions ( id, team_id, name, sort_order, archived_at )")
+    .select(
+      "id, name, color, icon, sort_order, positions ( id, team_id, name, sort_order, archived_at ), memberships ( role, profile:profiles ( full_name ) )",
+    )
     .is("archived_at", null)
     .order("sort_order");
   return (data ?? []).map((t) => ({
@@ -74,6 +76,9 @@ export async function listTeamsWithPositions(): Promise<TeamWithPositions[]> {
       .filter((p) => !p.archived_at)
       .sort((a, b) => a.sort_order - b.sort_order)
       .map((p) => ({ id: p.id, team_id: p.team_id, name: p.name, sort_order: p.sort_order })),
+    leaders: ((t.memberships ?? []) as { role: string; profile: { full_name: string | null } | null }[])
+      .filter((m) => m.role === "leader" && m.profile?.full_name)
+      .map((m) => m.profile!.full_name as string),
   }));
 }
 
@@ -211,6 +216,7 @@ export type EventListItem = {
   overallTone: CoverageTone;
   neededTotal: number;
   assignedTotal: number;
+  confirmedTotal: number;
 };
 
 type EventRowLite = {
@@ -252,12 +258,14 @@ async function assembleEventList(session: Session, events: EventRowLite[]): Prom
     const teamCov: EventTeamCoverage[] = [];
     let neededTotal = 0;
     let assignedTotal = 0;
+    let confirmedTotal = 0;
     for (const [teamId, cov] of perTeam) {
       if (!canSee(teamId)) continue;
       const meta = teamMeta.get(teamId);
       if (!meta) continue;
       neededTotal += cov.needed;
       assignedTotal += cov.assigned;
+      confirmedTotal += cov.confirmed;
       teamCov.push({
         teamId,
         name: meta.name,
@@ -265,7 +273,7 @@ async function assembleEventList(session: Session, events: EventRowLite[]): Prom
         needed: cov.needed,
         assigned: cov.assigned,
         confirmed: cov.confirmed,
-        tone: cov.tone,
+        tone: confirmTone(cov.needed, cov.confirmed, cov.assigned),
       });
     }
     teamCov.sort((a, b) => (teamMeta.get(a.teamId)?.sort_order ?? 0) - (teamMeta.get(b.teamId)?.sort_order ?? 0));
@@ -279,9 +287,10 @@ async function assembleEventList(session: Session, events: EventRowLite[]): Prom
       responsibleId: ev.responsible_id ?? null,
       responsibleName: ev.responsible?.full_name ?? null,
       teams: teamCov,
-      overallTone: coverageTone(neededTotal, assignedTotal),
+      overallTone: confirmTone(neededTotal, confirmedTotal, assignedTotal),
       neededTotal,
       assignedTotal,
+      confirmedTotal,
     };
   });
 }
@@ -310,6 +319,45 @@ export async function listEventsInRange(
     .lt("starts_at", toIso)
     .order("starts_at", { ascending: true });
   return assembleEventList(session, (events ?? []) as EventRowLite[]);
+}
+
+// =============================================================================
+// PEDIDOS DE EVENTO (líder sugere -> admin aprova)
+// =============================================================================
+export type PendingEventRequest = {
+  id: string;
+  title: string;
+  desiredAt: string | null;
+  location: string | null;
+  note: string | null;
+  requesterName: string;
+};
+
+/** Pedidos de evento aguardando decisão (visível só ao admin, via RLS). */
+export async function listPendingEventRequests(): Promise<PendingEventRequest[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("event_requests")
+    .select(
+      "id, title, desired_at, location, note, requester:profiles!event_requests_requested_by_fkey ( full_name )",
+    )
+    .eq("status", "pendente")
+    .order("created_at", { ascending: true });
+  return ((data ?? []) as {
+    id: string;
+    title: string;
+    desired_at: string | null;
+    location: string | null;
+    note: string | null;
+    requester: { full_name: string } | null;
+  }[]).map((r) => ({
+    id: r.id,
+    title: r.title,
+    desiredAt: r.desired_at,
+    location: r.location,
+    note: r.note,
+    requesterName: r.requester?.full_name || "Alguém",
+  }));
 }
 
 // =============================================================================
@@ -523,7 +571,7 @@ export async function getEventDetail(session: Session, eventId: string): Promise
         needed,
         assigned,
         confirmed,
-        tone: coverageTone(needed, assigned),
+        tone: confirmTone(needed, confirmed, assigned),
         positions: visiblePositions,
       } satisfies DetailTeam;
     })
@@ -802,6 +850,15 @@ export type LeaderHome = {
     positionName: string | null;
     note: string | null;
   }[];
+  resolvedInterests: {
+    id: string;
+    personName: string;
+    teamName: string;
+    status: "atendido" | "arquivado";
+    note: string | null;
+    resolvedNote: string | null;
+    resolvedAt: string | null;
+  }[];
 };
 
 export async function getLeaderHome(session: Session): Promise<LeaderHome> {
@@ -832,15 +889,27 @@ export async function getLeaderHome(session: Session): Promise<LeaderHome> {
   }
 
   let interests: LeaderHome["interests"] = [];
+  let resolvedInterests: LeaderHome["resolvedInterests"] = [];
   if (leadIds.length > 0) {
-    const { data } = await supabase
-      .from("service_interests")
-      .select(
-        "id, team_id, note, status, profile:profiles ( full_name ), team:teams ( name ), position:positions ( name )",
-      )
-      .in("team_id", leadIds)
-      .eq("status", "aberto")
-      .limit(10);
+    const [{ data }, { data: done }] = await Promise.all([
+      supabase
+        .from("service_interests")
+        .select(
+          "id, team_id, note, status, profile:profiles!service_interests_profile_id_fkey ( full_name ), team:teams ( name ), position:positions ( name )",
+        )
+        .in("team_id", leadIds)
+        .eq("status", "aberto")
+        .limit(10),
+      supabase
+        .from("service_interests")
+        .select(
+          "id, status, note, resolved_note, resolved_at, profile:profiles!service_interests_profile_id_fkey ( full_name ), team:teams ( name )",
+        )
+        .in("team_id", leadIds)
+        .neq("status", "aberto")
+        .order("resolved_at", { ascending: false, nullsFirst: false })
+        .limit(10),
+    ]);
     interests = ((data ?? []) as {
       id: string;
       team_id: string;
@@ -856,9 +925,26 @@ export async function getLeaderHome(session: Session): Promise<LeaderHome> {
       positionName: i.position?.name ?? null,
       note: i.note,
     }));
+    resolvedInterests = ((done ?? []) as {
+      id: string;
+      status: "atendido" | "arquivado";
+      note: string | null;
+      resolved_note: string | null;
+      resolved_at: string | null;
+      profile: { full_name: string } | null;
+      team: { name: string } | null;
+    }[]).map((i) => ({
+      id: i.id,
+      personName: i.profile?.full_name || "Alguém",
+      teamName: i.team?.name || "Equipe",
+      status: i.status,
+      note: i.note,
+      resolvedNote: i.resolved_note,
+      resolvedAt: i.resolved_at,
+    }));
   }
 
-  return { events: leaderEvents, openVacancies, awaitingConfirmation, interests };
+  return { events: leaderEvents, openVacancies, awaitingConfirmation, interests, resolvedInterests };
 }
 
 // =============================================================================
