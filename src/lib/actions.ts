@@ -2,8 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { getSession, canManageTeam } from "@/lib/auth";
-import { getEligibleMembers, getEventDetail, type EligibleMember, type DetailTeam } from "@/lib/data";
+import { getSession, canManageTeam, type Session } from "@/lib/auth";
+import { getEligibleMembers, getEventDetail, syncAchievements, type EligibleMember, type DetailTeam } from "@/lib/data";
+import { BADGE_BY_CODE } from "@/lib/achievements";
 import { notify, notifyMany, teamLeaderIds } from "@/lib/notify";
 import { sendEmail, conviteEmail, escaladoEmail, lembreteEmail, siteUrl } from "@/lib/email";
 import { churchDateISO, fmtEventWhen } from "@/lib/format";
@@ -19,6 +20,31 @@ import type {
 
 const ok: ActionResult = { ok: true };
 const fail = (error: string): ActionResult => ({ ok: false, error });
+
+/**
+ * Sincroniza as conquistas do usuário e notifica os desbloqueios novos.
+ * Bônus — nunca derruba a ação principal (best-effort). A guarda de 3 evita
+ * enxurrada no 1º cálculo (backfill), que a própria página Minha Jornada faz.
+ */
+async function notificarConquistas(session: Session): Promise<void> {
+  try {
+    const { newly } = await syncAchievements(session);
+    if (newly.length === 0 || newly.length > 3) return;
+    for (const code of newly) {
+      const b = BADGE_BY_CODE[code];
+      if (!b) continue;
+      await notify({
+        recipientId: session.userId,
+        kind: "conquista",
+        title: "🏆 Nova conquista!",
+        body: `${b.emoji} ${b.title} — ${b.desc}`,
+        link: "/jornada",
+      });
+    }
+  } catch {
+    /* conquistas são bônus */
+  }
+}
 
 // Brasil não tem horário de verão desde 2019 -> offset fixo -03:00.
 // (Quando virar multi-igreja, derivar do timezone da igreja.)
@@ -150,6 +176,7 @@ export async function confirmarEscalacao(assignmentId: string): Promise<ActionRe
       eventId: ca.event_id,
     });
   }
+  await notificarConquistas(session);
   revalidatePath("/inicio");
   revalidatePath("/escalas");
   return ok;
@@ -1273,6 +1300,8 @@ export async function fazerCheckin(assignmentId: string, teamId: string, eventId
     .from("checkins")
     .insert({ assignment_id: assignmentId, checked_by: session.userId });
   if (error && !error.message.includes("duplicate")) return fail(error.message);
+  // Conquistas do próprio (quando o líder marca por outro, a pessoa desbloqueia ao abrir o app).
+  if (isSelf) await notificarConquistas(session);
   revalidatePath(`/escalas/${eventId}`);
   return ok;
 }

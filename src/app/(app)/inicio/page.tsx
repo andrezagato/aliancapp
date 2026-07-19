@@ -31,6 +31,7 @@ import {
   getMyOpenInterests,
   getMyNextResponsibleEvent,
   getMyEventRequests,
+  getTeamCare,
   listPendingEventRequests,
   listTeams,
   listTeamsWithPositions,
@@ -96,6 +97,7 @@ export default async function InicioPage() {
         <SwapInbox items={swaps} />
         <ResponsibleConfirm events={respEvents} />
         <Servir teams={teamsWithPos} interests={myInterests} />
+        <JornadaTeaser />
         <Birthdays />
       </VolunteerHome>
     );
@@ -221,12 +223,13 @@ async function LeaderSection({ hideHeroForEventId }: { hideHeroForEventId: strin
   const nm = m === 12 ? 1 : m + 1;
   const toIso = new Date(`${ny}-${pad(nm)}-01T00:00:00-03:00`).toISOString();
 
-  const [home, mine, monthRaw, myEventRequests, teams] = await Promise.all([
+  const [home, mine, monthRaw, myEventRequests, teams, teamCare] = await Promise.all([
     getLeaderHome(session),
     getMyUpcomingAssignments(session),
     listEventsInRange(session, fromIso, toIso),
     getMyEventRequests(session),
     listTeams(),
+    getTeamCare(session),
   ]);
 
   const monthEvents = monthRaw
@@ -255,6 +258,50 @@ async function LeaderSection({ hideHeroForEventId }: { hideHeroForEventId: strin
           hint="Toque num dia pra ver a escala ou pedir um evento."
         />
       </section>
+
+      {teamCare.length > 0 ? (
+        <details className="rounded-2xl border border-border bg-card">
+          <summary className="cursor-pointer p-4 text-base font-semibold">Cuidado com a equipe</summary>
+          <div className="divide-y divide-border border-t border-border">
+            {teamCare.map((tc) => {
+              const top = tc.members.reduce((mx, m) => Math.max(mx, m.served90), 0);
+              return (
+                <div key={tc.teamName} className="p-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="font-semibold">{tc.teamName}</p>
+                    {tc.servedThisMonth > 0 ? (
+                      <span className="text-[12px] font-semibold text-success">
+                        {tc.servedThisMonth} presenças este mês 🎉
+                      </span>
+                    ) : null}
+                  </div>
+                  <ul className="mt-2 space-y-1.5">
+                    {tc.members.map((mem) => {
+                      const inactive =
+                        !mem.lastServedAt || Date.now() - new Date(mem.lastServedAt).getTime() > 60 * 864e5;
+                      const tag =
+                        mem.served90 >= 4 && mem.served90 === top
+                          ? { t: "💪 carregando bastante", c: "text-primary" }
+                          : inactive
+                            ? { t: "😴 dá um alô", c: "text-warning" }
+                            : null;
+                      return (
+                        <li key={mem.personName} className="flex items-center justify-between gap-2 text-sm">
+                          <span className="min-w-0 flex-1 truncate">{mem.personName}</span>
+                          {tag ? <span className={cn("shrink-0 text-[12px] font-semibold", tag.c)}>{tag.t}</span> : null}
+                          <span className="shrink-0 text-[12px] tabular-nums text-muted-foreground">
+                            {mem.served90}× em 90d
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              );
+            })}
+          </div>
+        </details>
+      ) : null}
 
       {home.interests.length > 0 ? (
         <section>
@@ -513,6 +560,22 @@ function Servir({ teams, interests }: { teams: TeamWithPositions[]; interests: M
         </Card>
       ) : null}
     </section>
+  );
+}
+
+function JornadaTeaser() {
+  return (
+    <Link
+      href="/jornada"
+      className="press flex items-center gap-3 rounded-2xl border border-accent/40 bg-gradient-to-br from-accent/10 to-accent/20 p-4"
+    >
+      <span className="grid size-10 shrink-0 place-items-center rounded-full bg-accent/25 text-xl">🏆</span>
+      <div className="min-w-0 flex-1">
+        <p className="font-display text-[15px] font-bold">Minha Jornada</p>
+        <p className="text-[13px] text-muted-foreground">Veja suas conquistas servindo</p>
+      </div>
+      <ChevronRight className="size-5 shrink-0 text-muted-foreground" />
+    </Link>
   );
 }
 

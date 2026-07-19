@@ -9,6 +9,7 @@ import {
   type ReqRow,
   type AssignRow,
 } from "@/lib/coverage";
+import { BADGES, earnedCodes, type JourneyMetrics } from "@/lib/achievements";
 import {
   type Session,
   memberTeamIds,
@@ -423,6 +424,240 @@ export async function getResolvedInterests(session: Session): Promise<ResolvedIn
     resolvedNote: i.resolved_note,
     resolvedAt: i.resolved_at,
   }));
+}
+
+// =============================================================================
+// MINHA JORNADA (conquistas do voluntário)
+// =============================================================================
+const SIX_HOURS_MS = 6 * 60 * 60 * 1000;
+
+async function computeJourneyMetrics(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  active: boolean,
+): Promise<JourneyMetrics> {
+  const nowIso = new Date().toISOString();
+
+  const { data: aRows } = await supabase
+    .from("assignments")
+    .select("id, status, team_id, created_at, responded_at, events!inner ( starts_at )")
+    .eq("profile_id", userId);
+  const rows = (aRows ?? []) as {
+    id: string;
+    status: AssignmentStatus;
+    team_id: string;
+    created_at: string;
+    responded_at: string | null;
+    events: { starts_at: string } | null;
+  }[];
+
+  const past = rows
+    .filter((r) => r.events && r.events.starts_at < nowIso)
+    .sort((a, b) => (a.events!.starts_at < b.events!.starts_at ? -1 : 1));
+  const isServed = (s: AssignmentStatus) => s === "confirmado" || s === "presente";
+
+  const servedRows = past.filter((r) => isServed(r.status));
+  const servido = servedRows.length;
+  const ministerios = new Set(servedRows.map((r) => r.team_id)).size;
+
+  // Sequência: cultos passados seguidos servidos (zera ao recusar).
+  let streak = 0;
+  for (const r of past) streak = isServed(r.status) ? streak + 1 : 0;
+
+  // Confirmações rápidas (confirmou em < 6h de ser escalado).
+  const rapida = rows.filter(
+    (r) =>
+      r.status === "confirmado" &&
+      r.responded_at &&
+      new Date(r.responded_at).getTime() - new Date(r.created_at).getTime() < SIX_HOURS_MS,
+  ).length;
+
+  // Meses de VOLUNTARIADO (desde o 1º culto servido).
+  let meses = 0;
+  if (servedRows.length > 0) {
+    const first = new Date(servedRows[0].events!.starts_at).getTime();
+    meses = Math.max(0, Math.floor((Date.now() - first) / (30 * 24 * 60 * 60 * 1000)));
+  }
+
+  // Check-ins.
+  let checkin = 0;
+  const ids = rows.map((r) => r.id);
+  if (ids.length > 0) {
+    const { data: c } = await supabase.from("checkins").select("assignment_id").in("assignment_id", ids);
+    checkin = (c ?? []).length;
+  }
+
+  // "Salvou o culto": aceitou ser substituto numa troca.
+  const { data: subs } = await supabase
+    .from("swap_requests")
+    .select("id")
+    .eq("suggested_profile_id", userId)
+    .not("substitute_accepted_at", "is", null);
+  const salvou = (subs ?? []).length;
+
+  return {
+    cadastro: active ? 1 : 0,
+    escalado: rows.length,
+    servido,
+    checkin,
+    streak,
+    ministerios,
+    salvou,
+    rapida,
+    meses,
+  };
+}
+
+export type JourneyBadge = {
+  code: string;
+  emoji: string;
+  title: string;
+  desc: string;
+  unlocked: boolean;
+  unlockedAt: string | null;
+  current: number;
+  target: number;
+};
+
+export type Journey = {
+  metrics: JourneyMetrics;
+  badges: JourneyBadge[];
+  unlockedCount: number;
+};
+
+/**
+ * Garante que as conquistas merecidas estão gravadas (com o próprio login, sob
+ * RLS) e devolve os códigos recém-inseridos. Idempotente.
+ */
+export async function syncAchievements(session: Session): Promise<{ metrics: JourneyMetrics; newly: string[] }> {
+  const supabase = await createClient();
+  const active = session.profile.status === "ativo";
+  const metrics = await computeJourneyMetrics(supabase, session.userId, active);
+  const earned = earnedCodes(metrics);
+
+  const { data: existingRows } = await supabase
+    .from("achievements")
+    .select("code")
+    .eq("profile_id", session.userId);
+  const existing = new Set((existingRows ?? []).map((r) => r.code));
+  const missing = earned.filter((c) => !existing.has(c));
+  if (missing.length > 0) {
+    await supabase
+      .from("achievements")
+      .upsert(
+        missing.map((code) => ({ profile_id: session.userId, code })),
+        { onConflict: "profile_id,code", ignoreDuplicates: true },
+      );
+  }
+  return { metrics, newly: missing };
+}
+
+export async function getMyJourney(session: Session): Promise<Journey> {
+  const { metrics } = await syncAchievements(session);
+  const supabase = await createClient();
+  const { data: rows } = await supabase
+    .from("achievements")
+    .select("code, unlocked_at")
+    .eq("profile_id", session.userId);
+  const unlockedAt = new Map((rows ?? []).map((r) => [r.code as string, r.unlocked_at as string]));
+
+  const badges: JourneyBadge[] = BADGES.map((b) => ({
+    code: b.code,
+    emoji: b.emoji,
+    title: b.title,
+    desc: b.desc,
+    unlocked: unlockedAt.has(b.code),
+    unlockedAt: unlockedAt.get(b.code) ?? null,
+    current: metrics[b.metric] ?? 0,
+    target: b.target,
+  }));
+  badges.sort((a, b) => {
+    if (a.unlocked !== b.unlocked) return a.unlocked ? -1 : 1;
+    if (a.unlocked && b.unlocked) return (b.unlockedAt ?? "").localeCompare(a.unlockedAt ?? "");
+    return b.current / b.target - a.current / a.target;
+  });
+
+  return { metrics, badges, unlockedCount: badges.filter((x) => x.unlocked).length };
+}
+
+// =============================================================================
+// CUIDADO COM A EQUIPE (visão do líder — quem carrega muito / sumiu / celebra)
+// =============================================================================
+export type TeamCareMember = { personName: string; served90: number; lastServedAt: string | null };
+export type TeamCare = { teamName: string; members: TeamCareMember[]; servedThisMonth: number };
+
+export async function getTeamCare(session: Session): Promise<TeamCare[]> {
+  const leadIds = session.profile.teams.filter((t) => t.role === "leader").map((t) => t.id);
+  if (leadIds.length === 0) return [];
+  const supabase = await createClient();
+
+  const nowMs = Date.now();
+  const since = new Date(nowMs - 120 * 24 * 60 * 60 * 1000).toISOString();
+  const nowIso = new Date(nowMs).toISOString();
+  const ninetyAgoMs = nowMs - 90 * 24 * 60 * 60 * 1000;
+  const monthStartIso = `${churchDateISO(nowIso).slice(0, 7)}-01`;
+
+  const [{ data: memRows }, { data: asgRows }] = await Promise.all([
+    supabase
+      .from("memberships")
+      .select("team_id, profile:profiles ( id, full_name ), team:teams ( name )")
+      .in("team_id", leadIds),
+    supabase
+      .from("assignments")
+      .select("profile_id, team_id, status, events!inner ( starts_at )")
+      .in("team_id", leadIds)
+      .in("status", ["confirmado", "presente"])
+      .gte("events.starts_at", since)
+      .lt("events.starts_at", nowIso),
+  ]);
+
+  const members = (memRows ?? []) as {
+    team_id: string;
+    profile: { id: string; full_name: string | null } | null;
+    team: { name: string } | null;
+  }[];
+  const asg = (asgRows ?? []) as {
+    profile_id: string | null;
+    team_id: string;
+    events: { starts_at: string } | null;
+  }[];
+
+  const byTeam = new Map<string, TeamCare>();
+  const key = (teamId: string, profileId: string) => `${teamId}:${profileId}`;
+  const stat = new Map<string, { served90: number; last: string | null }>();
+  const monthByTeam = new Map<string, number>();
+
+  for (const a of asg) {
+    if (!a.profile_id || !a.events) continue;
+    const startsAt = a.events.starts_at;
+    const k = key(a.team_id, a.profile_id);
+    const s = stat.get(k) ?? { served90: 0, last: null };
+    if (new Date(startsAt).getTime() >= ninetyAgoMs) s.served90 += 1;
+    if (!s.last || startsAt > s.last) s.last = startsAt;
+    stat.set(k, s);
+    if (churchDateISO(startsAt) >= monthStartIso) monthByTeam.set(a.team_id, (monthByTeam.get(a.team_id) ?? 0) + 1);
+  }
+
+  for (const m of members) {
+    if (!m.profile || !m.team) continue;
+    const care = byTeam.get(m.team_id) ?? {
+      teamName: m.team.name,
+      members: [],
+      servedThisMonth: monthByTeam.get(m.team_id) ?? 0,
+    };
+    const s = stat.get(key(m.team_id, m.profile.id)) ?? { served90: 0, last: null };
+    care.members.push({
+      personName: m.profile.full_name || "Alguém",
+      served90: s.served90,
+      lastServedAt: s.last,
+    });
+    byTeam.set(m.team_id, care);
+  }
+
+  for (const care of byTeam.values()) {
+    care.members.sort((a, b) => b.served90 - a.served90 || (b.lastServedAt ?? "").localeCompare(a.lastServedAt ?? ""));
+  }
+  return [...byTeam.values()];
 }
 
 // =============================================================================

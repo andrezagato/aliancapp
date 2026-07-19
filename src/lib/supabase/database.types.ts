@@ -14,6 +14,35 @@ export type Database = {
   }
   public: {
     Tables: {
+      achievements: {
+        Row: {
+          code: string
+          id: string
+          profile_id: string
+          unlocked_at: string
+        }
+        Insert: {
+          code: string
+          id?: string
+          profile_id: string
+          unlocked_at?: string
+        }
+        Update: {
+          code?: string
+          id?: string
+          profile_id?: string
+          unlocked_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "achievements_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       assignments: {
         Row: {
           assigned_by: string | null
@@ -1280,6 +1309,7 @@ export type Database = {
         | "cobertura"
         | "interesse_resolvido"
         | "evento_resolvido"
+        | "conquista"
       profile_status: "pendente" | "ativo"
       requirement_status: "needed" | "not_applicable"
       swap_status: "pendente" | "aprovada" | "recusada"
@@ -1441,6 +1471,7 @@ export const Constants = {
         "cobertura",
         "interesse_resolvido",
         "evento_resolvido",
+        "conquista",
       ],
       profile_status: ["pendente", "ativo"],
       requirement_status: ["needed", "not_applicable"],

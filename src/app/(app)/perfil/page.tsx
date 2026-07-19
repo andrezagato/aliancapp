@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Mail, Phone, Cake, History, Bell, CalendarOff, ChevronRight } from "lucide-react";
+import { Mail, Phone, Cake, History, Bell, CalendarOff, ChevronRight, Trophy } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar } from "@/components/ui/avatar";
 import { SignOutButton } from "@/components/sign-out-button";
@@ -101,6 +101,7 @@ export default async function PerfilPage() {
               action={atualizarTelefone}
             />
           </li>
+          <ProfileRow href="/jornada" icon={<Trophy className="size-[18px]" />} tone="accent" label="Minha Jornada" />
           <ProfileRow href="/historico" icon={<History className="size-[18px]" />} tone="primary" label="Histórico de escalas" />
           <ProfileRow href="/notificacoes" icon={<Bell className="size-[18px]" />} tone="accent" label="Notificações" />
           <ProfileRow
