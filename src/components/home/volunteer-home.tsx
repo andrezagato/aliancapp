@@ -175,24 +175,28 @@ export function VolunteerHome({
       <div aria-hidden style={{ height: "calc(env(safe-area-inset-top) + 5rem)" }} />
 
       <PullToRefresh>
-        <div className="space-y-4">
+        <div className="space-y-3">
           <PendingInviteBanner pending={pending} onRespond={openRespond} />
 
           {nothing ? <EmptyCard /> : null}
           {today ? (
-            <TodayCard a={today} onConfirm={() => confirm(today)} onCancel={() => openRespond(today)} onCheckin={() => checkin(today)} />
+            <div className="animate-fade-up" style={{ animationDelay: "50ms" }}>
+              <TodayCard a={today} onConfirm={() => confirm(today)} onCancel={() => openRespond(today)} onCheckin={() => checkin(today)} />
+            </div>
           ) : null}
           {hero ? (
-            <NextScheduleHero a={hero} onConfirm={() => confirm(hero)} onCancel={() => openRespond(hero)} onOpen={() => open(hero.eventId)} />
+            <div className="animate-fade-up" style={{ animationDelay: "100ms" }}>
+              <NextScheduleHero a={hero} onConfirm={() => confirm(hero)} onCancel={() => openRespond(hero)} onOpen={() => open(hero.eventId)} />
+            </div>
           ) : null}
 
           {list.length > 0 ? (
-            <section>
+            <section className="animate-fade-up" style={{ animationDelay: "150ms" }}>
               <div className="flex items-baseline justify-between px-1 pb-1.5">
                 <h3 className="font-display text-lg font-bold text-foreground">Suas escalas</h3>
                 <span className="text-xs font-semibold text-muted-foreground">Arraste p/ responder</span>
               </div>
-              <div className="space-y-2.5">
+              <div className="space-y-2">
                 {list.map((a) => (
                   <SwipeCard
                     key={a.assignmentId}
