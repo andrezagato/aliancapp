@@ -356,10 +356,11 @@ export function RundownGrid({
         </p>
       ) : (
         <ol className="flex flex-col gap-2">
-          {rows.map(({ it, startMs, endMs, status }) => {
+          {rows.map(({ it, startMs, endMs, status }, idx) => {
             const color = colorOf(it);
             const done = status === "done";
             const live = status === "live";
+            const last = idx === rows.length - 1;
             const resizingThis = drag?.mode === "resize" && drag.id === it.id;
             const reorderingThis = drag?.mode === "reorder" && drag.id === it.id;
             const durMs = it.durationMin * 60000;
@@ -374,120 +375,140 @@ export function RundownGrid({
                   if (el) itemRefs.current.set(it.id, el);
                   else itemRefs.current.delete(it.id);
                 }}
-                style={{ minHeight: heightOf(it.durationMin) }}
-                onClick={() => canEdit && !drag && setEditing(it)}
-                className={cn(
-                  "relative flex select-none items-stretch overflow-hidden rounded-2xl border bg-card transition-[box-shadow,transform,opacity,background-color]",
-                  canEdit && "cursor-pointer",
-                  done && "opacity-55",
-                  live && !liveRed && "border-primary shadow-[0_0_0_2px_hsl(var(--primary))]",
-                  liveRed && "border-red-500 bg-red-600/5 shadow-[0_0_0_2px_#ef4444]",
-                  !live && "border-border",
-                  reorderingThis && "z-10 scale-[1.02] opacity-90 shadow-lift",
-                )}
+                className="flex select-none items-stretch"
               >
-                {/* Faixa de cor */}
-                <span className="w-1.5 shrink-0" style={{ backgroundColor: liveRed ? "#ef4444" : color }} aria-hidden />
-
-                {/* Tick de "feito" */}
-                {canEdit ? (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleDone(it);
-                    }}
-                    aria-label={done ? "Desmarcar feito" : "Marcar feito"}
-                    className={cn(
-                      "my-3 ml-2.5 grid size-7 shrink-0 place-items-center self-start rounded-full border-2 transition-colors",
-                      done ? "border-success bg-success text-white" : live ? "border-primary text-primary" : "border-border text-transparent",
-                    )}
-                  >
-                    <Check className="size-4" strokeWidth={3.5} />
-                  </button>
-                ) : (
+                {/* Régua: horário de início */}
+                <div className="flex w-[46px] shrink-0 flex-col items-end pr-1 pt-2.5 text-right">
                   <span
                     className={cn(
-                      "my-3 ml-2.5 grid size-7 shrink-0 place-items-center self-start rounded-full",
-                      done ? "bg-success text-white" : live ? "border-2 border-primary" : "border-2 border-border",
+                      "text-[13px] font-bold leading-none tabular-nums",
+                      done ? "text-muted-foreground line-through" : liveRed ? "text-red-600" : live ? "text-primary" : "text-foreground",
                     )}
                   >
-                    {done ? <Check className="size-4" strokeWidth={3.5} /> : null}
+                    {fmt(startMs)}
                   </span>
-                )}
-
-                {/* Contadores + textos */}
-                <div className="my-2.5 ml-2.5 min-w-0 flex-1 pr-1">
-                  {live || done ? (
-                    <div className="flex items-end gap-4">
-                      <Stat label="início" value={fmt(startMs)} strike={done} />
-                      <Stat
-                        label="corrido"
-                        value={clock(elapsedMs)}
-                        big={live}
-                        className={live ? HEAT_TEXT[h] : "text-muted-foreground"}
-                      />
-                      <Stat
-                        label="passou"
-                        value={overMs > 0 ? `+${clock(overMs)}` : "0:00"}
-                        big={live}
-                        className={overMs > 0 ? "text-red-600" : "text-muted-foreground"}
-                      />
-                    </div>
-                  ) : (
-                    <div className="flex items-end gap-4">
-                      <Stat label="início" value={fmt(startMs)} />
-                      <Stat label="duração" value={`${it.durationMin} min`} className="text-muted-foreground" />
-                    </div>
-                  )}
-                  <p className={cn("mt-1.5 font-semibold leading-tight", done && "line-through")}>{it.title}</p>
-                  <p className="text-[12px] text-muted-foreground">
-                    {it.kind}
-                    {it.responsible ? ` · ${it.responsible}` : ""}
-                  </p>
-                  {it.note ? <p className="mt-0.5 text-[13px] text-muted-foreground">{it.note}</p> : null}
-                  {it.link ? (
-                    <a
-                      href={it.link}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                      className="mt-0.5 inline-flex items-center gap-1 text-[13px] font-semibold text-primary"
-                    >
-                      <ExternalLink className="size-3.5" /> Abrir link
-                    </a>
-                  ) : null}
+                  {live ? <span className="mt-1 text-[9px] font-extrabold uppercase tracking-wide text-primary">agora</span> : null}
                 </div>
 
-                {/* Alça de reordenar */}
-                {canEdit ? (
-                  <button
-                    onPointerDown={(e) => beginReorder(e, it)}
-                    onClick={(e) => e.stopPropagation()}
-                    aria-label="Arrastar pra reordenar"
-                    style={{ touchAction: "none" }}
-                    className="my-2 mr-1 grid w-8 shrink-0 cursor-grab place-items-center self-center rounded-lg text-muted-foreground/60 hover:bg-muted active:cursor-grabbing"
-                  >
-                    <GripVertical className="size-5" />
-                  </button>
-                ) : null}
+                {/* Trilha do tempo (linha + nó) */}
+                <div className="relative w-4 shrink-0" aria-hidden>
+                  <span className={cn("absolute left-1/2 top-0 w-px -translate-x-1/2 bg-border", last ? "bottom-2.5" : "-bottom-2")} />
+                  <span
+                    className="absolute left-1/2 top-2.5 size-2.5 -translate-x-1/2 rounded-full ring-2 ring-background"
+                    style={{ backgroundColor: liveRed ? "#ef4444" : color }}
+                  />
+                </div>
 
-                {/* Alça de redimensionar (borda de baixo) */}
-                {canEdit ? (
-                  <div
-                    onPointerDown={(e) => beginResize(e, it)}
-                    onClick={(e) => e.stopPropagation()}
-                    style={{ touchAction: "none" }}
-                    className="absolute inset-x-0 bottom-0 flex h-4 cursor-ns-resize items-center justify-center"
-                    aria-label="Arrastar pra mudar a duração"
-                  >
-                    <span className="h-1 w-10 rounded-full bg-border" />
-                    {resizingThis ? (
-                      <span className="absolute bottom-1 right-2 rounded-full bg-foreground px-2 py-0.5 text-[11px] font-bold text-background tabular-nums">
-                        {it.durationMin} min
-                      </span>
+                {/* Card */}
+                <div
+                  style={{ minHeight: heightOf(it.durationMin) }}
+                  onClick={() => canEdit && !drag && setEditing(it)}
+                  className={cn(
+                    "relative flex min-w-0 flex-1 items-stretch overflow-hidden rounded-2xl border bg-card transition-[box-shadow,transform,opacity,background-color]",
+                    canEdit && "cursor-pointer",
+                    done && "opacity-55",
+                    live && !liveRed && "border-primary shadow-[0_0_0_2px_hsl(var(--primary))]",
+                    liveRed && "border-red-500 bg-red-600/5 shadow-[0_0_0_2px_#ef4444]",
+                    !live && "border-border",
+                    reorderingThis && "z-10 scale-[1.02] opacity-90 shadow-lift",
+                  )}
+                >
+                  {/* Tick de "feito" */}
+                  {canEdit ? (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleDone(it);
+                      }}
+                      aria-label={done ? "Desmarcar feito" : "Marcar feito"}
+                      className={cn(
+                        "my-3 ml-3 grid size-7 shrink-0 place-items-center self-start rounded-full border-2 transition-colors",
+                        done ? "border-success bg-success text-white" : live ? "border-primary text-primary" : "border-border text-transparent",
+                      )}
+                    >
+                      <Check className="size-4" strokeWidth={3.5} />
+                    </button>
+                  ) : (
+                    <span
+                      className={cn(
+                        "my-3 ml-3 grid size-7 shrink-0 place-items-center self-start rounded-full",
+                        done ? "bg-success text-white" : live ? "border-2 border-primary" : "border-2 border-border",
+                      )}
+                    >
+                      {done ? <Check className="size-4" strokeWidth={3.5} /> : null}
+                    </span>
+                  )}
+
+                  {/* Contadores + textos */}
+                  <div className="my-2.5 ml-3 min-w-0 flex-1 pr-1">
+                    {live || done ? (
+                      <div className="flex items-end gap-5">
+                        <Stat
+                          label="corrido"
+                          value={clock(elapsedMs)}
+                          big={live}
+                          className={live ? HEAT_TEXT[h] : "text-muted-foreground"}
+                        />
+                        <Stat
+                          label="passou"
+                          value={overMs > 0 ? `+${clock(overMs)}` : "0:00"}
+                          big={live}
+                          className={overMs > 0 ? "text-red-600" : "text-muted-foreground"}
+                        />
+                      </div>
+                    ) : (
+                      <Stat label="duração" value={`${it.durationMin} min`} className="text-muted-foreground" />
+                    )}
+                    <p className={cn("mt-1.5 font-semibold leading-tight", done && "line-through")}>{it.title}</p>
+                    <p className="text-[12px] text-muted-foreground">
+                      {it.kind}
+                      {it.responsible ? ` · ${it.responsible}` : ""}
+                    </p>
+                    {it.note ? <p className="mt-0.5 text-[13px] text-muted-foreground">{it.note}</p> : null}
+                    {it.link ? (
+                      <a
+                        href={it.link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="mt-0.5 inline-flex items-center gap-1 text-[13px] font-semibold text-primary"
+                      >
+                        <ExternalLink className="size-3.5" /> Abrir link
+                      </a>
                     ) : null}
                   </div>
-                ) : null}
+
+                  {/* Alça de reordenar */}
+                  {canEdit ? (
+                    <button
+                      onPointerDown={(e) => beginReorder(e, it)}
+                      onClick={(e) => e.stopPropagation()}
+                      aria-label="Arrastar pra reordenar"
+                      style={{ touchAction: "none" }}
+                      className="my-2 mr-1 grid w-8 shrink-0 cursor-grab place-items-center self-center rounded-lg text-muted-foreground/60 hover:bg-muted active:cursor-grabbing"
+                    >
+                      <GripVertical className="size-5" />
+                    </button>
+                  ) : null}
+
+                  {/* Alça de redimensionar (borda de baixo) */}
+                  {canEdit ? (
+                    <div
+                      onPointerDown={(e) => beginResize(e, it)}
+                      onClick={(e) => e.stopPropagation()}
+                      style={{ touchAction: "none" }}
+                      className="absolute inset-x-0 bottom-0 flex h-4 cursor-ns-resize items-center justify-center"
+                      aria-label="Arrastar pra mudar a duração"
+                    >
+                      <span className="h-1 w-10 rounded-full bg-border" />
+                      {resizingThis ? (
+                        <span className="absolute bottom-1 right-2 rounded-full bg-foreground px-2 py-0.5 text-[11px] font-bold text-background tabular-nums">
+                          {it.durationMin} min
+                        </span>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
               </li>
             );
           })}
