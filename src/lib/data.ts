@@ -874,11 +874,15 @@ export async function getEventRundown(eventId: string): Promise<RundownItem[]> {
   }));
 }
 
-/** Hora real em que o culto começou (âncora do modo ao vivo do cronograma). */
-export async function getRundownStartedAt(eventId: string): Promise<string | null> {
+/** Estado do modo ao vivo do cronograma: início real e encerramento. */
+export async function getRundownState(eventId: string): Promise<{ startedAt: string | null; endedAt: string | null }> {
   const supabase = await createClient();
-  const { data } = await supabase.from("events").select("rundown_started_at").eq("id", eventId).maybeSingle();
-  return data?.rundown_started_at ?? null;
+  const { data } = await supabase
+    .from("events")
+    .select("rundown_started_at, rundown_ended_at")
+    .eq("id", eventId)
+    .maybeSingle();
+  return { startedAt: data?.rundown_started_at ?? null, endedAt: data?.rundown_ended_at ?? null };
 }
 
 export type RundownKind = { id: string; label: string; color: string };

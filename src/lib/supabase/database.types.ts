@@ -586,6 +586,7 @@ export type Database = {
           longitude: number | null
           notes: string | null
           responsible_id: string | null
+          rundown_ended_at: string | null
           rundown_started_at: string | null
           series_id: string | null
           starts_at: string
@@ -606,6 +607,7 @@ export type Database = {
           longitude?: number | null
           notes?: string | null
           responsible_id?: string | null
+          rundown_ended_at?: string | null
           rundown_started_at?: string | null
           series_id?: string | null
           starts_at: string
@@ -626,6 +628,7 @@ export type Database = {
           longitude?: number | null
           notes?: string | null
           responsible_id?: string | null
+          rundown_ended_at?: string | null
           rundown_started_at?: string | null
           series_id?: string | null
           starts_at?: string

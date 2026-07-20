@@ -58,7 +58,7 @@ export default async function NotificacoesPage() {
 
   return (
     <div className="pb-4">
-      <header className="sticky top-0 z-30 -mx-5 border-b border-border/70 bg-background/90 pt-safe backdrop-blur">
+      <header className="sticky top-0 z-30 -mx-4 border-b border-border/70 bg-background/90 pt-safe backdrop-blur">
         <div className="flex items-center gap-1 px-5 pb-3 pt-2">
           <Link
             href="/inicio"

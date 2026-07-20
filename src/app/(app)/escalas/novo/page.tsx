@@ -13,7 +13,7 @@ export default async function NovoEventoPage() {
   const [teams, templates] = await Promise.all([listTeamsWithPositions(), listTemplates()]);
 
   return (
-    <div className="animate-fade-in space-y-4 py-3">
+    <div className="animate-fade-in space-y-3 py-3">
       <Link href="/escalas" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="size-4" /> Escalas
       </Link>

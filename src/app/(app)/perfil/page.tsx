@@ -19,7 +19,7 @@ export default async function PerfilPage() {
   const hasContact = !!(p.email || p.phone || p.birth_date);
 
   return (
-    <div className="space-y-4 pb-4 pt-safe">
+    <div className="space-y-3 pb-4 pt-safe">
       {/* Cabeçalho vinho */}
       <div className="relative overflow-hidden rounded-[24px] bg-gradient-to-br from-[hsl(349_72%_28%)] to-[hsl(349_69%_15%)] p-6 text-center text-primary-foreground shadow-lift">
         <div

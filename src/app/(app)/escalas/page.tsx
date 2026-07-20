@@ -17,7 +17,7 @@ export default async function EscalasPage() {
   return (
     <>
       <TopBar title="Escalas" subtitle="Veja o que vem por aí" userName={session.profile.full_name || "?"} />
-      <div className="animate-fade-in space-y-4 py-3">
+      <div className="animate-fade-in space-y-3 py-3">
         <Link href="/calendario" className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline">
           <CalendarDays className="size-4" /> Ver o mês inteiro
         </Link>

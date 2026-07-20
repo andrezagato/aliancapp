@@ -4,7 +4,7 @@ import { TopBar } from "@/components/app-shell/top-bar";
 import { Card } from "@/components/ui/card";
 import { RundownGrid } from "@/components/rundown-grid";
 import { getSession } from "@/lib/auth";
-import { listUpcomingEvents, getEventRundown, listRundownKinds, getRundownStartedAt } from "@/lib/data";
+import { listUpcomingEvents, getEventRundown, listRundownKinds, getRundownState } from "@/lib/data";
 import { fmtEventWhen } from "@/lib/format";
 
 export default async function CronogramaPage() {
@@ -13,8 +13,8 @@ export default async function CronogramaPage() {
 
   const upcoming = await listUpcomingEvents(session, 6);
   const ev = upcoming[0] ?? null;
-  const [rundown, kinds, startedAt] = ev
-    ? await Promise.all([getEventRundown(ev.id), listRundownKinds(), getRundownStartedAt(ev.id)])
+  const [rundown, kinds, state] = ev
+    ? await Promise.all([getEventRundown(ev.id), listRundownKinds(), getRundownState(ev.id)])
     : [[], await listRundownKinds(), null];
   const leadIds = session.profile.teams.filter((t) => t.role === "leader").map((t) => t.id);
   const canEdit = ev
@@ -24,7 +24,7 @@ export default async function CronogramaPage() {
   return (
     <>
       <TopBar title="Cronograma" subtitle="A ordem do próximo culto" userName={session.profile.full_name || "?"} />
-      <div className="animate-fade-in space-y-4 py-3">
+      <div className="animate-fade-in space-y-3 py-3">
         {ev ? (
           <>
             {/* Herói do próximo culto */}
@@ -50,7 +50,8 @@ export default async function CronogramaPage() {
             <RundownGrid
               eventId={ev.id}
               startsAt={ev.starts_at}
-              startedAt={startedAt}
+              startedAt={state?.startedAt ?? null}
+              endedAt={state?.endedAt ?? null}
               items={rundown}
               kinds={kinds}
               canEdit={canEdit}

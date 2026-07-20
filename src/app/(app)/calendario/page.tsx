@@ -63,7 +63,7 @@ export default async function CalendarioPage({
   return (
     <>
       <TopBar title="Calendário" subtitle="Veja o mês inteiro" userName={session.profile.full_name || "?"} />
-      <div className="animate-fade-in space-y-4 py-3">
+      <div className="animate-fade-in space-y-3 py-3">
         <EventRequestInbox requests={pendingRequests} />
 
         <div className="flex items-center justify-between">
@@ -95,7 +95,7 @@ export default async function CalendarioPage({
         {daysWithEvents.length === 0 ? (
           <p className="px-1 text-sm text-muted-foreground">Nenhum evento neste mês.</p>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-3">
             {daysWithEvents.map((day) => (
               <section key={day} id={`d-${day}`} className="scroll-mt-20">
                 <h3 className="mb-2 px-1 text-sm font-semibold text-muted-foreground">

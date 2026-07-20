@@ -14,7 +14,7 @@ export default async function HistoricoPage() {
   const events = await listRecentHistory();
 
   return (
-    <div className="animate-fade-in space-y-4 py-3">
+    <div className="animate-fade-in space-y-3 py-3">
       <Link href="/perfil" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="size-4" /> Perfil
       </Link>
@@ -30,7 +30,7 @@ export default async function HistoricoPage() {
           description="Depois dos primeiros cultos, aqui fica o registro de quem serviu em cada função — útil pro rodízio."
         />
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-3">
           {events.map((ev) => (
             <section key={ev.eventId}>
               <h3 className="mb-2 px-1 text-sm font-semibold">

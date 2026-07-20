@@ -9,6 +9,7 @@ import {
   Check,
   Play,
   RotateCcw,
+  Flag,
   ExternalLink,
   Settings2,
   X,
@@ -24,6 +25,7 @@ import {
   ajustarDuracaoBloco,
   iniciarCronograma,
   reiniciarCronograma,
+  encerrarCronograma,
   marcarBlocoFeito,
   adicionarTipoBloco,
   removerTipoBloco,
@@ -127,6 +129,7 @@ export function RundownGrid({
   eventId,
   startsAt,
   startedAt,
+  endedAt,
   items,
   kinds,
   canEdit,
@@ -134,6 +137,7 @@ export function RundownGrid({
   eventId: string;
   startsAt: string;
   startedAt: string | null;
+  endedAt: string | null;
   items: RundownItem[];
   kinds: RundownKind[];
   canEdit: boolean;
@@ -144,6 +148,7 @@ export function RundownGrid({
 
   const [list, setList] = useState(items);
   const [started, setStarted] = useState<string | null>(startedAt);
+  const [ended, setEnded] = useState<string | null>(endedAt);
   const [drag, setDrag] = useState<Drag>(null);
   const [now, setNow] = useState<number | null>(null);
   const [editing, setEditing] = useState<RundownItem | "new" | null>(null);
@@ -151,6 +156,7 @@ export function RundownGrid({
 
   useEffect(() => setList(items), [items]);
   useEffect(() => setStarted(startedAt), [startedAt]);
+  useEffect(() => setEnded(endedAt), [endedAt]);
 
   // Relógio ao vivo (só depois de montar, pra não quebrar a hidratação).
   useEffect(() => {
@@ -172,9 +178,13 @@ export function RundownGrid({
 
   // ---- Projeção de horários (o coração do "ao vivo") ----------------------
   const startedMs = started ? new Date(started).getTime() : null;
+  const endedMs = ended ? new Date(ended).getTime() : null;
   const plannedStartMs = new Date(startsAt).getTime();
-  const liveIdx = list.findIndex((it) => !it.doneAt);
+  // Encerrado → congela em endedMs (nada "ao vivo"); senão segue o relógio.
+  const liveNow = endedMs ?? now;
+  const liveIdx = startedMs != null && endedMs == null ? list.findIndex((it) => !it.doneAt) : -1;
   const totalMin = list.reduce((s, i) => s + i.durationMin, 0);
+  const allDone = list.length > 0 && list.every((it) => it.doneAt);
 
   let cursor = startedMs ?? plannedStartMs;
   const rows: Row[] = list.map((it, i) => {
@@ -185,10 +195,10 @@ export function RundownGrid({
     if (it.doneAt) {
       endMs = new Date(it.doneAt).getTime();
       status = "done";
-    } else if (startedMs != null && i === liveIdx) {
+    } else if (i === liveIdx) {
       status = "live";
       const plannedEnd = startMs + durMs;
-      endMs = now != null ? Math.max(plannedEnd, now) : plannedEnd;
+      endMs = liveNow != null ? Math.max(plannedEnd, liveNow) : plannedEnd;
     } else {
       status = startedMs != null ? "future" : "planned";
       endMs = startMs + durMs;
@@ -197,7 +207,7 @@ export function RundownGrid({
     return { it, startMs, endMs, durMs, status };
   });
   const finishMs = cursor;
-  const overFinish = startedMs != null && finishMs > plannedStartMs + totalMin * 60000 + 60000;
+  const overFinish = startedMs != null && endedMs == null && finishMs > plannedStartMs + totalMin * 60000 + 60000;
 
   // ---- Persistência -------------------------------------------------------
   const persistOrder = (next: RundownItem[]) =>
@@ -293,10 +303,19 @@ export function RundownGrid({
   };
   const reset = () => {
     setStarted(null);
+    setEnded(null);
     setList((prev) => prev.map((x) => ({ ...x, doneAt: null })));
     startTx(async () => {
       await reiniciarCronograma(eventId);
       router.refresh();
+    });
+  };
+  const encerrar = () => {
+    setEnded(new Date().toISOString());
+    startTx(async () => {
+      const r = await encerrarCronograma(eventId);
+      if (r.ok) router.refresh();
+      else showToast(r.error);
     });
   };
   const remove = (id: string) =>
@@ -321,17 +340,27 @@ export function RundownGrid({
         </div>
         {list.length > 0 ? (
           started ? (
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-2 rounded-full bg-destructive/10 px-3 py-1.5">
-                <span className="size-2 animate-pulse rounded-full bg-destructive" />
-                <span className="text-[11px] font-extrabold uppercase tracking-wide text-destructive">Ao vivo</span>
-                <span className="text-xl font-extrabold tabular-nums leading-none text-destructive">
-                  {clock(now != null ? now - (startedMs ?? 0) : 0)}
+            <div className="flex items-center gap-1.5">
+              <div className={cn("flex items-center gap-2 rounded-full px-3 py-1.5", ended ? "bg-success/12" : "bg-destructive/10")}>
+                {ended ? null : <span className="size-2 animate-pulse rounded-full bg-destructive" />}
+                <span className={cn("text-[11px] font-extrabold uppercase tracking-wide", ended ? "text-success" : "text-destructive")}>
+                  {ended ? "Encerrado" : "Ao vivo"}
+                </span>
+                <span className={cn("text-xl font-extrabold tabular-nums leading-none", ended ? "text-success" : "text-destructive")}>
+                  {clock((liveNow ?? startedMs ?? 0) - (startedMs ?? 0))}
                 </span>
               </div>
+              {canEdit && !ended ? (
+                <button
+                  onClick={() => window.confirm("Encerrar o culto agora? O relógio para.") && encerrar()}
+                  className="press-sm inline-flex items-center gap-1 rounded-full border border-destructive/40 bg-destructive/10 px-2.5 py-1.5 text-[12px] font-bold text-destructive"
+                >
+                  <Flag className="size-3.5" /> Encerrar
+                </button>
+              ) : null}
               {canEdit ? (
                 <button
-                  onClick={reset}
+                  onClick={() => window.confirm("Reiniciar o cronograma? Isso apaga o início, o encerramento e os checks.") && reset()}
                   aria-label="Reiniciar"
                   className="press-sm grid size-9 place-items-center rounded-full border border-border text-muted-foreground"
                 >
@@ -349,6 +378,15 @@ export function RundownGrid({
           ) : null
         ) : null}
       </div>
+
+      {canEdit && started && !ended && allDone ? (
+        <button
+          onClick={() => window.confirm("Encerrar o culto? Todos os blocos foram concluídos.") && encerrar()}
+          className="press mb-2 flex w-full items-center justify-center gap-2 rounded-2xl bg-success py-3 text-sm font-extrabold text-white"
+        >
+          <Check className="size-4" strokeWidth={3} /> Tudo concluído — encerrar culto
+        </button>
+      ) : null}
 
       {list.length === 0 ? (
         <p className="rounded-2xl border border-dashed border-border bg-card px-4 py-6 text-center text-sm text-muted-foreground">

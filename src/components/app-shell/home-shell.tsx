@@ -27,7 +27,7 @@ export function HomeShell({
       <ReactiveHeader title={title} subtitle={subtitle} userName={userName} unread={unread} />
       <div aria-hidden style={{ height: "calc(env(safe-area-inset-top) + 5rem)" }} />
       <PullToRefresh>
-        <div className="space-y-4">
+        <div className="space-y-3">
           {children}
           <p className="py-2 text-center font-display text-xs italic text-muted-foreground/70">Servir com alegria.</p>
         </div>

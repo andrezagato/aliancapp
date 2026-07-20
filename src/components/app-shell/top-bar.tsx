@@ -43,7 +43,7 @@ export function TopBar({
   }, []);
 
   return (
-    <header className="sticky top-0 z-30 -mx-5 pt-safe">
+    <header className="sticky top-0 z-30 -mx-4 pt-safe">
       <div
         ref={bg}
         aria-hidden
@@ -56,9 +56,9 @@ export function TopBar({
       >
         {title}
       </div>
-      <div className="relative mx-auto flex max-w-[520px] items-center gap-3 px-5 pb-3.5 pt-2 lg:max-w-[720px]">
+      <div className="relative mx-auto flex max-w-[520px] items-center gap-3 px-4 pb-2.5 pt-1.5 lg:max-w-[720px]">
         <div ref={big} className="min-w-0 flex-1 origin-top-left">
-          <div className="truncate font-display text-[26px] font-extrabold leading-[1.04] tracking-tight text-foreground">
+          <div className="truncate font-display text-[23px] font-extrabold leading-[1.05] tracking-tight text-foreground">
             {title}
           </div>
           {subtitle ? <div className="mt-0.5 truncate text-sm text-muted-foreground">{subtitle}</div> : null}

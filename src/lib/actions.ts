@@ -1005,14 +1005,29 @@ export async function iniciarCronograma(eventId: string): Promise<ActionResult> 
   return ok;
 }
 
-/** Zera o modo ao vivo (limpa o start e todos os ticks de "feito"). */
+/** Zera o modo ao vivo (limpa o start, o encerramento e todos os ticks). */
 export async function reiniciarCronograma(eventId: string): Promise<ActionResult> {
   const session = await getSession();
   if (!session) return fail("Sessão expirada.");
   if (!(await podeEditarCronograma(session, eventId))) return fail("Sem permissão.");
   const supabase = await createClient();
-  await supabase.from("events").update({ rundown_started_at: null }).eq("id", eventId);
+  await supabase.from("events").update({ rundown_started_at: null, rundown_ended_at: null }).eq("id", eventId);
   await supabase.from("event_rundown").update({ done_at: null }).eq("event_id", eventId);
+  revalidatePath("/cronograma");
+  return ok;
+}
+
+/** Encerra o culto agora — congela o relógio do modo ao vivo. */
+export async function encerrarCronograma(eventId: string): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  if (!(await podeEditarCronograma(session, eventId))) return fail("Sem permissão.");
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("events")
+    .update({ rundown_ended_at: new Date().toISOString() })
+    .eq("id", eventId);
+  if (error) return fail(error.message);
   revalidatePath("/cronograma");
   return ok;
 }

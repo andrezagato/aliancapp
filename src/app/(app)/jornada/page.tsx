@@ -13,7 +13,7 @@ export default async function JornadaPage() {
   const m = journey.metrics;
 
   return (
-    <div className="space-y-4 pb-6 pt-safe">
+    <div className="space-y-3 pb-6 pt-safe">
       {/* Cabeçalho vinho */}
       <div className="relative overflow-hidden rounded-[24px] bg-gradient-to-br from-[hsl(349_72%_28%)] to-[hsl(349_69%_15%)] p-6 text-primary-foreground shadow-lift">
         <div
