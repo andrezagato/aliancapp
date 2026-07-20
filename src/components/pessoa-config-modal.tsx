@@ -2,13 +2,14 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Crown, X, Plus, ShieldCheck, Trash2 } from "lucide-react";
+import { Crown, X, Plus, ShieldCheck, Trash2, Cake } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Modal } from "@/components/modal";
 import { TeamDot } from "@/components/coverage-badge";
 import { WhatsAppButton } from "@/components/whatsapp-button";
 import { cn, displayName } from "@/lib/utils";
+import { fmtBirthday } from "@/lib/format";
 import {
   adicionarMembro,
   removerMembro,
@@ -52,12 +53,18 @@ export function PessoaConfigModal({
   const [nome, setNome] = useState(person.fullName);
   const [phone, setPhone] = useState(person.phone ?? "");
   const [email, setEmail] = useState(person.email ?? "");
+  const [bday, setBday] = useState(person.birthDate ?? "");
   useEffect(() => {
     setNome(person.fullName);
     setPhone(person.phone ?? "");
     setEmail(person.email ?? "");
-  }, [person.id, person.fullName, person.phone, person.email]);
-  const dadosDirty = nome !== person.fullName || phone !== (person.phone ?? "") || email !== (person.email ?? "");
+    setBday(person.birthDate ?? "");
+  }, [person.id, person.fullName, person.phone, person.email, person.birthDate]);
+  const dadosDirty =
+    nome !== person.fullName ||
+    phone !== (person.phone ?? "") ||
+    email !== (person.email ?? "") ||
+    bday !== (person.birthDate ?? "");
 
   const manageableIds = new Set(manageTeams.map((t) => t.id));
   const personTeamsInScope = person.teams.filter((t) => manageableIds.has(t.teamId));
@@ -88,6 +95,11 @@ export function PessoaConfigModal({
               {person.systemRole === "admin" ? <Badge variant="primary" className="ml-2">Admin</Badge> : null}
             </p>
             {person.email ? <p className="truncate text-sm text-muted-foreground">{person.email}</p> : null}
+            {person.birthDate ? (
+              <p className="inline-flex items-center gap-1 text-sm text-muted-foreground">
+                <Cake className="size-3.5" /> {fmtBirthday(person.birthDate)}
+              </p>
+            ) : null}
           </div>
           {person.phone && !isSelf ? (
             <WhatsAppButton
@@ -120,10 +132,21 @@ export function PessoaConfigModal({
               placeholder="E-mail"
               className="w-full rounded-[12px] border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary"
             />
+            <label className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                <Cake className="size-3.5" /> Aniversário
+              </span>
+              <input
+                value={bday}
+                onChange={(e) => setBday(e.target.value)}
+                type="date"
+                className="flex-1 rounded-[12px] border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary"
+              />
+            </label>
             {dadosDirty ? (
               <button
                 disabled={pending}
-                onClick={() => run(() => atualizarPessoaAdmin(person.id, { fullName: nome, phone, email }))}
+                onClick={() => run(() => atualizarPessoaAdmin(person.id, { fullName: nome, phone, email, birthdate: bday }))}
                 className="press-sm rounded-full bg-primary px-4 py-1.5 text-xs font-bold text-primary-foreground disabled:opacity-50"
               >
                 Salvar dados

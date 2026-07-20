@@ -4,7 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Avatar } from "@/components/ui/avatar";
 import { SignOutButton } from "@/components/sign-out-button";
 import { ProfileEditableField } from "@/components/profile-field";
-import { atualizarNome, atualizarApelido, atualizarTelefone } from "@/lib/actions";
+import { atualizarNome, atualizarApelido, atualizarTelefone, atualizarAniversario } from "@/lib/actions";
 import { cn, displayName } from "@/lib/utils";
 import { getSession } from "@/lib/auth";
 import { fmtBirthday } from "@/lib/format";
@@ -99,6 +99,17 @@ export default async function PerfilPage() {
               placeholder="(11) 99999-9999"
               emptyHint="Toque para adicionar seu WhatsApp"
               action={atualizarTelefone}
+            />
+          </li>
+          <li>
+            <ProfileEditableField
+              label="Aniversário"
+              current={p.birth_date}
+              displayValue={fmtBirthday(p.birth_date)}
+              placeholder="Sua data de nascimento"
+              emptyHint="Toque para adicionar seu aniversário"
+              type="date"
+              action={atualizarAniversario}
             />
           </li>
           <ProfileRow href="/jornada" icon={<Trophy className="size-[18px]" />} tone="accent" label="Minha Jornada" />

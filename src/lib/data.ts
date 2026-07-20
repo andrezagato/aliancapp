@@ -1585,6 +1585,7 @@ export type MemberRow = {
   nickname: string | null;
   email: string | null;
   phone: string | null;
+  birthDate: string | null;
   avatarUrl: string | null;
   systemRole: string;
   status: string;
@@ -1597,7 +1598,7 @@ export async function listMembers(): Promise<MemberRow[]> {
   const { data } = await supabase
     .from("profiles")
     .select(
-      "id, full_name, nickname, email, phone, avatar_url, system_role, status, created_at, memberships ( id, role, team:teams ( id, name, color, archived_at ) )",
+      "id, full_name, nickname, email, phone, birth_date, avatar_url, system_role, status, created_at, memberships ( id, role, team:teams ( id, name, color, archived_at ) )",
     )
     .order("full_name");
   return ((data ?? []) as {
@@ -1606,6 +1607,7 @@ export async function listMembers(): Promise<MemberRow[]> {
     nickname: string | null;
     email: string | null;
     phone: string | null;
+    birth_date: string | null;
     avatar_url: string | null;
     system_role: string;
     status: string;
@@ -1621,6 +1623,7 @@ export async function listMembers(): Promise<MemberRow[]> {
     nickname: p.nickname,
     email: p.email,
     phone: p.phone,
+    birthDate: p.birth_date,
     avatarUrl: p.avatar_url,
     systemRole: p.system_role,
     status: p.status,

@@ -16,6 +16,8 @@ export function ProfileEditableField({
   placeholder,
   emptyHint,
   required = false,
+  type = "text",
+  displayValue,
   action,
 }: {
   label: string;
@@ -23,6 +25,8 @@ export function ProfileEditableField({
   placeholder: string;
   emptyHint: string;
   required?: boolean;
+  type?: "text" | "date";
+  displayValue?: string;
   action: (value: string) => Promise<ActionResult>;
 }) {
   const router = useRouter();
@@ -53,8 +57,9 @@ export function ProfileEditableField({
       <div className="flex items-center gap-2 px-4 py-3">
         <input
           autoFocus
+          type={type}
           value={value}
-          maxLength={60}
+          maxLength={type === "date" ? undefined : 60}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter") save();
@@ -96,7 +101,7 @@ export function ProfileEditableField({
       <span className="min-w-0 flex-1">
         <span className="block text-[15px] font-semibold">{label}</span>
         <span className="block truncate text-sm text-muted-foreground">
-          {current?.trim() ? current : emptyHint}
+          {current?.trim() ? (displayValue ?? current) : emptyHint}
         </span>
       </span>
       <span className="shrink-0 text-[13px] font-bold text-primary">{current?.trim() ? "Editar" : "Adicionar"}</span>

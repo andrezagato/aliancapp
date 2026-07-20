@@ -134,15 +134,30 @@ export async function atualizarTelefone(phone: string): Promise<ActionResult> {
   return ok;
 }
 
+// Aniversário: a própria pessoa define o próprio (aceita vazio pra limpar).
+export async function atualizarAniversario(birth: string): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  const value = birth.trim();
+  if (value && !/^\d{4}-\d{2}-\d{2}$/.test(value)) return fail("Data inválida.");
+  const supabase = await createClient();
+  const { error } = await supabase.from("profiles").update({ birth_date: value || null }).eq("id", session.userId);
+  if (error) return fail(error.message);
+  revalidatePath("/perfil");
+  revalidatePath("/equipes");
+  revalidatePath("/inicio");
+  return ok;
+}
+
 /** Admin corrige dados de qualquer pessoa (ex.: convite feito com nome/e-mail errado). */
 export async function atualizarPessoaAdmin(
   profileId: string,
-  input: { fullName?: string; phone?: string; email?: string },
+  input: { fullName?: string; phone?: string; email?: string; birthdate?: string },
 ): Promise<ActionResult> {
   const session = await getSession();
   if (!session) return fail("Sessão expirada.");
   if (session.role !== "admin") return fail("Só o administrador edita dados de outras pessoas.");
-  const patch: { full_name?: string; phone?: string | null; email?: string | null } = {};
+  const patch: { full_name?: string; phone?: string | null; email?: string | null; birth_date?: string | null } = {};
   if (input.fullName !== undefined) {
     const v = input.fullName.trim();
     if (v.length < 2) return fail("Informe o nome.");
@@ -150,6 +165,11 @@ export async function atualizarPessoaAdmin(
   }
   if (input.phone !== undefined) patch.phone = input.phone.trim() || null;
   if (input.email !== undefined) patch.email = input.email.trim().toLowerCase() || null;
+  if (input.birthdate !== undefined) {
+    const b = input.birthdate.trim();
+    if (b && !/^\d{4}-\d{2}-\d{2}$/.test(b)) return fail("Data de aniversário inválida.");
+    patch.birth_date = b || null;
+  }
   if (Object.keys(patch).length === 0) return ok;
   const supabase = await createClient();
   const { error } = await supabase.from("profiles").update(patch).eq("id", profileId);
