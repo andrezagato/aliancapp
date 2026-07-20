@@ -30,8 +30,8 @@ import {
 } from "@/lib/actions";
 import type { RundownItem, RundownKind } from "@/lib/data";
 
-const PX_PER_MIN = 5; // altura do bloco = duração × isto (arrastar 1min = 5px)
-const MIN_H = 52; // altura mínima pra caber o conteúdo/toque
+const PX_PER_MIN = 6; // altura do bloco = duração × isto (arrastar 1min = 6px)
+const MIN_H = 72; // altura mínima pra caber os contadores/toque
 const DEFAULT_COLOR = "#6b7280";
 const SWATCHES = [
   "#0e7490",
@@ -56,9 +56,58 @@ const tf = new Intl.DateTimeFormat("pt-BR", {
 });
 const fmt = (ms: number) => tf.format(new Date(ms));
 const heightOf = (dur: number) => Math.max(MIN_H, dur * PX_PER_MIN);
+const pad = (n: number) => String(n).padStart(2, "0");
 function clock(ms: number): string {
   const s = Math.max(0, Math.floor(ms / 1000));
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  return h > 0 ? `${h}:${pad(m)}:${pad(s % 60)}` : `${m}:${pad(s % 60)}`;
+}
+
+// Escala de cor do contador conforme o tempo restante do bloco (ao vivo).
+type Heat = "normal" | "amber" | "orange" | "red";
+function heatOf(remainingMs: number): Heat {
+  if (remainingMs <= 0) return "red";
+  if (remainingMs <= 60_000) return "orange";
+  if (remainingMs <= 120_000) return "amber";
+  return "normal";
+}
+const HEAT_TEXT: Record<Heat, string> = {
+  normal: "text-foreground",
+  amber: "text-amber-500",
+  orange: "text-orange-500",
+  red: "text-red-600",
+};
+
+/** Contador com rótulo (início · corrido · passou). */
+function Stat({
+  label,
+  value,
+  className,
+  big,
+  strike,
+}: {
+  label: string;
+  value: string;
+  className?: string;
+  big?: boolean;
+  strike?: boolean;
+}) {
+  return (
+    <div className="flex flex-col">
+      <span
+        className={cn(
+          "font-bold tabular-nums leading-none",
+          big ? "text-[22px]" : "text-[15px]",
+          strike && "line-through",
+          className,
+        )}
+      >
+        {value}
+      </span>
+      <span className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</span>
+    </div>
+  );
 }
 
 type Row = {
@@ -259,7 +308,7 @@ export function RundownGrid({
 
   return (
     <section>
-      {/* Cabeçalho: início → fim + total + controle ao vivo */}
+      {/* Cabeçalho: início → fim + total + relógio ao vivo */}
       <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2 px-0.5">
         <div>
           <h3 className="font-display text-lg font-bold leading-tight">Ordem do culto</h3>
@@ -270,27 +319,34 @@ export function RundownGrid({
             </p>
           ) : null}
         </div>
-        {canEdit && list.length > 0 ? (
+        {list.length > 0 ? (
           started ? (
             <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-destructive/10 px-2.5 py-1 text-[12px] font-bold text-destructive">
-                <span className="size-1.5 animate-pulse rounded-full bg-destructive" /> AO VIVO
-              </span>
-              <button
-                onClick={reset}
-                className="press-sm inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-[12px] font-semibold text-muted-foreground"
-              >
-                <RotateCcw className="size-3.5" /> Reiniciar
-              </button>
+              <div className="flex items-center gap-2 rounded-full bg-destructive/10 px-3 py-1.5">
+                <span className="size-2 animate-pulse rounded-full bg-destructive" />
+                <span className="text-[11px] font-extrabold uppercase tracking-wide text-destructive">Ao vivo</span>
+                <span className="text-xl font-extrabold tabular-nums leading-none text-destructive">
+                  {clock(now != null ? now - (startedMs ?? 0) : 0)}
+                </span>
+              </div>
+              {canEdit ? (
+                <button
+                  onClick={reset}
+                  aria-label="Reiniciar"
+                  className="press-sm grid size-9 place-items-center rounded-full border border-border text-muted-foreground"
+                >
+                  <RotateCcw className="size-4" />
+                </button>
+              ) : null}
             </div>
-          ) : (
+          ) : canEdit ? (
             <button
               onClick={start}
               className="press inline-flex items-center gap-1.5 rounded-full bg-primary px-3.5 py-1.5 text-sm font-extrabold text-primary-foreground"
             >
               <Play className="size-4 fill-current" /> Iniciar culto
             </button>
-          )
+          ) : null
         ) : null}
       </div>
 
@@ -306,7 +362,11 @@ export function RundownGrid({
             const live = status === "live";
             const resizingThis = drag?.mode === "resize" && drag.id === it.id;
             const reorderingThis = drag?.mode === "reorder" && drag.id === it.id;
-            const overMin = live && now != null ? Math.floor((now - startMs) / 60000) - it.durationMin : 0;
+            const durMs = it.durationMin * 60000;
+            const elapsedMs = live ? (now != null ? now - startMs : 0) : done ? endMs - startMs : durMs;
+            const overMs = Math.max(0, elapsedMs - durMs);
+            const h: Heat = live ? heatOf(durMs - elapsedMs) : done && overMs > 0 ? "red" : "normal";
+            const liveRed = live && h === "red";
             return (
               <li
                 key={it.id}
@@ -317,16 +377,17 @@ export function RundownGrid({
                 style={{ minHeight: heightOf(it.durationMin) }}
                 onClick={() => canEdit && !drag && setEditing(it)}
                 className={cn(
-                  "relative flex select-none items-stretch overflow-hidden rounded-2xl border bg-card transition-[box-shadow,transform,opacity]",
+                  "relative flex select-none items-stretch overflow-hidden rounded-2xl border bg-card transition-[box-shadow,transform,opacity,background-color]",
                   canEdit && "cursor-pointer",
                   done && "opacity-55",
-                  live && "border-primary shadow-[0_0_0_2px_hsl(var(--primary))]",
+                  live && !liveRed && "border-primary shadow-[0_0_0_2px_hsl(var(--primary))]",
+                  liveRed && "border-red-500 bg-red-600/5 shadow-[0_0_0_2px_#ef4444]",
                   !live && "border-border",
                   reorderingThis && "z-10 scale-[1.02] opacity-90 shadow-lift",
                 )}
               >
                 {/* Faixa de cor */}
-                <span className="w-1.5 shrink-0" style={{ backgroundColor: color }} aria-hidden />
+                <span className="w-1.5 shrink-0" style={{ backgroundColor: liveRed ? "#ef4444" : color }} aria-hidden />
 
                 {/* Tick de "feito" */}
                 {canEdit ? (
@@ -337,42 +398,51 @@ export function RundownGrid({
                     }}
                     aria-label={done ? "Desmarcar feito" : "Marcar feito"}
                     className={cn(
-                      "my-3 ml-2.5 grid size-6 shrink-0 place-items-center self-start rounded-full border-2 transition-colors",
+                      "my-3 ml-2.5 grid size-7 shrink-0 place-items-center self-start rounded-full border-2 transition-colors",
                       done ? "border-success bg-success text-white" : live ? "border-primary text-primary" : "border-border text-transparent",
                     )}
                   >
-                    <Check className="size-3.5" strokeWidth={3.5} />
+                    <Check className="size-4" strokeWidth={3.5} />
                   </button>
                 ) : (
                   <span
                     className={cn(
-                      "my-3 ml-2.5 grid size-6 shrink-0 place-items-center self-start rounded-full",
+                      "my-3 ml-2.5 grid size-7 shrink-0 place-items-center self-start rounded-full",
                       done ? "bg-success text-white" : live ? "border-2 border-primary" : "border-2 border-border",
                     )}
                   >
-                    {done ? <Check className="size-3.5" strokeWidth={3.5} /> : null}
+                    {done ? <Check className="size-4" strokeWidth={3.5} /> : null}
                   </span>
                 )}
 
-                {/* Horário */}
-                <div className="my-3 ml-2.5 flex w-[52px] shrink-0 flex-col items-start">
-                  <span className={cn("text-sm font-bold tabular-nums", done && "line-through")}>{fmt(startMs)}</span>
-                  {live && now != null ? (
-                    <span className={cn("text-[12px] font-bold tabular-nums", overMin >= 0 ? "text-destructive" : "text-primary")}>
-                      {clock(now - startMs)}
-                    </span>
+                {/* Contadores + textos */}
+                <div className="my-2.5 ml-2.5 min-w-0 flex-1 pr-1">
+                  {live || done ? (
+                    <div className="flex items-end gap-4">
+                      <Stat label="início" value={fmt(startMs)} strike={done} />
+                      <Stat
+                        label="corrido"
+                        value={clock(elapsedMs)}
+                        big={live}
+                        className={live ? HEAT_TEXT[h] : "text-muted-foreground"}
+                      />
+                      <Stat
+                        label="passou"
+                        value={overMs > 0 ? `+${clock(overMs)}` : "0:00"}
+                        big={live}
+                        className={overMs > 0 ? "text-red-600" : "text-muted-foreground"}
+                      />
+                    </div>
                   ) : (
-                    <span className="text-[11px] tabular-nums text-muted-foreground">{it.durationMin}min</span>
+                    <div className="flex items-end gap-4">
+                      <Stat label="início" value={fmt(startMs)} />
+                      <Stat label="duração" value={`${it.durationMin} min`} className="text-muted-foreground" />
+                    </div>
                   )}
-                </div>
-
-                {/* Conteúdo */}
-                <div className="my-3 min-w-0 flex-1 pr-1">
-                  <p className={cn("font-semibold leading-tight", done && "line-through")}>{it.title}</p>
+                  <p className={cn("mt-1.5 font-semibold leading-tight", done && "line-through")}>{it.title}</p>
                   <p className="text-[12px] text-muted-foreground">
                     {it.kind}
                     {it.responsible ? ` · ${it.responsible}` : ""}
-                    {live && overMin >= 1 ? <span className="font-bold text-destructive"> · +{overMin}min</span> : ""}
                   </p>
                   {it.note ? <p className="mt-0.5 text-[13px] text-muted-foreground">{it.note}</p> : null}
                   {it.link ? (
