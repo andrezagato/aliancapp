@@ -107,6 +107,51 @@
   .press-sm:active { transform: scale(0.99); }
 }
 
+/* ===== camada de animação "tato" ===== */
+@keyframes confetti-fly {
+  0%   { opacity: 0; transform: translate(0,0) rotate(0) scale(.3); }
+  12%  { opacity: 1; }
+  100% { opacity: 0; transform: var(--to) rotate(var(--rot)) scale(1); }
+}
+@keyframes spring-in {
+  0%   { opacity: 0; transform: scale(.72); }
+  55%  { transform: scale(1.07); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes emoji-pop {
+  0%   { transform: scale(0) rotate(-28deg); }
+  62%  { transform: scale(1.28) rotate(9deg); }
+  100% { transform: scale(1) rotate(0); }
+}
+@keyframes page-in {
+  /* só-opacidade: o app tem header fixo (ReactiveHeader) e sticky (TopBar)
+     DENTRO do wrapper de página; um translateY criaria containing-block e
+     faria o header "pular" na entrada. Fade resolve sem esse efeito. */
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes sheet-out {
+  from { transform: translateY(0); }
+  to   { transform: translateY(104%); }
+}
+@keyframes scrim-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+@keyframes nav-pop {
+  0% { transform: scale(1); } 45% { transform: scale(1.28); } 100% { transform: scale(1); }
+}
+
+@layer utilities {
+  .anim-spring   { animation: spring-in .55s cubic-bezier(.32,.72,.24,1) both; }
+  .anim-emoji    { animation: emoji-pop .6s .1s cubic-bezier(.34,1.56,.64,1) both; }
+  .confetti-pc   { position: absolute; top: 46%; left: 50%; animation: confetti-fly 1.15s ease-out forwards; }
+  .page-in       { animation: page-in .34s cubic-bezier(.32,.72,.24,1) both; }
+  .animate-sheet-out { animation: sheet-out .28s cubic-bezier(.32,.72,.24,1) both; }
+  .animate-scrim-out { animation: scrim-out .24s ease both; }
+  .nav-pop       { animation: nav-pop .4s ease; }
+}
+
 /* scrollbar discreta e quente (desktop) */
 @media (pointer: fine) {
   * { scrollbar-width: thin; scrollbar-color: hsl(var(--border)) transparent; }

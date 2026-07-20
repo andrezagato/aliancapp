@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400;0,500;0,700;0,800;0,900;1,400&family=Alegreya+Sans:ital,wght@0,400;0,500;0,700;0,800;1,400&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:hsl(44 56% 95%);--fg:hsl(8 20% 18%);--card:hsl(48 60% 98%);
+    --vinho:hsl(349 70% 26%);--vinho-deep:hsl(349 69% 15%);--creme-fg:hsl(36 78% 95%);
+    --gold:hsl(42 78% 60%);--gold-fg:hsl(32 70% 16%);--muted:hsl(43 46% 89%);
+    --muted-fg:hsl(27 13% 40%);--success:hsl(138 34% 37%);--warning:hsl(36 62% 47%);
+    --destructive:hsl(6 62% 46%);--border:hsl(40 40% 85%);
+    --sans:'Alegreya Sans',system-ui,sans-serif;--disp:'Alegreya',Georgia,serif;
+  }
+  *{box-sizing:border-box}
+  .board{min-height:100%;display:flex;flex-direction:column;align-items:center;gap:20px;
+    background:radial-gradient(60rem 30rem at 85% -8%, hsl(45 80% 88% / .55), transparent 60%),
+      radial-gradient(48rem 26rem at -10% 108%, hsl(6 40% 88% / .4), transparent 55%),hsl(40 40% 91%);
+    font-family:var(--sans);color:var(--fg);padding:40px 24px 60px;}
+  .press{transition:transform .13s cubic-bezier(.2,0,.2,1),filter .15s ease,background-color .15s ease}
+  .press:active{transform:scale(.965)}
+  .rise{animation:fadeUp .5s both}
+  .pagein{animation:pageIn .34s cubic-bezier(.32,.72,.24,1) both}
+  @keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+  @keyframes pageIn{from{opacity:0;transform:translateX(16px)}to{opacity:1;transform:none}}
+  @keyframes spring{0%{transform:scale(.72);opacity:0}55%{transform:scale(1.07)}100%{transform:scale(1);opacity:1}}
+  @keyframes glow{0%,100%{opacity:.45;transform:scale(1)}50%{opacity:.95;transform:scale(1.15)}}
+  @keyframes heroGlow{0%,100%{opacity:.55}50%{opacity:.95}}
+  @keyframes sheetUp{from{transform:translateY(104%)}to{transform:none}}
+  @keyframes scrim{from{opacity:0}to{opacity:1}}
+  @keyframes toastIn{0%{opacity:0;transform:translate(-50%,18px)}14%{opacity:1;transform:translate(-50%,0)}86%{opacity:1;transform:translate(-50%,0)}100%{opacity:0;transform:translate(-50%,-8px)}}
+  @keyframes flame{to{transform:rotate(360deg)}}
+  @keyframes emojiPop{0%{transform:scale(0) rotate(-28deg)}62%{transform:scale(1.28) rotate(9deg)}100%{transform:scale(1) rotate(0)}}
+  @keyframes confetti{0%{opacity:0;transform:translate(0,0) rotate(0) scale(.3)}12%{opacity:1}100%{opacity:0;transform:var(--to) rotate(var(--rot)) scale(1)}}
+  @keyframes popIn{0%{transform:scale(.85);opacity:0}60%{transform:scale(1.04)}100%{transform:scale(1);opacity:1}}
+  @keyframes pulseDot{0%{box-shadow:0 0 0 0 hsl(349 70% 26% / .55)}70%,100%{box-shadow:0 0 0 9px transparent}}
+  .confetti span{position:absolute;top:46%;left:50%;font-size:22px;animation:confetti 1.15s ease-out forwards}
+</style>
+</helmet>
+<div class="board">
+  <div style="text-align:center;max-width:420px">
+    <p style="font-family:var(--sans);font-weight:800;letter-spacing:.14em;text-transform:uppercase;font-size:12px;color:var(--vinho);margin:0 0 4px">Sirvo · demo tátil</p>
+    <h1 style="font-family:var(--disp);font-weight:900;font-size:26px;line-height:1.05;margin:0 0 6px">Toque em tudo — é pra reagir</h1>
+    <p style="margin:0;font-size:13.5px;line-height:1.5;color:var(--muted-fg)">Confirme a escala pra ver a conquista animada. Troque de aba, abra o sheet, puxe pra atualizar.</p>
+  </div>
+
+  <!-- PHONE -->
+  <div style="position:relative;width:390px;height:812px;border-radius:44px;background:#241d1b;padding:11px;box-shadow:0 34px 80px rgba(43,39,36,.32)">
+    <div style="position:relative;width:100%;height:100%;border-radius:34px;overflow:hidden;background:var(--bg);display:flex;flex-direction:column">
+
+      <!-- status bar -->
+      <div style="flex:0 0 auto;height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 26px;font-weight:800;font-size:14px;z-index:5">
+        <span>9:41</span>
+        <span style="display:inline-flex;align-items:center;gap:8px" onClick="{{ refresh }}" class="press">
+          <sc-if value="{{ refreshing }}" hint-placeholder-val="{{ false }}"><span style="display:inline-block;animation:flame .9s linear infinite;color:var(--vinho)">🔥</span></sc-if>
+          <span style="font-size:12px;letter-spacing:1px">● ● ●&nbsp;&nbsp;▮</span>
+        </span>
+      </div>
+
+      <!-- SCROLL AREA -->
+      <div style="flex:1 1 auto;overflow-y:auto;overflow-x:hidden;position:relative">
+
+        <!-- ===== INÍCIO ===== -->
+        <sc-if value="{{ isInicio }}" hint-placeholder-val="{{ true }}">
+        <div class="pagein" style="padding:0 16px 16px">
+          <!-- compact top bar -->
+          <div class="rise" style="display:flex;align-items:center;gap:10px;padding:6px 2px 12px;animation-delay:.02s">
+            <span class="press" style="flex:0 0 auto;width:38px;height:38px;border-radius:999px;border:1px solid var(--border);background:var(--muted);display:grid;place-items:center;font-weight:800;font-size:14px">AV</span>
+            <div style="flex:1 1 auto;min-width:0">
+              <div style="font-family:var(--disp);font-weight:900;font-size:19px;line-height:1.05">Boa tarde, André</div>
+              <div style="font-size:12px;color:var(--muted-fg);margin-top:-1px">Louvor · Diaconia</div>
+            </div>
+            <span class="press" onClick="{{ celebrateNow }}" style="flex:0 0 auto;position:relative;width:36px;height:36px;border-radius:999px;background:var(--card);border:1px solid var(--border);display:grid;place-items:center;font-size:16px">🔔<span style="position:absolute;top:-2px;right:-2px;width:16px;height:16px;border-radius:999px;background:var(--vinho);color:#fff;font-size:10px;font-weight:800;display:grid;place-items:center;animation:pulseDot 1.8s infinite">2</span></span>
+          </div>
+
+          <!-- condensed hero -->
+          <div class="rise" style="position:relative;overflow:hidden;border-radius:18px;background:linear-gradient(135deg,hsl(349 72% 28%),hsl(349 69% 15%));color:var(--creme-fg);padding:14px 15px;box-shadow:0 14px 40px rgba(43,39,36,.14);animation-delay:.08s">
+            <div aria-hidden style="position:absolute;right:-38px;top:-38px;width:150px;height:150px;border-radius:999px;background:radial-gradient(circle,hsl(42 78% 60% / .42),transparent 68%);animation:heroGlow 5s ease-in-out infinite"></div>
+            <div style="position:relative">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
+                <div style="min-width:0">
+                  <p style="margin:0;font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--gold)">Sua próxima escala</p>
+                  <h2 style="font-family:var(--disp);font-weight:800;font-size:22px;line-height:1.05;margin:2px 0 0;color:#fff">Culto de Quarta</h2>
+                  <p style="margin:3px 0 0;font-size:13px;color:hsl(36 78% 95% / .85)">qua, 23 jul · 19h30 · <span style="color:var(--gold);font-weight:700">chega 18h45</span></p>
+                </div>
+                <div style="flex:0 0 auto;display:flex;flex-direction:column;gap:4px;align-items:flex-end">
+                  <span style="background:hsl(0 0% 100% / .13);border-radius:999px;padding:3px 9px;font-size:11.5px">● Louvor</span>
+                  <span style="background:hsl(0 0% 100% / .13);border-radius:999px;padding:3px 9px;font-size:11.5px">Vocal</span>
+                </div>
+              </div>
+              <sc-if value="{{ notConfirmed }}" hint-placeholder-val="{{ true }}">
+                <div style="margin-top:12px;display:flex;gap:8px">
+                  <button class="press" onClick="{{ confirmHero }}" style="flex:1;height:42px;border:0;border-radius:12px;background:var(--gold);color:var(--gold-fg);font-family:var(--sans);font-weight:800;font-size:14.5px;box-shadow:0 8px 20px rgba(231,184,78,.32);cursor:pointer">✓ Confirmar</button>
+                  <button class="press" onClick="{{ openSheet }}" style="height:42px;border:1px solid hsl(0 0% 100% / .25);border-radius:12px;background:hsl(0 0% 100% / .06);color:var(--creme-fg);font-family:var(--sans);font-weight:700;font-size:13.5px;padding:0 16px;cursor:pointer">Não posso</button>
+                </div>
+              </sc-if>
+              <sc-if value="{{ confirmed }}" hint-placeholder-val="{{ false }}">
+                <div style="margin-top:12px;border-radius:12px;background:hsl(0 0% 100% / .1);padding:11px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;animation:popIn .5s both">
+                  <span style="display:inline-flex;align-items:center;gap:9px;font-weight:800;font-size:14.5px;color:#fff"><span style="width:24px;height:24px;border-radius:999px;background:var(--gold);color:var(--gold-fg);display:grid;place-items:center;font-size:13px">✓</span> Presença confirmada</span>
+                  <span style="font-size:12.5px;font-weight:700;color:var(--gold)">Ver escala ›</span>
+                </div>
+              </sc-if>
+            </div>
+          </div>
+
+          <!-- pending strip -->
+          <sc-if value="{{ hasInvites }}" hint-placeholder-val="{{ true }}">
+          <div class="rise" style="margin-top:10px;display:flex;align-items:center;gap:10px;border:1px solid hsl(42 78% 60% / .55);background:hsl(42 78% 60% / .22);border-radius:14px;padding:10px 12px;animation-delay:.14s">
+            <span style="width:28px;height:28px;border-radius:999px;background:var(--vinho);color:var(--creme-fg);display:grid;place-items:center;font-size:13px;animation:pulseDot 2s infinite">🔔</span>
+            <span style="flex:1;min-width:0;font-size:13.5px;font-weight:700">{{ invites }} convite: <span style="font-weight:800">Culto de Domingo</span></span>
+            <button class="press" onClick="{{ respondInvite }}" style="border:0;background:var(--vinho);color:var(--creme-fg);font-family:var(--sans);font-weight:800;font-size:12.5px;border-radius:10px;padding:8px 14px;cursor:pointer">Responder</button>
+          </div>
+          </sc-if>
+
+          <!-- suas escalas -->
+          <div class="rise" style="display:flex;align-items:baseline;justify-content:space-between;padding:14px 2px 6px;animation-delay:.2s">
+            <span style="font-family:var(--disp);font-weight:800;font-size:16px">Suas escalas</span>
+            <span style="font-size:11px;font-weight:700;color:var(--muted-fg)">Arraste p/ responder</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <div class="rise press" style="display:flex;align-items:center;gap:11px;border:1px solid var(--border);background:var(--card);border-radius:14px;padding:9px 11px;animation-delay:.24s">
+              <span style="width:42px;display:flex;flex-direction:column;align-items:center;background:var(--muted);border-radius:11px;padding:4px 0"><span style="font-size:9.5px;font-weight:800;text-transform:uppercase;color:var(--muted-fg)">Dom</span><span style="font-family:var(--disp);font-weight:900;font-size:18px;line-height:1;color:var(--vinho)">27</span></span>
+              <span style="min-width:0;flex:1"><span style="font-weight:700;display:block;font-size:14.5px">Culto da Família</span><span style="font-size:12px;color:var(--muted-fg)">● Diaconia · Recepção</span></span>
+              <span style="flex:0 0 auto;font-size:11px;font-weight:800;color:var(--success);background:hsl(138 34% 37% / .12);border-radius:999px;padding:4px 9px">Confirmado</span>
+            </div>
+            <div class="rise press" style="display:flex;align-items:center;gap:11px;border:1px solid var(--border);background:var(--card);border-radius:14px;padding:9px 11px;animation-delay:.3s">
+              <span style="width:42px;display:flex;flex-direction:column;align-items:center;background:var(--muted);border-radius:11px;padding:4px 0"><span style="font-size:9.5px;font-weight:800;text-transform:uppercase;color:var(--muted-fg)">Qui</span><span style="font-family:var(--disp);font-weight:900;font-size:18px;line-height:1;color:var(--vinho)">31</span></span>
+              <span style="min-width:0;flex:1"><span style="font-weight:700;display:block;font-size:14.5px">Ensaio Geral</span><span style="font-size:12px;color:var(--muted-fg)">● Louvor · Teclado</span></span>
+              <span style="flex:0 0 auto;font-size:11px;font-weight:800;color:var(--warning);background:hsl(36 62% 47% / .15);border-radius:999px;padding:4px 9px">Convidado</span>
+            </div>
+          </div>
+
+          <!-- quick tiles -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;padding-top:12px">
+            <div class="rise press" onClick="{{ celebrateNow }}" style="border:1px solid hsl(42 78% 60% / .4);background:linear-gradient(135deg,hsl(42 78% 60% / .12),hsl(42 78% 60% / .22));border-radius:14px;padding:11px 12px;cursor:pointer;animation-delay:.34s"><div style="font-size:18px">🏆</div><div style="font-weight:800;font-size:13.5px;margin-top:3px">Minha Jornada</div><div style="font-size:11.5px;color:var(--gold-fg)">3 conquistas novas</div></div>
+            <div class="rise press" style="border:1px solid var(--border);background:var(--card);border-radius:14px;padding:11px 12px;animation-delay:.38s"><div style="font-size:18px">🗓️</div><div style="font-weight:800;font-size:13.5px;margin-top:3px">Disponibilidade</div><div style="font-size:11.5px;color:var(--muted-fg)">2 datas bloqueadas</div></div>
+            <div class="rise press" style="border:1px solid var(--border);background:var(--card);border-radius:14px;padding:11px 12px;animation-delay:.42s"><div style="font-size:18px">✨</div><div style="font-weight:800;font-size:13.5px;margin-top:3px">Quero servir</div><div style="font-size:11.5px;color:var(--muted-fg)">Escolher equipe</div></div>
+            <div class="rise press" style="border:1px solid var(--border);background:var(--card);border-radius:14px;padding:11px 12px;animation-delay:.46s"><div style="font-size:18px">🎂</div><div style="font-weight:800;font-size:13.5px;margin-top:3px">Aniversários</div><div style="font-size:11.5px;color:var(--muted-fg)">Ana faz hoje 🎉</div></div>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- ===== ESCALAS ===== -->
+        <sc-if value="{{ isEscalas }}" hint-placeholder-val="{{ false }}">
+        <div class="pagein" style="padding:10px 16px 16px">
+          <h2 class="rise" style="font-family:var(--disp);font-weight:900;font-size:24px;margin:0 0 12px">Escalas</h2>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <div class="rise press" style="border:1px solid var(--border);background:var(--card);border-radius:14px;padding:12px;animation-delay:.05s"><div style="font-weight:800">Culto de Quarta</div><div style="font-size:12.5px;color:var(--muted-fg)">qua, 23 jul · 19h30 · Louvor</div></div>
+            <div class="rise press" style="border:1px solid var(--border);background:var(--card);border-radius:14px;padding:12px;animation-delay:.1s"><div style="font-weight:800">Culto da Família</div><div style="font-size:12.5px;color:var(--muted-fg)">dom, 27 jul · 18h00 · Diaconia</div></div>
+            <div class="rise press" style="border:1px solid var(--border);background:var(--card);border-radius:14px;padding:12px;animation-delay:.15s"><div style="font-weight:800">Ensaio Geral</div><div style="font-size:12.5px;color:var(--muted-fg)">qui, 31 jul · 20h00 · Louvor</div></div>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- ===== CRONOGRAMA ===== -->
+        <sc-if value="{{ isCron }}" hint-placeholder-val="{{ false }}">
+        <div class="pagein" style="padding:10px 16px 16px">
+          <h2 class="rise" style="font-family:var(--disp);font-weight:900;font-size:24px;margin:0 0 12px">Cronograma</h2>
+          <div class="rise" style="border:1px solid var(--border);background:var(--card);border-radius:14px;overflow:hidden;animation-delay:.05s">
+            <div style="display:flex;gap:11px;padding:12px;border-left:3px solid var(--vinho)"><div style="font-family:var(--disp);font-weight:900;color:var(--vinho);width:44px">19:30</div><div><div style="font-weight:800">Abertura · Louvor</div><div style="font-size:12px;color:var(--muted-fg)">Banda + vocal</div></div></div>
+            <div style="display:flex;gap:11px;padding:12px;border-top:1px solid var(--border);border-left:3px solid var(--gold)"><div style="font-family:var(--disp);font-weight:900;color:var(--gold-fg);width:44px">19:50</div><div><div style="font-weight:800">Palavra</div><div style="font-size:12px;color:var(--muted-fg)">Pr. Lucas</div></div></div>
+            <div style="display:flex;gap:11px;padding:12px;border-top:1px solid var(--border);border-left:3px solid var(--success)"><div style="font-family:var(--disp);font-weight:900;color:var(--success);width:44px">20:30</div><div><div style="font-weight:800">Ministração</div><div style="font-size:12px;color:var(--muted-fg)">Equipe de oração</div></div></div>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- ===== EQUIPES ===== -->
+        <sc-if value="{{ isEquipes }}" hint-placeholder-val="{{ false }}">
+        <div class="pagein" style="padding:10px 16px 16px">
+          <h2 class="rise" style="font-family:var(--disp);font-weight:900;font-size:24px;margin:0 0 12px">Equipes</h2>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <div class="rise press" style="display:flex;align-items:center;gap:11px;border:1px solid var(--border);background:var(--card);border-radius:14px;padding:12px;animation-delay:.05s"><span style="width:34px;height:34px;border-radius:11px;background:hsl(349 70% 26% / .12);display:grid;place-items:center">🎵</span><div style="flex:1"><div style="font-weight:800">Louvor</div><div style="font-size:12px;color:var(--muted-fg)">12 pessoas</div></div><span style="font-size:11px;font-weight:800;color:var(--success);background:hsl(138 34% 37% / .12);border-radius:999px;padding:4px 9px">100% escalado</span></div>
+            <div class="rise press" style="display:flex;align-items:center;gap:11px;border:1px solid var(--border);background:var(--card);border-radius:14px;padding:12px;animation-delay:.1s"><span style="width:34px;height:34px;border-radius:11px;background:hsl(42 78% 60% / .2);display:grid;place-items:center">🤝</span><div style="flex:1"><div style="font-weight:800">Diaconia</div><div style="font-size:12px;color:var(--muted-fg)">8 pessoas</div></div><span style="font-size:11px;font-weight:800;color:var(--warning);background:hsl(36 62% 47% / .15);border-radius:999px;padding:4px 9px">2 vagas</span></div>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- ===== PERFIL ===== -->
+        <sc-if value="{{ isPerfil }}" hint-placeholder-val="{{ false }}">
+        <div class="pagein" style="padding:10px 16px 16px">
+          <div class="rise" style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:16px 0">
+            <span style="width:76px;height:76px;border-radius:999px;background:var(--vinho);color:var(--creme-fg);display:grid;place-items:center;font-family:var(--disp);font-weight:900;font-size:28px;animation:spring .6s both">AV</span>
+            <div style="font-family:var(--disp);font-weight:900;font-size:22px">André Vieira</div>
+            <div style="font-size:13px;color:var(--muted-fg)">Louvor · Diaconia</div>
+          </div>
+          <div class="rise" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;animation-delay:.08s">
+            <div style="border:1px solid var(--border);background:var(--card);border-radius:14px;padding:12px;text-align:center"><div style="font-family:var(--disp);font-weight:900;font-size:22px;color:var(--vinho)">27</div><div style="font-size:11px;color:var(--muted-fg)">cultos</div></div>
+            <div style="border:1px solid var(--border);background:var(--card);border-radius:14px;padding:12px;text-align:center"><div style="font-family:var(--disp);font-weight:900;font-size:22px;color:var(--gold-fg)">9</div><div style="font-size:11px;color:var(--muted-fg)">conquistas</div></div>
+            <div style="border:1px solid var(--border);background:var(--card);border-radius:14px;padding:12px;text-align:center"><div style="font-family:var(--disp);font-weight:900;font-size:22px;color:var(--success)">4</div><div style="font-size:11px;color:var(--muted-fg)">seguidas 🔥</div></div>
+          </div>
+        </div>
+        </sc-if>
+
+      </div>
+
+      <!-- BOTTOM NAV (5) -->
+      <div style="flex:0 0 auto;height:64px;border-top:1px solid hsl(40 40% 85% / .8);background:hsl(48 60% 98% / .92);backdrop-filter:blur(10px);display:flex;justify-content:space-around;align-items:center;padding:0 6px;z-index:5">
+        <sc-for list="{{ nav }}" as="n" hint-placeholder-count="5">
+          <button class="press" onClick="{{ n.onClick }}" style="flex:1;background:none;border:0;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;font-family:var(--sans);font-size:10.5px;font-weight:700;color:{{ n.color }}">
+            <span style="width:52px;height:26px;border-radius:999px;display:grid;place-items:center;font-size:17px;background:{{ n.pill }};transition:transform .2s cubic-bezier(.2,0,.2,1),background-color .2s ease;transform:scale({{ n.scale }})">{{ n.icon }}</span>
+            {{ n.label }}
+          </button>
+        </sc-for>
+      </div>
+
+      <!-- ===== RESPOND SHEET ===== -->
+      <sc-if value="{{ sheet }}" hint-placeholder-val="{{ false }}">
+      <div style="position:absolute;inset:0;z-index:40;display:flex;flex-direction:column;justify-content:flex-end">
+        <div onClick="{{ closeSheet }}" style="position:absolute;inset:0;background:hsl(8 20% 18% / .42);animation:scrim .22s ease both"></div>
+        <div style="position:relative;background:var(--bg);border-radius:26px 26px 0 0;padding:8px 20px 24px;box-shadow:0 -12px 40px rgba(58,42,40,.2);animation:sheetUp .34s cubic-bezier(.32,.72,.24,1) both">
+          <div style="width:40px;height:5px;border-radius:999px;background:var(--border);margin:6px auto 12px"></div>
+          <h3 style="font-family:var(--disp);font-weight:900;font-size:21px;margin:0">Não vai poder?</h3>
+          <p style="margin:6px 0 0;font-size:13.5px;line-height:1.5;color:var(--muted-fg)">Avisar cedo ajuda o líder a achar alguém. Conta rapidinho o motivo.</p>
+          <div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:9px">
+            <span class="press" style="border:1px solid hsl(6 62% 46% / .25);background:var(--card);color:var(--vinho);border-radius:999px;padding:9px 14px;font-size:13px;font-weight:800">Viajando</span>
+            <span class="press" style="border:1px solid hsl(6 62% 46% / .25);background:var(--card);color:var(--vinho);border-radius:999px;padding:9px 14px;font-size:13px;font-weight:800">Trabalho</span>
+            <span class="press" style="border:1px solid hsl(6 62% 46% / .25);background:var(--card);color:var(--vinho);border-radius:999px;padding:9px 14px;font-size:13px;font-weight:800">Saúde</span>
+            <span class="press" style="border:1px solid hsl(6 62% 46% / .25);background:var(--card);color:var(--vinho);border-radius:999px;padding:9px 14px;font-size:13px;font-weight:800">Outro</span>
+          </div>
+          <button class="press" onClick="{{ sheetDecline }}" style="margin-top:16px;width:100%;height:50px;border:0;border-radius:15px;background:var(--destructive);color:#fff;font-family:var(--sans);font-weight:800;font-size:15.5px;cursor:pointer">Não vou poder</button>
+          <button class="press" onClick="{{ closeSheet }}" style="margin-top:8px;width:100%;height:44px;background:none;border:0;color:var(--muted-fg);font-family:var(--sans);font-weight:800;font-size:14.5px;cursor:pointer">Deixa, vou confirmar</button>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- ===== ACHIEVEMENT CELEBRATION ===== -->
+      <sc-if value="{{ celebrate }}" hint-placeholder-val="{{ false }}">
+      <div onClick="{{ closeCelebrate }}" style="position:absolute;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;padding:24px;background:hsl(0 0% 0% / .6);animation:scrim .24s ease both">
+        <div class="confetti" aria-hidden style="position:absolute;inset:0;overflow:hidden;pointer-events:none">
+          <span style="--to:translate(-120px,-150px);--rot:220deg;color:var(--gold);animation-delay:0s">🎉</span>
+          <span style="--to:translate(130px,-140px);--rot:-200deg;animation-delay:.05s">✨</span>
+          <span style="--to:translate(-150px,60px);--rot:180deg;animation-delay:.1s">⭐</span>
+          <span style="--to:translate(160px,80px);--rot:-160deg;animation-delay:.08s">🎊</span>
+          <span style="--to:translate(-90px,180px);--rot:140deg;color:var(--vinho);animation-delay:.14s">💛</span>
+          <span style="--to:translate(100px,190px);--rot:-240deg;animation-delay:.12s">🔥</span>
+          <span style="--to:translate(-180px,-40px);--rot:200deg;animation-delay:.18s">🙌</span>
+          <span style="--to:translate(180px,-30px);--rot:-180deg;animation-delay:.16s">🎉</span>
+          <span style="--to:translate(-60px,-200px);--rot:160deg;animation-delay:.22s">✨</span>
+          <span style="--to:translate(70px,-200px);--rot:-220deg;animation-delay:.2s">⭐</span>
+          <span style="--to:translate(-200px,140px);--rot:120deg;animation-delay:.26s">🎊</span>
+          <span style="--to:translate(200px,150px);--rot:-140deg;animation-delay:.24s">💛</span>
+        </div>
+        <div style="position:relative;width:100%;max-width:290px;border-radius:26px;background:var(--card);padding:28px 24px;text-align:center;box-shadow:0 24px 60px rgba(43,39,36,.28);animation:spring .55s cubic-bezier(.32,.72,.24,1) both">
+          <div style="position:relative;margin:0 auto;width:96px;height:96px;display:grid;place-items:center">
+            <div aria-hidden style="position:absolute;inset:0;border-radius:999px;background:radial-gradient(circle,hsl(42 78% 60% / .5),transparent 68%);animation:glow 2.2s ease-in-out infinite"></div>
+            <span style="position:relative;font-size:60px;line-height:1;animation:emojiPop .6s .1s cubic-bezier(.34,1.56,.64,1) both">⚡</span>
+          </div>
+          <p style="margin:12px 0 0;font-size:11px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:var(--gold-fg)">Conquista desbloqueada!</p>
+          <h2 style="font-family:var(--disp);font-weight:900;font-size:24px;line-height:1.1;margin:4px 0 0">Resposta relâmpago</h2>
+          <p style="margin:4px 0 0;font-size:13.5px;color:var(--muted-fg)">Confirmou rapidinho 3 vezes.</p>
+          <button class="press" onClick="{{ closeCelebrate }}" style="margin-top:20px;width:100%;height:48px;border:0;border-radius:15px;background:var(--vinho);color:var(--creme-fg);font-family:var(--sans);font-weight:800;font-size:15.5px;cursor:pointer">Boa! 🎉</button>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- ===== TOAST ===== -->
+      <sc-if value="{{ hasToast }}" hint-placeholder-val="{{ false }}">
+      <div style="position:absolute;left:50%;bottom:84px;z-index:70;transform:translateX(-50%);background:hsl(8 20% 18%);color:var(--creme-fg);font-weight:700;font-size:13.5px;padding:11px 18px;border-radius:14px;box-shadow:0 12px 30px rgba(43,39,36,.3);white-space:nowrap;animation:toastIn 2.6s ease forwards">{{ toast }}</div>
+      </sc-if>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { tab: "inicio", confirmed: false, sheet: false, toast: "", celebrate: false, invites: 1, refreshing: false };
+
+  go(t) { this.setState({ tab: t }); }
+  showToast(msg) {
+    this.setState({ toast: msg });
+    clearTimeout(this._t);
+    this._t = setTimeout(() => this.setState({ toast: "" }), 2600);
+  }
+  confirmHero() {
+    if (this.state.confirmed) return;
+    this.setState({ confirmed: true });
+    this.showToast("Presença confirmada — obrigado!");
+    clearTimeout(this._c);
+    this._c = setTimeout(() => this.setState({ celebrate: true }), 700);
+  }
+  refresh() {
+    if (this.state.refreshing) return;
+    this.setState({ refreshing: true });
+    setTimeout(() => this.setState({ refreshing: false }), 1000);
+  }
+  sheetDecline() {
+    this.setState({ sheet: false, invites: Math.max(0, this.state.invites - 1) });
+    this.showToast("Avisamos o líder. Obrigado por avisar.");
+  }
+
+  renderVals() {
+    const s = this.state;
+    const items = [
+      { key: "inicio", label: "Início", icon: "🏠" },
+      { key: "escalas", label: "Escalas", icon: "🗓️" },
+      { key: "cronograma", label: "Cronograma", icon: "📋" },
+      { key: "equipes", label: "Equipes", icon: "👥" },
+      { key: "perfil", label: "Perfil", icon: "👤" },
+    ];
+    const nav = items.map((it) => {
+      const active = s.tab === it.key;
+      return {
+        label: it.label,
+        icon: it.icon,
+        onClick: () => this.go(it.key),
+        color: active ? "hsl(349 70% 26%)" : "hsl(27 13% 40%)",
+        pill: active ? "hsl(42 78% 60% / .4)" : "transparent",
+        scale: active ? "1.12" : "1",
+      };
+    });
+    return {
+      nav,
+      isInicio: s.tab === "inicio",
+      isEscalas: s.tab === "escalas",
+      isCron: s.tab === "cronograma",
+      isEquipes: s.tab === "equipes",
+      isPerfil: s.tab === "perfil",
+      confirmed: s.confirmed,
+      notConfirmed: !s.confirmed,
+      sheet: s.sheet,
+      celebrate: s.celebrate,
+      invites: s.invites,
+      hasInvites: s.invites > 0,
+      refreshing: s.refreshing,
+      toast: s.toast,
+      hasToast: !!s.toast,
+      openSheet: () => this.setState({ sheet: true }),
+      respondInvite: () => this.setState({ sheet: true }),
+      closeSheet: () => this.setState({ sheet: false }),
+      confirmHero: () => this.confirmHero(),
+      closeCelebrate: () => this.setState({ celebrate: false }),
+      celebrateNow: () => this.setState({ celebrate: true }),
+      refresh: () => this.refresh(),
+      sheetDecline: () => this.sheetDecline(),
+    };
+  }
+}
+</script>
+</body>
+</html>
