@@ -50,6 +50,7 @@ export function NovoEventoForm({
   function applyTemplate(t: EventTemplate) {
     setTitle(t.title);
     if (t.startTime) setTime(t.startTime.slice(0, 5));
+    setCallTime(t.callTime ? t.callTime.slice(0, 5) : "");
     setLocation(t.location ?? "");
     setSelected(new Set(t.teams.map((x) => x.id)));
   }

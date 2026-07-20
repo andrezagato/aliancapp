@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Plus, Trash2, LayoutTemplate } from "lucide-react";
+import { Check, Pencil, Plus, Trash2, LayoutTemplate } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { TeamDot } from "@/components/coverage-badge";
@@ -25,8 +25,10 @@ export function ModelosManager({
   const router = useRouter();
   const [pending, start] = useTransition();
   const [open, setOpen] = useState(templates.length === 0);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [time, setTime] = useState("18:00");
+  const [callTime, setCallTime] = useState("");
   const [location, setLocation] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
@@ -40,17 +42,48 @@ export function ModelosManager({
     });
   }
 
-  function create() {
+  function reset() {
+    setEditingId(null);
+    setName("");
+    setTime("18:00");
+    setCallTime("");
+    setLocation("");
+    setSelected(new Set());
+    setError(null);
+  }
+
+  function startNew() {
+    reset();
+    setOpen(true);
+  }
+
+  function startEdit(t: EventTemplate) {
+    setEditingId(t.id);
+    setName(t.title);
+    setTime(t.startTime ? t.startTime.slice(0, 5) : "18:00");
+    setCallTime(t.callTime ? t.callTime.slice(0, 5) : "");
+    setLocation(t.location ?? "");
+    setSelected(new Set(t.teams.map((x) => x.id)));
+    setError(null);
+    setOpen(true);
+  }
+
+  function save() {
     setError(null);
     start(async () => {
-      const r = await criarModelo({ name, time, location, teamIds: [...selected] });
+      const r = await criarModelo({
+        id: editingId ?? undefined,
+        name,
+        time,
+        callTime: callTime || undefined,
+        location,
+        teamIds: [...selected],
+      });
       if (!r.ok) {
         setError(r.error);
         return;
       }
-      setName("");
-      setLocation("");
-      setSelected(new Set());
+      reset();
       setOpen(false);
       router.refresh();
     });
@@ -59,7 +92,10 @@ export function ModelosManager({
   function remove(id: string) {
     start(async () => {
       const r = await excluirModelo(id);
-      if (r.ok) router.refresh();
+      if (r.ok) {
+        if (editingId === id) reset();
+        router.refresh();
+      }
     });
   }
 
@@ -69,15 +105,16 @@ export function ModelosManager({
       {templates.length > 0 ? (
         <div className="space-y-3">
           {templates.map((t) => (
-            <Card key={t.id}>
+            <Card key={t.id} className={cn(editingId === t.id && "ring-1 ring-primary")}>
               <CardContent className="flex items-start gap-3 p-4">
-                <span className="inline-flex size-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+                <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
                   <LayoutTemplate className="size-5" />
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="font-medium">{t.title}</p>
                   <p className="text-sm text-muted-foreground">
                     {t.startTime ? t.startTime.slice(0, 5) : ""}
+                    {t.callTime ? ` · equipe ${t.callTime.slice(0, 5)}` : ""}
                     {t.location ? ` · ${t.location}` : ""}
                   </p>
                   <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5">
@@ -88,25 +125,35 @@ export function ModelosManager({
                     ))}
                   </div>
                 </div>
-                <button
-                  onClick={() => remove(t.id)}
-                  disabled={pending}
-                  aria-label="Excluir modelo"
-                  className="inline-flex size-8 items-center justify-center rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                >
-                  <Trash2 className="size-4" />
-                </button>
+                <div className="flex shrink-0 items-center gap-0.5">
+                  <button
+                    onClick={() => startEdit(t)}
+                    disabled={pending}
+                    aria-label="Editar modelo"
+                    className="inline-flex size-8 items-center justify-center rounded-full text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                  >
+                    <Pencil className="size-4" />
+                  </button>
+                  <button
+                    onClick={() => remove(t.id)}
+                    disabled={pending}
+                    aria-label="Excluir modelo"
+                    className="inline-flex size-8 items-center justify-center rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                  >
+                    <Trash2 className="size-4" />
+                  </button>
+                </div>
               </CardContent>
             </Card>
           ))}
         </div>
       ) : null}
 
-      {/* Novo modelo */}
+      {/* Novo modelo / edição */}
       {open ? (
         <Card>
           <CardContent className="space-y-4 p-5">
-            <p className="text-base font-semibold">Novo modelo</p>
+            <p className="text-base font-semibold">{editingId ? "Editar modelo" : "Novo modelo"}</p>
             <label className="block space-y-1.5">
               <span className="text-sm font-medium">Nome</span>
               <input className={inputClass} value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex.: Culto de Domingo" />
@@ -117,10 +164,14 @@ export function ModelosManager({
                 <input type="time" className={inputClass} value={time} onChange={(e) => setTime(e.target.value)} />
               </label>
               <label className="block space-y-1.5">
-                <span className="text-sm font-medium">Local padrão</span>
-                <input className={inputClass} value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Ex.: Templo" />
+                <span className="text-sm font-medium">Chegada da equipe</span>
+                <input type="time" className={inputClass} value={callTime} onChange={(e) => setCallTime(e.target.value)} />
               </label>
             </div>
+            <label className="block space-y-1.5">
+              <span className="text-sm font-medium">Local padrão</span>
+              <input className={inputClass} value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Ex.: Templo" />
+            </label>
             <div className="space-y-2">
               <span className="text-sm font-medium">Equipes que servem</span>
               <div className="flex flex-wrap gap-2">
@@ -145,18 +196,26 @@ export function ModelosManager({
             {error ? <p className="text-sm text-destructive">{error}</p> : null}
             <div className="flex gap-2">
               {templates.length > 0 ? (
-                <Button variant="ghost" className="flex-1" onClick={() => setOpen(false)} disabled={pending}>
+                <Button
+                  variant="ghost"
+                  className="flex-1"
+                  onClick={() => {
+                    reset();
+                    setOpen(false);
+                  }}
+                  disabled={pending}
+                >
                   Cancelar
                 </Button>
               ) : null}
-              <Button className="flex-1" onClick={create} disabled={pending || !name.trim() || selected.size === 0}>
-                {pending ? "Salvando…" : "Salvar modelo"}
+              <Button className="flex-1" onClick={save} disabled={pending || !name.trim() || selected.size === 0}>
+                {pending ? "Salvando…" : editingId ? "Salvar em cima" : "Salvar modelo"}
               </Button>
             </div>
           </CardContent>
         </Card>
       ) : (
-        <Button variant="outline" className="w-full" onClick={() => setOpen(true)}>
+        <Button variant="outline" className="w-full" onClick={startNew}>
           <Plus className="size-4" /> Novo modelo
         </Button>
       )}

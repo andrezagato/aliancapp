@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { LocateFixed } from "lucide-react";
 import { useToast } from "@/components/ui/toast";
+import { AddressSearch } from "@/components/address-search";
 import { definirLocalIgreja } from "@/lib/actions";
 import { getCoords } from "@/lib/geo-client";
 import type { ChurchLocation } from "@/lib/data";
@@ -66,8 +67,16 @@ export function ChurchLocationCard({ location }: { location: ChurchLocation | nu
           <LocateFixed className="size-4" /> Usar minha localização atual
         </button>
         <p className="text-[12px] text-muted-foreground">
-          Jeito mais fácil: <b>esteja na igreja</b> e toque no botão acima. Não precisa digitar nada.
+          Jeito mais fácil: <b>esteja na igreja</b> e toque no botão acima. Ou busque o endereço abaixo — sem precisar
+          estar lá.
         </p>
+        <AddressSearch
+          onPick={(a, o) => {
+            setLat(a.toFixed(6));
+            setLng(o.toFixed(6));
+            showToast("Endereço encontrado — confira e salve.");
+          }}
+        />
         <details className="text-[12px] text-muted-foreground">
           <summary className="cursor-pointer">Ou informar manualmente (avançado)</summary>
           <div className="mt-2 grid grid-cols-2 gap-2">

@@ -22,6 +22,7 @@ import { EventTeams } from "@/components/event/event-teams";
 import { ResponsavelControls } from "@/components/responsavel-controls";
 import { CallTimeControl } from "@/components/call-time-control";
 import { EventAdminActions } from "@/components/event-admin-actions";
+import { EventLocationControl } from "@/components/event-location-control";
 import { fmtEventDate, fmtTime, churchDateISO } from "@/lib/format";
 
 export default async function EventoPage({ params }: { params: Promise<{ id: string }> }) {
@@ -114,6 +115,10 @@ export default async function EventoPage({ params }: { params: Promise<{ id: str
           ) : null}
         </CardContent>
       </Card>
+
+      {session.role === "admin" ? (
+        <EventLocationControl eventId={ev.id} lat={ev.latitude} lng={ev.longitude} />
+      ) : null}
 
       <RundownEditor eventId={ev.id} startsAt={ev.starts_at} items={rundown} canEdit={canEditRundown} />
 

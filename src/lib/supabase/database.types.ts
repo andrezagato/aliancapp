@@ -523,6 +523,7 @@ export type Database = {
       event_series: {
         Row: {
           active: boolean
+          call_time: string | null
           church_id: string
           created_at: string
           id: string
@@ -533,6 +534,7 @@ export type Database = {
         }
         Insert: {
           active?: boolean
+          call_time?: string | null
           church_id: string
           created_at?: string
           id?: string
@@ -543,6 +545,7 @@ export type Database = {
         }
         Update: {
           active?: boolean
+          call_time?: string | null
           church_id?: string
           created_at?: string
           id?: string
@@ -572,7 +575,9 @@ export type Database = {
           created_by: string | null
           ends_at: string | null
           id: string
+          latitude: number | null
           location: string | null
+          longitude: number | null
           notes: string | null
           responsible_id: string | null
           series_id: string | null
@@ -589,7 +594,9 @@ export type Database = {
           created_by?: string | null
           ends_at?: string | null
           id?: string
+          latitude?: number | null
           location?: string | null
+          longitude?: number | null
           notes?: string | null
           responsible_id?: string | null
           series_id?: string | null
@@ -606,7 +613,9 @@ export type Database = {
           created_by?: string | null
           ends_at?: string | null
           id?: string
+          latitude?: number | null
           location?: string | null
+          longitude?: number | null
           notes?: string | null
           responsible_id?: string | null
           series_id?: string | null

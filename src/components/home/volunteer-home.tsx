@@ -84,20 +84,24 @@ export function VolunteerHome({
     });
   };
 
-  const checkin = (a: MyAssignment) => {
-    patch(a.assignmentId, { checkedIn: true });
-    showToast("Check-in feito. Bom culto!");
+  const doCheckin = (a: MyAssignment, force = false) => {
     startTransition(async () => {
       const coords = await getCoords();
-      const r = await fazerCheckin(a.assignmentId, a.teamId, a.eventId, coords?.lat ?? null, coords?.lng ?? null);
-      if (!r.ok) {
-        patch(a.assignmentId, { checkedIn: false });
+      const r = await fazerCheckin(a.assignmentId, a.teamId, a.eventId, coords?.lat ?? null, coords?.lng ?? null, force);
+      if (r.ok) {
+        patch(a.assignmentId, { checkedIn: true });
+        showToast("Check-in feito. Bom culto!");
+        if (r.unlocked && r.unlocked.length > 0) celebrateNew(r.unlocked);
+      } else if (r.code === "outside") {
+        if (typeof window !== "undefined" && window.confirm("Você não está no local do evento. Fazer check-in mesmo assim?")) {
+          doCheckin(a, true);
+        }
+      } else {
         showToast(r.error);
-      } else if (r.unlocked && r.unlocked.length > 0) {
-        celebrateNew(r.unlocked);
       }
     });
   };
+  const checkin = (a: MyAssignment) => doCheckin(a);
 
   const openRespond = (a: MyAssignment) => {
     setRespond(a);

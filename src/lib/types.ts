@@ -42,8 +42,10 @@ export type AprovarProfileInput = {
 };
 
 export type CriarModeloInput = {
+  id?: string; // presente = editar/salvar em cima de um modelo existente
   name: string;
   time?: string; // HH:mm
+  callTime?: string; // HH:mm — chegada da equipe (opcional)
   location?: string;
   teamIds: string[];
 };

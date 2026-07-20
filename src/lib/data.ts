@@ -147,6 +147,7 @@ export type EventTemplate = {
   id: string;
   title: string;
   startTime: string; // HH:mm:ss
+  callTime: string | null; // HH:mm:ss — chegada da equipe (opcional)
   location: string | null;
   teams: { id: string; name: string; color: string }[];
 };
@@ -154,18 +155,25 @@ export type EventTemplate = {
 export async function listTemplates(): Promise<EventTemplate[]> {
   const supabase = await createClient();
   const [{ data: series }, { data: links }, teams] = await Promise.all([
-    supabase.from("event_series").select("id, title, start_time, location").order("title"),
+    supabase.from("event_series").select("id, title, start_time, call_time, location").order("title"),
     supabase.from("series_teams").select("series_id, team_id"),
     listTeams(),
   ]);
   const teamMeta = new Map(teams.map((t) => [t.id, t]));
   const linkRows = (links ?? []) as { series_id: string; team_id: string }[];
 
-  return ((series ?? []) as { id: string; title: string; start_time: string; location: string | null }[]).map(
+  return ((series ?? []) as {
+    id: string;
+    title: string;
+    start_time: string;
+    call_time: string | null;
+    location: string | null;
+  }[]).map(
     (s) => ({
       id: s.id,
       title: s.title,
       startTime: s.start_time,
+      callTime: s.call_time,
       location: s.location,
       teams: linkRows
         .filter((l) => l.series_id === s.id)
@@ -913,6 +921,8 @@ export type EventDetail = {
   confirmedByName: string | null;
   callTime: string | null;
   archivedAt: string | null;
+  latitude: number | null;
+  longitude: number | null;
   teams: DetailTeam[];
   addableTeams: { id: string; name: string; color: string }[];
 };
@@ -922,7 +932,7 @@ export async function getEventDetail(session: Session, eventId: string): Promise
   const { data: ev } = await supabase
     .from("events")
     .select(
-      "id, title, starts_at, ends_at, call_time, archived_at, location, notes, series_id, responsible_id, confirmed_at, responsible:profiles!events_responsible_id_fkey ( full_name ), confirmer:profiles!events_confirmed_by_fkey ( full_name )",
+      "id, title, starts_at, ends_at, call_time, archived_at, latitude, longitude, location, notes, series_id, responsible_id, confirmed_at, responsible:profiles!events_responsible_id_fkey ( full_name ), confirmer:profiles!events_confirmed_by_fkey ( full_name )",
     )
     .eq("id", eventId)
     .maybeSingle();
@@ -1098,6 +1108,8 @@ export async function getEventDetail(session: Session, eventId: string): Promise
     confirmedByName: confirmer?.full_name ?? null,
     callTime: ev.call_time,
     archivedAt: ev.archived_at,
+    latitude: ev.latitude,
+    longitude: ev.longitude,
     teams: detailTeams,
     addableTeams:
       session.role === "admin"

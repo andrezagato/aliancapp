@@ -34,6 +34,13 @@ export function CheckinButton({
       if (next) {
         const coords = await getCoords();
         r = await fazerCheckin(assignmentId, teamId, eventId, coords?.lat ?? null, coords?.lng ?? null);
+        if (!r.ok && r.code === "outside") {
+          if (typeof window !== "undefined" && window.confirm("Você não está no local do evento. Fazer check-in mesmo assim?")) {
+            r = await fazerCheckin(assignmentId, teamId, eventId, coords?.lat ?? null, coords?.lng ?? null, true);
+          } else {
+            return;
+          }
+        }
       } else {
         r = await desfazerCheckin(assignmentId, teamId, eventId);
       }

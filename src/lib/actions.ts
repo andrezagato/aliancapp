@@ -776,6 +776,44 @@ export async function excluirEvento(eventId: string): Promise<ActionResult> {
   return ok;
 }
 
+/** Busca endereço → coordenadas (geocoding grátis via OpenStreetMap/Nominatim). */
+export async function buscarEndereco(query: string): Promise<{ label: string; lat: number; lng: number }[]> {
+  const session = await getSession();
+  if (!session) return [];
+  const q = query.trim();
+  if (q.length < 3) return [];
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&accept-language=pt-BR&countrycodes=br&q=${encodeURIComponent(q)}`;
+    const res = await fetch(url, {
+      headers: { "User-Agent": "SirvoApp/1.0 (escalas de igreja)", Accept: "application/json" },
+      cache: "no-store",
+    });
+    if (!res.ok) return [];
+    const data = (await res.json()) as { display_name: string; lat: string; lon: string }[];
+    return data
+      .map((d) => ({ label: d.display_name, lat: Number(d.lat), lng: Number(d.lon) }))
+      .filter((d) => !Number.isNaN(d.lat) && !Number.isNaN(d.lng));
+  } catch {
+    return [];
+  }
+}
+
+/** Admin define/limpa a localização de um evento (override do local da igreja). */
+export async function definirLocalEvento(
+  eventId: string,
+  lat: number | null,
+  lng: number | null,
+): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  if (session.role !== "admin") return fail("Só o administrador define o local do evento.");
+  const supabase = await createClient();
+  const { error } = await supabase.from("events").update({ latitude: lat, longitude: lng }).eq("id", eventId);
+  if (error) return fail(error.message);
+  revalidatePath(`/escalas/${eventId}`);
+  return ok;
+}
+
 // =============================================================================
 // CRONOGRAMA (ordem do culto) — admin, responsável do culto ou líder de equipe do evento
 // =============================================================================
@@ -1513,21 +1551,33 @@ export async function criarModelo(input: CriarModeloInput): Promise<ActionResult
   if (teamIds.length === 0) return fail("Escolha pelo menos uma equipe.");
 
   const supabase = await createClient();
-  const { data: series, error } = await supabase
-    .from("event_series")
-    .insert({
-      church_id: session.profile.church_id,
-      title: nome,
-      start_time: input.time || "18:00",
-      location: input.location?.trim() || null,
-    })
-    .select("id")
-    .single();
-  if (error || !series) return fail(error?.message || "Não consegui criar o modelo.");
+  const fields = {
+    title: nome,
+    start_time: input.time || "18:00",
+    call_time: input.callTime || null,
+    location: input.location?.trim() || null,
+  };
+
+  let seriesId = input.id;
+  if (seriesId) {
+    // Editar/"salvar em cima" de um modelo existente.
+    const { error } = await supabase.from("event_series").update(fields).eq("id", seriesId);
+    if (error) return fail(error.message);
+    const { error: delErr } = await supabase.from("series_teams").delete().eq("series_id", seriesId);
+    if (delErr) return fail(delErr.message);
+  } else {
+    const { data: series, error } = await supabase
+      .from("event_series")
+      .insert({ church_id: session.profile.church_id, ...fields })
+      .select("id")
+      .single();
+    if (error || !series) return fail(error?.message || "Não consegui criar o modelo.");
+    seriesId = series.id;
+  }
 
   const { error: stErr } = await supabase
     .from("series_teams")
-    .insert(teamIds.map((teamId) => ({ series_id: series.id, team_id: teamId })));
+    .insert(teamIds.map((teamId) => ({ series_id: seriesId!, team_id: teamId })));
   if (stErr) return fail(stErr.message);
 
   revalidatePath("/modelos");
@@ -1595,7 +1645,8 @@ export async function fazerCheckin(
   eventId: string,
   lat?: number | null,
   lng?: number | null,
-): Promise<ActionResult & { unlocked?: UnlockedBadge[] }> {
+  force?: boolean,
+): Promise<ActionResult & { unlocked?: UnlockedBadge[]; code?: string }> {
   const session = await getSession();
   if (!session) return fail("Sessão expirada.");
   const supabase = await createClient();
@@ -1603,16 +1654,35 @@ export async function fazerCheckin(
   const isSelf = a?.profile_id === session.userId;
   if (!isSelf && !canManageTeam(session, teamId)) return fail("Sem permissão.");
 
-  // Selo de local (opcional): confere se está no raio da igreja. Nunca trava o check-in.
+  // Selo de local: usa a coordenada do EVENTO (ex.: retiro) ou, se não houver, a da igreja.
   let atLocation: boolean | null = null;
-  if (typeof lat === "number" && typeof lng === "number" && session.profile.church_id) {
-    const { data: ch } = await supabase
-      .from("churches")
-      .select("latitude, longitude, checkin_radius_m")
-      .eq("id", session.profile.church_id)
+  if (typeof lat === "number" && typeof lng === "number") {
+    const { data: evLoc } = await supabase
+      .from("events")
+      .select("latitude, longitude")
+      .eq("id", eventId)
       .maybeSingle();
-    if (ch && ch.latitude != null && ch.longitude != null) {
-      atLocation = distanceM(lat, lng, ch.latitude, ch.longitude) <= (ch.checkin_radius_m ?? 200);
+    let locLat: number | null = evLoc?.latitude ?? null;
+    let locLng: number | null = evLoc?.longitude ?? null;
+    let radius = 200;
+    if (session.profile.church_id) {
+      const { data: ch } = await supabase
+        .from("churches")
+        .select("latitude, longitude, checkin_radius_m")
+        .eq("id", session.profile.church_id)
+        .maybeSingle();
+      if (ch?.checkin_radius_m) radius = ch.checkin_radius_m;
+      if (locLat == null && ch?.latitude != null && ch?.longitude != null) {
+        locLat = ch.latitude;
+        locLng = ch.longitude;
+      }
+    }
+    if (locLat != null && locLng != null) {
+      atLocation = distanceM(lat, lng, locLat, locLng) <= radius;
+      // Fora do raio: não grava ainda — o cliente pergunta "confirmar mesmo assim?".
+      if (atLocation === false && !force) {
+        return { ok: false, error: "Você não está no local do evento.", code: "outside" };
+      }
     }
   }
 
