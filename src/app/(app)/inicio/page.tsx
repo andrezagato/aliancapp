@@ -104,7 +104,7 @@ export default async function InicioPage() {
         <ResponsibleConfirm events={respEvents} />
         <FeedbackPrompt pending={pendingFeedback} />
         <Servir teams={teamsWithPos} interests={myInterests} />
-        <JornadaTeaser />
+        <QuickTiles />
         <Birthdays />
       </VolunteerHome>
     );
@@ -602,19 +602,32 @@ function Servir({ teams, interests }: { teams: TeamWithPositions[]; interests: M
   );
 }
 
-function JornadaTeaser() {
+const QUICK_TILES = [
+  { href: "/jornada", emoji: "🏆", label: "Minha Jornada", sub: "Suas conquistas", accent: true },
+  { href: "/disponibilidade", emoji: "🗓️", label: "Minhas datas", sub: "Quando não pode" },
+  { href: "/historico", emoji: "📋", label: "Histórico", sub: "Onde você serviu" },
+  { href: "/notificacoes", emoji: "🔔", label: "Avisos", sub: "Suas notificações" },
+];
+
+/** Grid 2×2 de atalhos da home (Home Densa) — agrupa o que eram faixas soltas. */
+function QuickTiles() {
   return (
-    <Link
-      href="/jornada"
-      className="press flex items-center gap-3 rounded-2xl border border-accent/40 bg-gradient-to-br from-accent/10 to-accent/20 p-4"
-    >
-      <span className="grid size-10 shrink-0 place-items-center rounded-full bg-accent/25 text-xl">🏆</span>
-      <div className="min-w-0 flex-1">
-        <p className="font-display text-[15px] font-bold">Minha Jornada</p>
-        <p className="text-[13px] text-muted-foreground">Veja suas conquistas servindo</p>
-      </div>
-      <ChevronRight className="size-5 shrink-0 text-muted-foreground" />
-    </Link>
+    <div className="grid grid-cols-2 gap-2">
+      {QUICK_TILES.map((t) => (
+        <Link
+          key={t.href}
+          href={t.href}
+          className={cn(
+            "press rounded-2xl border p-3",
+            t.accent ? "border-accent/40 bg-gradient-to-br from-accent/10 to-accent/20" : "border-border bg-card",
+          )}
+        >
+          <div className="text-xl">{t.emoji}</div>
+          <p className="mt-1 text-[13.5px] font-bold leading-tight">{t.label}</p>
+          <p className="text-[11.5px] text-muted-foreground">{t.sub}</p>
+        </Link>
+      ))}
+    </div>
   );
 }
 
