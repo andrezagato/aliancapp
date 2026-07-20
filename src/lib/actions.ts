@@ -776,6 +776,115 @@ export async function excluirEvento(eventId: string): Promise<ActionResult> {
   return ok;
 }
 
+// =============================================================================
+// CRONOGRAMA (ordem do culto) — admin, responsável do culto ou líder de equipe do evento
+// =============================================================================
+async function podeEditarCronograma(session: Session, eventId: string): Promise<boolean> {
+  if (session.role === "admin") return true;
+  const supabase = await createClient();
+  const { data: ev } = await supabase.from("events").select("responsible_id").eq("id", eventId).maybeSingle();
+  if (ev?.responsible_id === session.userId) return true;
+  const leadIds = session.profile.teams.filter((t) => t.role === "leader").map((t) => t.id);
+  if (leadIds.length === 0) return false;
+  const { data: reqs } = await supabase
+    .from("event_requirements")
+    .select("team_id")
+    .eq("event_id", eventId)
+    .in("team_id", leadIds)
+    .limit(1);
+  return (reqs ?? []).length > 0;
+}
+
+type BlocoInput = {
+  title: string;
+  kind: string;
+  durationMin: number;
+  responsible?: string;
+  note?: string;
+  link?: string;
+};
+
+export async function adicionarBlocoCronograma(eventId: string, input: BlocoInput): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  if (!(await podeEditarCronograma(session, eventId))) return fail("Sem permissão pra editar o cronograma.");
+  const title = input.title.trim();
+  if (!title) return fail("Dê um nome ao bloco.");
+  const supabase = await createClient();
+  const { data: last } = await supabase
+    .from("event_rundown")
+    .select("sort_order")
+    .eq("event_id", eventId)
+    .order("sort_order", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const { error } = await supabase.from("event_rundown").insert({
+    event_id: eventId,
+    sort_order: (last?.sort_order ?? -1) + 1,
+    title,
+    kind: input.kind || "outro",
+    duration_min: Math.max(0, Math.round(input.durationMin || 0)),
+    responsible: input.responsible?.trim() || null,
+    note: input.note?.trim() || null,
+    link: input.link?.trim() || null,
+  });
+  if (error) return fail(error.message);
+  revalidatePath(`/escalas/${eventId}`);
+  revalidatePath("/cronograma");
+  return ok;
+}
+
+export async function atualizarBlocoCronograma(id: string, eventId: string, input: BlocoInput): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  if (!(await podeEditarCronograma(session, eventId))) return fail("Sem permissão.");
+  const title = input.title.trim();
+  if (!title) return fail("Dê um nome ao bloco.");
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("event_rundown")
+    .update({
+      title,
+      kind: input.kind || "outro",
+      duration_min: Math.max(0, Math.round(input.durationMin || 0)),
+      responsible: input.responsible?.trim() || null,
+      note: input.note?.trim() || null,
+      link: input.link?.trim() || null,
+    })
+    .eq("id", id);
+  if (error) return fail(error.message);
+  revalidatePath(`/escalas/${eventId}`);
+  revalidatePath("/cronograma");
+  return ok;
+}
+
+export async function removerBlocoCronograma(id: string, eventId: string): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  if (!(await podeEditarCronograma(session, eventId))) return fail("Sem permissão.");
+  const supabase = await createClient();
+  const { error } = await supabase.from("event_rundown").delete().eq("id", id);
+  if (error) return fail(error.message);
+  revalidatePath(`/escalas/${eventId}`);
+  revalidatePath("/cronograma");
+  return ok;
+}
+
+export async function reordenarCronograma(eventId: string, orderedIds: string[]): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  if (!(await podeEditarCronograma(session, eventId))) return fail("Sem permissão.");
+  const supabase = await createClient();
+  await Promise.all(
+    orderedIds.map((id, i) =>
+      supabase.from("event_rundown").update({ sort_order: i }).eq("id", id).eq("event_id", eventId),
+    ),
+  );
+  revalidatePath(`/escalas/${eventId}`);
+  revalidatePath("/cronograma");
+  return ok;
+}
+
 /** Admin adiciona outra equipe a um evento já criado (copia as posições da equipe). */
 export async function adicionarEquipeAoEvento(eventId: string, teamId: string): Promise<ActionResult> {
   const session = await getSession();

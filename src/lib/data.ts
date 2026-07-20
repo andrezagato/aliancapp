@@ -817,6 +817,48 @@ export async function getChurchLocation(session: Session): Promise<ChurchLocatio
 }
 
 // =============================================================================
+// CRONOGRAMA (ordem do culto) — blocos por evento
+// =============================================================================
+export type RundownItem = {
+  id: string;
+  sortOrder: number;
+  title: string;
+  kind: string;
+  durationMin: number;
+  responsible: string | null;
+  note: string | null;
+  link: string | null;
+};
+
+export async function getEventRundown(eventId: string): Promise<RundownItem[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("event_rundown")
+    .select("id, sort_order, title, kind, duration_min, responsible, note, link")
+    .eq("event_id", eventId)
+    .order("sort_order", { ascending: true });
+  return ((data ?? []) as {
+    id: string;
+    sort_order: number;
+    title: string;
+    kind: string;
+    duration_min: number;
+    responsible: string | null;
+    note: string | null;
+    link: string | null;
+  }[]).map((r) => ({
+    id: r.id,
+    sortOrder: r.sort_order,
+    title: r.title,
+    kind: r.kind,
+    durationMin: r.duration_min,
+    responsible: r.responsible,
+    note: r.note,
+    link: r.link,
+  }));
+}
+
+// =============================================================================
 // DETALHE DO EVENTO (agrupado por equipe -> posição -> vagas)
 // =============================================================================
 export type SlotPerson = {

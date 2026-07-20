@@ -473,6 +473,53 @@ export type Database = {
           },
         ]
       }
+      event_rundown: {
+        Row: {
+          created_at: string
+          duration_min: number
+          event_id: string
+          id: string
+          kind: string
+          link: string | null
+          note: string | null
+          responsible: string | null
+          sort_order: number
+          title: string
+        }
+        Insert: {
+          created_at?: string
+          duration_min?: number
+          event_id: string
+          id?: string
+          kind?: string
+          link?: string | null
+          note?: string | null
+          responsible?: string | null
+          sort_order?: number
+          title: string
+        }
+        Update: {
+          created_at?: string
+          duration_min?: number
+          event_id?: string
+          id?: string
+          kind?: string
+          link?: string | null
+          note?: string | null
+          responsible?: string | null
+          sort_order?: number
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_rundown_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       event_series: {
         Row: {
           active: boolean
