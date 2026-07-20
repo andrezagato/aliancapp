@@ -1124,6 +1124,39 @@ export async function aprovarProfilePendente(input: AprovarProfileInput): Promis
 // =============================================================================
 // EQUIPES / POSIÇÕES (admin cria equipe; admin ou líder gerencia posições)
 // =============================================================================
+/** Admin renomeia uma equipe. */
+export async function renomearEquipe(teamId: string, name: string): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  if (session.role !== "admin") return fail("Só o administrador renomeia equipes.");
+  const value = name.trim();
+  if (value.length < 2) return fail("Dê um nome à equipe.");
+  const supabase = await createClient();
+  const { error } = await supabase.from("teams").update({ name: value }).eq("id", teamId);
+  if (error) return fail(error.message);
+  revalidatePath("/equipes");
+  revalidatePath("/inicio");
+  revalidatePath("/escalas");
+  return ok;
+}
+
+/** Admin arquiva/reativa uma equipe (some das listas; mantém histórico). */
+export async function arquivarEquipe(teamId: string, arquivar: boolean): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  if (session.role !== "admin") return fail("Só o administrador arquiva equipes.");
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("teams")
+    .update({ archived_at: arquivar ? new Date().toISOString() : null })
+    .eq("id", teamId);
+  if (error) return fail(error.message);
+  revalidatePath("/equipes");
+  revalidatePath("/inicio");
+  revalidatePath("/escalas");
+  return ok;
+}
+
 export async function criarEquipe(name: string, color?: string): Promise<ActionResult> {
   const session = await getSession();
   if (!session) return fail("Sessão expirada.");

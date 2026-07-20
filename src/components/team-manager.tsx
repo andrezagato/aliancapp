@@ -12,6 +12,8 @@ import { PessoaConfigModal, type TeamOpt } from "@/components/pessoa-config-moda
 import { cn } from "@/lib/utils";
 import {
   criarEquipe,
+  renomearEquipe,
+  arquivarEquipe,
   criarPosicao,
   renomearPosicao,
   arquivarPosicao,
@@ -76,7 +78,7 @@ export function TeamManager({
       ) : (
         <div className="grid gap-4 lg:grid-cols-2">
           {teams.map((team) => (
-            <TeamCard key={team.id} team={team} allProfiles={allProfiles} onOpenPerson={setOpenId} />
+            <TeamCard key={team.id} team={team} allProfiles={allProfiles} isAdmin={isAdmin} onOpenPerson={setOpenId} />
           ))}
         </div>
       )}
@@ -177,22 +179,107 @@ function NovaEquipe() {
   );
 }
 
+function TeamHeader({ team, isAdmin }: { team: ManageableTeam; isAdmin: boolean }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(team.name);
+  const [confirming, setConfirming] = useState(false);
+
+  const save = () =>
+    start(async () => {
+      const r = await renomearEquipe(team.id, value);
+      if (r.ok) {
+        setEditing(false);
+        router.refresh();
+      }
+    });
+  const archive = () =>
+    start(async () => {
+      const r = await arquivarEquipe(team.id, true);
+      if (r.ok) router.refresh();
+      setConfirming(false);
+    });
+
+  if (editing) {
+    return (
+      <div className="flex items-center gap-2 border-b border-border p-4">
+        <TeamDot color={team.color} className="size-3" />
+        <input className={inputClass} value={value} autoFocus onChange={(e) => setValue(e.target.value)} />
+        <button
+          onClick={save}
+          disabled={pending || !value.trim()}
+          aria-label="Salvar"
+          className="inline-flex size-8 shrink-0 items-center justify-center rounded-full text-success hover:bg-success/10"
+        >
+          <Check className="size-4" />
+        </button>
+        <button
+          onClick={() => {
+            setEditing(false);
+            setValue(team.name);
+          }}
+          aria-label="Cancelar"
+          className="inline-flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted"
+        >
+          <X className="size-4" />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-2 border-b border-border p-4">
+      <TeamDot color={team.color} className="size-3" />
+      <h2 className="text-lg font-semibold">{team.name}</h2>
+      {isAdmin && confirming ? (
+        <div className="ml-auto flex items-center gap-1">
+          <Button size="sm" variant="destructive" onClick={archive} disabled={pending}>
+            {pending ? "…" : "Arquivar"}
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setConfirming(false)} disabled={pending}>
+            Não
+          </Button>
+        </div>
+      ) : isAdmin ? (
+        <div className="ml-auto flex items-center gap-1">
+          <button
+            onClick={() => setEditing(true)}
+            aria-label="Renomear equipe"
+            className="inline-flex size-8 items-center justify-center rounded-full text-muted-foreground hover:bg-muted"
+          >
+            <Pencil className="size-4" />
+          </button>
+          <button
+            onClick={() => setConfirming(true)}
+            aria-label="Arquivar equipe"
+            className="inline-flex size-8 items-center justify-center rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+          >
+            <Archive className="size-4" />
+          </button>
+          <span className="ml-1 text-sm text-muted-foreground">{team.members.length}</span>
+        </div>
+      ) : (
+        <span className="ml-auto text-sm text-muted-foreground">{team.members.length}</span>
+      )}
+    </div>
+  );
+}
+
 function TeamCard({
   team,
   allProfiles,
+  isAdmin,
   onOpenPerson,
 }: {
   team: ManageableTeam;
   allProfiles: Profile[];
+  isAdmin: boolean;
   onOpenPerson: (profileId: string) => void;
 }) {
   return (
     <Card className="self-start">
-      <div className="flex items-center gap-2 border-b border-border p-4">
-        <TeamDot color={team.color} className="size-3" />
-        <h2 className="text-lg font-semibold">{team.name}</h2>
-        <span className="ml-auto text-sm text-muted-foreground">{team.members.length}</span>
-      </div>
+      <TeamHeader team={team} isAdmin={isAdmin} />
 
       {/* Membros — tocar abre o modal de configuração */}
       <div className="border-b border-border">

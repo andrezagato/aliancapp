@@ -224,7 +224,7 @@ export function DisponibilidadeManager({
           dirty ? "bg-primary text-primary-foreground" : "cursor-not-allowed bg-muted text-muted-foreground",
         )}
       >
-        {pending ? "Salvando…" : "Salvar disponibilidade"}
+        {pending ? "Salvando…" : "Salvar indisponibilidade"}
       </button>
     </div>
   );

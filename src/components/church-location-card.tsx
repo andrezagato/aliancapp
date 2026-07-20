@@ -65,7 +65,12 @@ export function ChurchLocationCard({ location }: { location: ChurchLocation | nu
         >
           <LocateFixed className="size-4" /> Usar minha localização atual
         </button>
-        <div className="grid grid-cols-2 gap-2">
+        <p className="text-[12px] text-muted-foreground">
+          Jeito mais fácil: <b>esteja na igreja</b> e toque no botão acima. Não precisa digitar nada.
+        </p>
+        <details className="text-[12px] text-muted-foreground">
+          <summary className="cursor-pointer">Ou informar manualmente (avançado)</summary>
+          <div className="mt-2 grid grid-cols-2 gap-2">
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-muted-foreground">Latitude</span>
             <input value={lat} onChange={(e) => setLat(e.target.value)} inputMode="decimal" placeholder="-23.55" className={inputCls} />
@@ -75,10 +80,11 @@ export function ChurchLocationCard({ location }: { location: ChurchLocation | nu
             <input value={lng} onChange={(e) => setLng(e.target.value)} inputMode="decimal" placeholder="-46.63" className={inputCls} />
           </label>
         </div>
-        <label className="block">
-          <span className="mb-1 block text-xs font-medium text-muted-foreground">Raio (metros)</span>
-          <input value={radius} onChange={(e) => setRadius(e.target.value)} inputMode="numeric" className={inputCls} />
-        </label>
+          <label className="mt-2 block">
+            <span className="mb-1 block text-xs font-medium text-muted-foreground">Raio (metros)</span>
+            <input value={radius} onChange={(e) => setRadius(e.target.value)} inputMode="numeric" className={inputCls} />
+          </label>
+        </details>
         <button
           onClick={save}
           disabled={busy}
