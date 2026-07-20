@@ -14,7 +14,6 @@ import {
   EscalarDialog,
   RemoveAssignmentButton,
   NecessarioStepper,
-  NaoSeAplicaToggle,
 } from "@/components/leader-controls";
 import { STATUS_META } from "@/lib/status";
 import { cn } from "@/lib/utils";
@@ -248,33 +247,33 @@ function EditablePosition({
 }) {
   const notApplicable = pos.status === "not_applicable";
   return (
-    <div className="space-y-2.5">
+    <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
-        <p className="text-sm font-semibold">{pos.positionName}</p>
-        <div className="flex items-center gap-3">
-          {!notApplicable ? (
-            <NecessarioStepper requirementId={pos.requirementId!} eventId={eventId} teamId={team.teamId} needed={pos.needed} />
-          ) : null}
-          <NaoSeAplicaToggle requirementId={pos.requirementId!} eventId={eventId} teamId={team.teamId} naoSeAplica={notApplicable} />
-        </div>
+        <p className={cn("min-w-0 truncate text-sm font-semibold", notApplicable && "text-muted-foreground")}>
+          {pos.positionName}
+        </p>
+        <NecessarioStepper
+          requirementId={pos.requirementId!}
+          eventId={eventId}
+          teamId={team.teamId}
+          needed={pos.needed}
+          notApplicable={notApplicable}
+        />
       </div>
 
-      {notApplicable ? (
-        <p className="inline-flex items-center gap-1.5 rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">
-          <CircleSlash className="size-3.5" /> Não se aplica neste evento{pos.note ? ` — ${pos.note}` : ""}
-        </p>
-      ) : (
-        <div className="space-y-2">
+      {notApplicable ? null : (
+        <div className="space-y-1.5">
           {pos.filled.map((person) => {
             const meta = STATUS_META[person.status];
             const showResponse =
               person.isMe && !person.swap && (person.status === "convidado" || person.status === "confirmado");
+            const showActions = person.status !== "recusado" && ((person.phone && !person.isMe) || canCheckin);
             return (
-              <div key={person.assignmentId} className="space-y-2">
-                <div className="flex items-center gap-3">
-                  <Avatar name={person.name} src={person.avatarUrl} className="size-9" />
+              <div key={person.assignmentId} className="rounded-xl bg-muted/25 p-2">
+                <div className="flex items-center gap-2.5">
+                  <Avatar name={person.name} src={person.avatarUrl} className="size-8" />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">
+                    <p className="truncate text-[13.5px] font-medium">
                       {person.name}
                       {person.isMe ? <span className="text-muted-foreground"> (você)</span> : null}
                     </p>
@@ -285,17 +284,20 @@ function EditablePosition({
                   {showResponse ? (
                     <AssignmentResponse assignmentId={person.assignmentId} status={person.status} teamId={team.teamId} />
                   ) : (
-                    <Badge variant={meta.variant}>{meta.label}</Badge>
+                    <Badge variant={meta.variant} className="shrink-0 px-2 py-0.5 text-[11px]">
+                      {SHORT[person.status] ?? meta.label}
+                    </Badge>
                   )}
                   <RemoveAssignmentButton assignmentId={person.assignmentId} eventId={eventId} teamId={team.teamId} />
                 </div>
 
-                {person.status !== "recusado" && ((person.phone && !person.isMe) || canCheckin) ? (
-                  <div className="flex flex-wrap items-center gap-2 pl-12">
+                {showActions ? (
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5 pl-[42px]">
                     {person.phone && !person.isMe ? (
                       <WhatsAppButton
                         phone={person.phone}
                         message={`Oi ${person.name.split(/\s+/)[0]}! Passando pra confirmar sua presença na escala de ${team.name} (${fmtEventWhen(startsAt)}). Consegue? 🙏`}
+                        className="h-8 px-2.5 text-[13px]"
                       />
                     ) : null}
                     {canCheckin ? (
@@ -311,7 +313,7 @@ function EditablePosition({
                 ) : null}
 
                 {person.swap ? (
-                  <div className="pl-12">
+                  <div className="mt-1.5 pl-[42px]">
                     <SwapPending
                       swapId={person.swap.id}
                       eventId={eventId}

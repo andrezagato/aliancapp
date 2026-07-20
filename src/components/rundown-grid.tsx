@@ -449,12 +449,9 @@ export function RundownGrid({
                           big={live}
                           className={live ? HEAT_TEXT[h] : "text-muted-foreground"}
                         />
-                        <Stat
-                          label="passou"
-                          value={overMs > 0 ? `+${clock(overMs)}` : "0:00"}
-                          big={live}
-                          className={overMs > 0 ? "text-red-600" : "text-muted-foreground"}
-                        />
+                        {overMs > 0 ? (
+                          <Stat label="passou" value={`+${clock(overMs)}`} big={live} className="text-red-600" />
+                        ) : null}
                       </div>
                     ) : (
                       <Stat label="duração" value={`${it.durationMin} min`} className="text-muted-foreground" />

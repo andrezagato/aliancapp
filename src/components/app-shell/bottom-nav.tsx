@@ -30,13 +30,15 @@ export function BottomNav({ role }: { role: EffectiveRole }) {
 
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border/80 bg-card/85 backdrop-blur-lg pb-safe">
-      <div className="relative mx-auto flex max-w-[520px] items-stretch justify-around px-2 pt-1.5 lg:max-w-[720px]">
-        {/* pílula deslizante */}
+      <div className="relative mx-auto flex max-w-[520px] items-stretch pt-1.5 lg:max-w-[720px]">
+        {/* pílula deslizante — wrapper ocupa exatamente 1 célula (w%) e centraliza a barra */}
         <span
           aria-hidden
-          className="pointer-events-none absolute top-1.5 h-8 rounded-full bg-accent/40 transition-[left] duration-300 ease-[cubic-bezier(.32,.72,.24,1)]"
-          style={{ width: "3.5rem", left: `calc(${activeIdx * w}% + (${w}% - 3.5rem) / 2 + 0.5rem)` }}
-        />
+          className="pointer-events-none absolute top-1.5 flex justify-center transition-[left] duration-300 ease-[cubic-bezier(.32,.72,.24,1)]"
+          style={{ width: `${w}%`, left: `${activeIdx * w}%` }}
+        >
+          <span className="h-8 w-14 rounded-full bg-accent/40" />
+        </span>
         {items.map(({ href, label, icon: Icon }, idx) => {
           const active = idx === activeIdx;
           return (

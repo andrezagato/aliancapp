@@ -15,7 +15,7 @@ import {
 } from "@/components/leader-controls";
 import { STATUS_META } from "@/lib/status";
 import { getSession } from "@/lib/auth";
-import { getEventDetail, listChurchProfiles, type DetailPosition, type DetailTeam } from "@/lib/data";
+import { getEventDetail, listChurchProfiles, getChurchLocation, type DetailPosition, type DetailTeam } from "@/lib/data";
 import { CheckinButton, SwapPending } from "@/components/slot-controls";
 import { EventTeams } from "@/components/event/event-teams";
 import { ResponsavelControls } from "@/components/responsavel-controls";
@@ -36,6 +36,7 @@ export default async function EventoPage({ params }: { params: Promise<{ id: str
   const canCheckin = churchDateISO(ev.starts_at) <= churchDateISO(nowISO);
   const kicker = churchDateISO(ev.starts_at) === churchDateISO(nowISO) ? "Acontece hoje" : "Próximo culto";
   const profiles = session.role === "admin" ? await listChurchProfiles() : [];
+  const churchLoc = session.role === "admin" ? await getChurchLocation(session) : null;
   const manageTeams = ev.teams.filter((t) => t.canManage);
   const otherTeams = ev.teams.filter((t) => !t.canManage);
   const callHHMM = ev.callTime
@@ -114,7 +115,13 @@ export default async function EventoPage({ params }: { params: Promise<{ id: str
       </Card>
 
       {session.role === "admin" ? (
-        <EventLocationControl eventId={ev.id} lat={ev.latitude} lng={ev.longitude} />
+        <EventLocationControl
+          eventId={ev.id}
+          lat={ev.latitude}
+          lng={ev.longitude}
+          churchLat={churchLoc?.latitude ?? null}
+          churchLng={churchLoc?.longitude ?? null}
+        />
       ) : null}
 
       {ev.teams.length === 0 ? (

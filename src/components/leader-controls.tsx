@@ -15,7 +15,7 @@ import {
   escalarVoluntario,
   removerEscalacao,
   marcarNaoSeAplica,
-  ajustarNecessario,
+  definirNecessario,
   adicionarEquipeAoEvento,
 } from "@/lib/actions";
 import type { EligibleMember } from "@/lib/data";
@@ -229,44 +229,46 @@ export function NecessarioStepper({
   eventId,
   teamId,
   needed,
+  notApplicable = false,
 }: {
   requirementId: string;
   eventId: string;
   teamId: string;
   needed: number;
+  /** posição marcada como "não se aplica" → mostra 0 (o + reativa). */
+  notApplicable?: boolean;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
-  const [n, setN] = useState(needed);
+  const [n, setN] = useState(notApplicable ? 0 : needed);
 
   function change(next: number) {
     const clamped = Math.max(0, Math.min(20, next));
     setN(clamped);
     start(async () => {
-      const r = await ajustarNecessario(requirementId, clamped, eventId, teamId);
-      if (!r.ok) setN(needed);
+      const r = await definirNecessario(requirementId, clamped, eventId, teamId);
+      if (!r.ok) setN(notApplicable ? 0 : needed);
       else router.refresh();
     });
   }
 
   return (
-    <div className="flex items-center gap-1.5">
-      <span className="text-xs text-muted-foreground">precisa</span>
+    <div className="inline-flex shrink-0 items-center gap-1 rounded-full border border-border bg-card p-0.5">
       <button
         type="button"
         onClick={() => change(n - 1)}
         disabled={pending || n === 0}
-        className="inline-flex size-7 items-center justify-center rounded-full border border-border text-muted-foreground hover:bg-muted disabled:opacity-40"
+        className="press-sm grid size-6 place-items-center rounded-full text-muted-foreground disabled:opacity-30"
         aria-label="Menos"
       >
         <Minus className="size-3.5" />
       </button>
-      <span className="w-4 text-center text-sm font-semibold tabular-nums">{n}</span>
+      <span className={cn("w-4 text-center text-sm font-bold tabular-nums", n === 0 && "text-muted-foreground")}>{n}</span>
       <button
         type="button"
         onClick={() => change(n + 1)}
         disabled={pending}
-        className="inline-flex size-7 items-center justify-center rounded-full border border-border text-muted-foreground hover:bg-muted"
+        className="press-sm grid size-6 place-items-center rounded-full text-primary"
         aria-label="Mais"
       >
         <Plus className="size-3.5" />

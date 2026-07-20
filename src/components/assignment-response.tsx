@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check } from "lucide-react";
+import { Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
 import { Modal } from "@/components/modal";
@@ -125,17 +125,19 @@ export function AssignmentResponse({
 
   if (status === "confirmado" || status === "presente") {
     return (
-      <div className="flex flex-col items-end gap-1">
-        <span className="inline-flex items-center gap-1 text-sm font-medium text-success">
-          <Check className="size-4" /> Confirmado
+      <div className="flex shrink-0 items-center gap-1">
+        <span className="inline-flex items-center gap-1 rounded-full bg-success/12 px-2 py-0.5 text-[12px] font-bold text-success">
+          <Check className="size-3.5" strokeWidth={3} /> {status === "presente" ? "Presente" : "Confirmado"}
         </span>
         {status === "confirmado" ? (
           <button
             type="button"
             onClick={openDecline}
-            className="text-xs text-muted-foreground underline-offset-2 hover:text-destructive hover:underline"
+            title="Não poderei mais"
+            aria-label="Não poderei mais"
+            className="press-sm grid size-7 place-items-center rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
           >
-            Não poderei mais
+            <X className="size-4" />
           </button>
         ) : null}
         {declineModal}
@@ -144,19 +146,19 @@ export function AssignmentResponse({
   }
 
   if (status === "recusado") {
-    return <span className="text-sm text-muted-foreground">Você recusou</span>;
+    return <span className="shrink-0 text-sm text-muted-foreground">Você recusou</span>;
   }
 
   if (status === "vaga_aberta") return null;
 
   // convidado
   return (
-    <div className="flex flex-col items-stretch gap-1.5">
-      <div className="flex gap-2">
-        <Button size="sm" onClick={confirmar} disabled={pending}>
+    <div className="flex shrink-0 flex-col items-stretch gap-1">
+      <div className="flex gap-1.5">
+        <Button size="sm" onClick={confirmar} disabled={pending} className="h-8 px-3 text-[13px]">
           {pending ? "…" : "Confirmar"}
         </Button>
-        <Button size="sm" variant="outline" onClick={openDecline} disabled={pending}>
+        <Button size="sm" variant="outline" onClick={openDecline} disabled={pending} className="h-8 px-3 text-[13px]">
           Não posso
         </Button>
       </div>

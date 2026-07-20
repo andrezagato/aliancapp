@@ -503,6 +503,33 @@ export async function ajustarNecessario(
   return ok;
 }
 
+/**
+ * Define de uma vez quantas pessoas a posição precisa neste evento.
+ * 0 = "não se aplica" (status not_applicable); ≥1 reativa (status needed).
+ * Unifica o stepper e o "não se aplica" num controle só.
+ */
+export async function definirNecessario(
+  requirementId: string,
+  count: number,
+  eventId: string,
+  teamId: string,
+): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  if (!canManageTeam(session, teamId)) return fail("Você não gerencia esta equipe.");
+  const n = Math.max(0, Math.min(20, Math.trunc(count)));
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("event_requirements")
+    .update({ needed_count: n, status: n === 0 ? "not_applicable" : "needed" })
+    .eq("id", requirementId);
+  if (error) return fail(error.message);
+  revalidatePath(`/escalas/${eventId}`);
+  revalidatePath("/escalas");
+  revalidatePath("/inicio");
+  return ok;
+}
+
 export async function marcarNaoSeAplica(
   requirementId: string,
   naoSeAplica: boolean,
