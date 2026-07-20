@@ -565,7 +565,9 @@ export type Journey = {
  * Garante que as conquistas merecidas estão gravadas (com o próprio login, sob
  * RLS) e devolve os códigos recém-inseridos. Idempotente.
  */
-export async function syncAchievements(session: Session): Promise<{ metrics: JourneyMetrics; newly: string[] }> {
+export async function syncAchievements(
+  session: Session,
+): Promise<{ metrics: JourneyMetrics; newly: string[]; earned: string[] }> {
   const supabase = await createClient();
   const active = session.profile.status === "ativo";
   const isLeader = session.profile.teams.some((t) => t.role === "leader");
@@ -586,7 +588,7 @@ export async function syncAchievements(session: Session): Promise<{ metrics: Jou
         { onConflict: "profile_id,code", ignoreDuplicates: true },
       );
   }
-  return { metrics, newly: missing };
+  return { metrics, newly: missing, earned };
 }
 
 export async function getMyJourney(session: Session): Promise<Journey> {

@@ -20,6 +20,7 @@ import {
 } from "@/lib/actions";
 import { AchievementCelebration } from "@/components/achievement-celebration";
 import { getCoords } from "@/lib/geo-client";
+import { markSeen } from "@/lib/achievements-seen";
 import type { UnlockedBadge } from "@/lib/achievements";
 import { TodayCard } from "./today-card";
 import { NextScheduleHero } from "./next-schedule-hero";
@@ -52,6 +53,10 @@ export function VolunteerHome({
   useEffect(() => setItems(assignments), [assignments]);
 
   const [celebrate, setCelebrate] = useState<UnlockedBadge[]>([]);
+  const celebrateNew = (u: UnlockedBadge[]) => {
+    markSeen(u.map((b) => b.code));
+    setCelebrate(u);
+  };
 
   // sheet único de resposta — confirmar OU recusar uma escala
   const [respond, setRespond] = useState<MyAssignment | null>(null);
@@ -74,7 +79,7 @@ export function VolunteerHome({
         patch(a.assignmentId, { status: "convidado" });
         showToast(r.error);
       } else if (r.unlocked && r.unlocked.length > 0) {
-        setCelebrate(r.unlocked);
+        celebrateNew(r.unlocked);
       }
     });
   };
@@ -89,7 +94,7 @@ export function VolunteerHome({
         patch(a.assignmentId, { checkedIn: false });
         showToast(r.error);
       } else if (r.unlocked && r.unlocked.length > 0) {
-        setCelebrate(r.unlocked);
+        celebrateNew(r.unlocked);
       }
     });
   };

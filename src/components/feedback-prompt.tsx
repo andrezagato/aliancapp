@@ -7,6 +7,7 @@ import { Modal } from "@/components/modal";
 import { useToast } from "@/components/ui/toast";
 import { AchievementCelebration } from "@/components/achievement-celebration";
 import { enviarFeedback } from "@/lib/actions";
+import { markSeen } from "@/lib/achievements-seen";
 import { fmtEventWhen } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { PendingFeedback } from "@/lib/data";
@@ -42,7 +43,10 @@ export function FeedbackPrompt({ pending }: { pending: PendingFeedback[] }) {
       if (r.ok) {
         setOpen(null);
         showToast("Feedback enviado — obrigado! 💛");
-        if (r.unlocked && r.unlocked.length > 0) setCelebrate(r.unlocked);
+        if (r.unlocked && r.unlocked.length > 0) {
+          markSeen(r.unlocked.map((b) => b.code));
+          setCelebrate(r.unlocked);
+        }
         router.refresh();
       } else {
         showToast(r.error);

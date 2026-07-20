@@ -350,8 +350,10 @@ function WhatsAppButton({
   startsAt: string;
 }) {
   const digits = phone.replace(/\D/g, "");
-  if (digits.length < 10) return null;
-  const num = digits.startsWith("55") ? digits : `55${digits}`;
+  // Brasil: 10–11 dígitos = DDD+número (sem país) → prefixa 55; 12–13 = já veio com o país.
+  // Decidir pelo TAMANHO (não por "começa com 55") evita quebrar DDD 55 (Santa Maria/RS).
+  const num = digits.length === 10 || digits.length === 11 ? `55${digits}` : digits;
+  if (num.length < 12 || num.length > 13) return null;
   const first = name.split(/\s+/)[0];
   const msg = `Oi ${first}! Passando pra confirmar sua presença na escala de ${teamName} (${fmtEventWhen(startsAt)}). Consegue? 🙏`;
   return (

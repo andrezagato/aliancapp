@@ -242,6 +242,22 @@ export async function recusarEscalacao(assignmentId: string, motivo: string): Pr
   return ok;
 }
 
+/**
+ * Sincroniza conquistas (insere as merecidas) e devolve TODAS as desbloqueadas.
+ * Usado pelo "vigia" que comemora no login o que a pessoa ainda não viu.
+ */
+export async function sincronizarConquistas(): Promise<UnlockedBadge[]> {
+  const session = await getSession();
+  if (!session) return [];
+  const { earned } = await syncAchievements(session);
+  const out: UnlockedBadge[] = [];
+  for (const code of earned) {
+    const b = BADGE_BY_CODE[code];
+    if (b) out.push({ code: b.code, emoji: b.emoji, title: b.title, desc: b.desc });
+  }
+  return out;
+}
+
 // =============================================================================
 // VOLUNTÁRIO: feedback do culto (privado — só a própria pessoa vê)
 // =============================================================================
