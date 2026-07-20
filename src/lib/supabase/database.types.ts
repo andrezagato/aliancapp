@@ -475,7 +475,9 @@ export type Database = {
       }
       event_rundown: {
         Row: {
+          color: string | null
           created_at: string
+          done_at: string | null
           duration_min: number
           event_id: string
           id: string
@@ -487,7 +489,9 @@ export type Database = {
           title: string
         }
         Insert: {
+          color?: string | null
           created_at?: string
+          done_at?: string | null
           duration_min?: number
           event_id: string
           id?: string
@@ -499,7 +503,9 @@ export type Database = {
           title: string
         }
         Update: {
+          color?: string | null
           created_at?: string
+          done_at?: string | null
           duration_min?: number
           event_id?: string
           id?: string
@@ -580,6 +586,7 @@ export type Database = {
           longitude: number | null
           notes: string | null
           responsible_id: string | null
+          rundown_started_at: string | null
           series_id: string | null
           starts_at: string
           title: string
@@ -599,6 +606,7 @@ export type Database = {
           longitude?: number | null
           notes?: string | null
           responsible_id?: string | null
+          rundown_started_at?: string | null
           series_id?: string | null
           starts_at: string
           title: string
@@ -618,6 +626,7 @@ export type Database = {
           longitude?: number | null
           notes?: string | null
           responsible_id?: string | null
+          rundown_started_at?: string | null
           series_id?: string | null
           starts_at?: string
           title?: string
@@ -1089,6 +1098,41 @@ export type Database = {
             columns: ["profile_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rundown_kinds: {
+        Row: {
+          church_id: string
+          color: string
+          created_at: string
+          id: string
+          label: string
+          sort_order: number
+        }
+        Insert: {
+          church_id: string
+          color?: string
+          created_at?: string
+          id?: string
+          label: string
+          sort_order?: number
+        }
+        Update: {
+          church_id?: string
+          color?: string
+          created_at?: string
+          id?: string
+          label?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rundown_kinds_church_id_fkey"
+            columns: ["church_id"]
+            isOneToOne: false
+            referencedRelation: "churches"
             referencedColumns: ["id"]
           },
         ]

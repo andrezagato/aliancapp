@@ -1,0 +1,689 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import {
+  Plus,
+  Trash2,
+  GripVertical,
+  Check,
+  Play,
+  RotateCcw,
+  ExternalLink,
+  Settings2,
+  X,
+} from "lucide-react";
+import { Modal } from "@/components/modal";
+import { useToast } from "@/components/ui/toast";
+import { cn } from "@/lib/utils";
+import {
+  adicionarBlocoCronograma,
+  atualizarBlocoCronograma,
+  removerBlocoCronograma,
+  reordenarCronograma,
+  ajustarDuracaoBloco,
+  iniciarCronograma,
+  reiniciarCronograma,
+  marcarBlocoFeito,
+  adicionarTipoBloco,
+  removerTipoBloco,
+} from "@/lib/actions";
+import type { RundownItem, RundownKind } from "@/lib/data";
+
+const PX_PER_MIN = 5; // altura do bloco = duração × isto (arrastar 1min = 5px)
+const MIN_H = 52; // altura mínima pra caber o conteúdo/toque
+const DEFAULT_COLOR = "#6b7280";
+const SWATCHES = [
+  "#0e7490",
+  "#7c3aed",
+  "#2563eb",
+  "#b45309",
+  "#be185d",
+  "#9d174d",
+  "#0891b2",
+  "#15803d",
+  "#db2777",
+  "#ea580c",
+  "#4f46e5",
+  "#6b7280",
+];
+
+const tf = new Intl.DateTimeFormat("pt-BR", {
+  timeZone: "America/Sao_Paulo",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
+const fmt = (ms: number) => tf.format(new Date(ms));
+const heightOf = (dur: number) => Math.max(MIN_H, dur * PX_PER_MIN);
+function clock(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
+type Row = {
+  it: RundownItem;
+  startMs: number;
+  endMs: number;
+  durMs: number;
+  status: "done" | "live" | "future" | "planned";
+};
+
+type Drag =
+  | { mode: "resize"; id: string; startY: number; startDur: number; newDur: number }
+  | { mode: "reorder"; id: string }
+  | null;
+
+export function RundownGrid({
+  eventId,
+  startsAt,
+  startedAt,
+  items,
+  kinds,
+  canEdit,
+}: {
+  eventId: string;
+  startsAt: string;
+  startedAt: string | null;
+  items: RundownItem[];
+  kinds: RundownKind[];
+  canEdit: boolean;
+}) {
+  const router = useRouter();
+  const { showToast } = useToast();
+  const [, startTx] = useTransition();
+
+  const [list, setList] = useState(items);
+  const [started, setStarted] = useState<string | null>(startedAt);
+  const [drag, setDrag] = useState<Drag>(null);
+  const [now, setNow] = useState<number | null>(null);
+  const [editing, setEditing] = useState<RundownItem | "new" | null>(null);
+  const [manageKinds, setManageKinds] = useState(false);
+
+  useEffect(() => setList(items), [items]);
+  useEffect(() => setStarted(startedAt), [startedAt]);
+
+  // Relógio ao vivo (só depois de montar, pra não quebrar a hidratação).
+  useEffect(() => {
+    setNow(Date.now());
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  const listRef = useRef(list);
+  listRef.current = list;
+  const dragRef = useRef<Drag>(null);
+  dragRef.current = drag;
+  const itemRefs = useRef(new Map<string, HTMLElement>());
+
+  const colorOf = useCallback(
+    (it: RundownItem) => it.color ?? kinds.find((k) => k.label === it.kind)?.color ?? DEFAULT_COLOR,
+    [kinds],
+  );
+
+  // ---- Projeção de horários (o coração do "ao vivo") ----------------------
+  const startedMs = started ? new Date(started).getTime() : null;
+  const plannedStartMs = new Date(startsAt).getTime();
+  const liveIdx = list.findIndex((it) => !it.doneAt);
+  const totalMin = list.reduce((s, i) => s + i.durationMin, 0);
+
+  let cursor = startedMs ?? plannedStartMs;
+  const rows: Row[] = list.map((it, i) => {
+    const durMs = it.durationMin * 60000;
+    const startMs = cursor;
+    let endMs: number;
+    let status: Row["status"];
+    if (it.doneAt) {
+      endMs = new Date(it.doneAt).getTime();
+      status = "done";
+    } else if (startedMs != null && i === liveIdx) {
+      status = "live";
+      const plannedEnd = startMs + durMs;
+      endMs = now != null ? Math.max(plannedEnd, now) : plannedEnd;
+    } else {
+      status = startedMs != null ? "future" : "planned";
+      endMs = startMs + durMs;
+    }
+    cursor = endMs;
+    return { it, startMs, endMs, durMs, status };
+  });
+  const finishMs = cursor;
+  const overFinish = startedMs != null && finishMs > plannedStartMs + totalMin * 60000 + 60000;
+
+  // ---- Persistência -------------------------------------------------------
+  const persistOrder = (next: RundownItem[]) =>
+    startTx(async () => {
+      await reordenarCronograma(eventId, next.map((x) => x.id));
+      router.refresh();
+    });
+  const persistDuration = (id: string, dur: number) =>
+    startTx(async () => {
+      await ajustarDuracaoBloco(id, eventId, dur);
+      router.refresh();
+    });
+
+  // ---- Gestos (arrastar) --------------------------------------------------
+  const onPointerMove = useCallback((e: PointerEvent) => {
+    const d = dragRef.current;
+    if (!d) return;
+    if (d.mode === "resize") {
+      const deltaMin = Math.round((e.clientY - d.startY) / PX_PER_MIN);
+      const newDur = Math.max(1, d.startDur + deltaMin);
+      setDrag({ ...d, newDur });
+      setList((prev) => prev.map((it) => (it.id === d.id ? { ...it, durationMin: newDur } : it)));
+    } else {
+      const ids = listRef.current.map((x) => x.id);
+      let over = ids.length - 1;
+      for (let i = 0; i < ids.length; i++) {
+        const el = itemRefs.current.get(ids[i]);
+        if (!el) continue;
+        const r = el.getBoundingClientRect();
+        if (e.clientY < r.top + r.height / 2) {
+          over = i;
+          break;
+        }
+      }
+      const cur = listRef.current;
+      const from = cur.findIndex((x) => x.id === d.id);
+      if (from !== -1 && over !== from) {
+        const next = [...cur];
+        const [moved] = next.splice(from, 1);
+        next.splice(over, 0, moved);
+        setList(next);
+      }
+    }
+  }, []);
+
+  const onPointerUp = useCallback(() => {
+    const d = dragRef.current;
+    window.removeEventListener("pointermove", onPointerMove);
+    setDrag(null);
+    if (!d) return;
+    if (d.mode === "resize") {
+      const it = listRef.current.find((x) => x.id === d.id);
+      if (it) persistDuration(it.id, it.durationMin);
+    } else {
+      persistOrder(listRef.current);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onPointerMove]);
+
+  const beginResize = (e: React.PointerEvent, it: RundownItem) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDrag({ mode: "resize", id: it.id, startY: e.clientY, startDur: it.durationMin, newDur: it.durationMin });
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp, { once: true });
+  };
+  const beginReorder = (e: React.PointerEvent, it: RundownItem) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDrag({ mode: "reorder", id: it.id });
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp, { once: true });
+  };
+
+  const toggleDone = (it: RundownItem) => {
+    const done = !it.doneAt;
+    setList((prev) =>
+      prev.map((x) => (x.id === it.id ? { ...x, doneAt: done ? new Date().toISOString() : null } : x)),
+    );
+    startTx(async () => {
+      await marcarBlocoFeito(it.id, eventId, done);
+      router.refresh();
+    });
+  };
+
+  const start = () => {
+    setStarted(new Date().toISOString());
+    startTx(async () => {
+      const r = await iniciarCronograma(eventId);
+      if (r.ok) router.refresh();
+      else showToast(r.error);
+    });
+  };
+  const reset = () => {
+    setStarted(null);
+    setList((prev) => prev.map((x) => ({ ...x, doneAt: null })));
+    startTx(async () => {
+      await reiniciarCronograma(eventId);
+      router.refresh();
+    });
+  };
+  const remove = (id: string) =>
+    startTx(async () => {
+      const r = await removerBlocoCronograma(id, eventId);
+      if (r.ok) router.refresh();
+      else showToast(r.error);
+    });
+
+  return (
+    <section>
+      {/* Cabeçalho: início → fim + total + controle ao vivo */}
+      <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2 px-0.5">
+        <div>
+          <h3 className="font-display text-lg font-bold leading-tight">Ordem do culto</h3>
+          {list.length > 0 ? (
+            <p className="text-[13px] font-semibold tabular-nums text-muted-foreground">
+              {fmt(startedMs ?? plannedStartMs)} → <span className={cn(overFinish && "text-warning")}>{fmt(finishMs)}</span>
+              <span className="font-normal"> · {totalMin} min</span>
+            </p>
+          ) : null}
+        </div>
+        {canEdit && list.length > 0 ? (
+          started ? (
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-destructive/10 px-2.5 py-1 text-[12px] font-bold text-destructive">
+                <span className="size-1.5 animate-pulse rounded-full bg-destructive" /> AO VIVO
+              </span>
+              <button
+                onClick={reset}
+                className="press-sm inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-[12px] font-semibold text-muted-foreground"
+              >
+                <RotateCcw className="size-3.5" /> Reiniciar
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={start}
+              className="press inline-flex items-center gap-1.5 rounded-full bg-primary px-3.5 py-1.5 text-sm font-extrabold text-primary-foreground"
+            >
+              <Play className="size-4 fill-current" /> Iniciar culto
+            </button>
+          )
+        ) : null}
+      </div>
+
+      {list.length === 0 ? (
+        <p className="rounded-2xl border border-dashed border-border bg-card px-4 py-6 text-center text-sm text-muted-foreground">
+          {canEdit ? "Monte a ordem do culto adicionando blocos abaixo." : "A ordem do culto ainda não foi montada."}
+        </p>
+      ) : (
+        <ol className="flex flex-col gap-2">
+          {rows.map(({ it, startMs, endMs, status }) => {
+            const color = colorOf(it);
+            const done = status === "done";
+            const live = status === "live";
+            const resizingThis = drag?.mode === "resize" && drag.id === it.id;
+            const reorderingThis = drag?.mode === "reorder" && drag.id === it.id;
+            const overMin = live && now != null ? Math.floor((now - startMs) / 60000) - it.durationMin : 0;
+            return (
+              <li
+                key={it.id}
+                ref={(el) => {
+                  if (el) itemRefs.current.set(it.id, el);
+                  else itemRefs.current.delete(it.id);
+                }}
+                style={{ minHeight: heightOf(it.durationMin) }}
+                onClick={() => canEdit && !drag && setEditing(it)}
+                className={cn(
+                  "relative flex select-none items-stretch overflow-hidden rounded-2xl border bg-card transition-[box-shadow,transform,opacity]",
+                  canEdit && "cursor-pointer",
+                  done && "opacity-55",
+                  live && "border-primary shadow-[0_0_0_2px_hsl(var(--primary))]",
+                  !live && "border-border",
+                  reorderingThis && "z-10 scale-[1.02] opacity-90 shadow-lift",
+                )}
+              >
+                {/* Faixa de cor */}
+                <span className="w-1.5 shrink-0" style={{ backgroundColor: color }} aria-hidden />
+
+                {/* Tick de "feito" */}
+                {canEdit ? (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleDone(it);
+                    }}
+                    aria-label={done ? "Desmarcar feito" : "Marcar feito"}
+                    className={cn(
+                      "my-3 ml-2.5 grid size-6 shrink-0 place-items-center self-start rounded-full border-2 transition-colors",
+                      done ? "border-success bg-success text-white" : live ? "border-primary text-primary" : "border-border text-transparent",
+                    )}
+                  >
+                    <Check className="size-3.5" strokeWidth={3.5} />
+                  </button>
+                ) : (
+                  <span
+                    className={cn(
+                      "my-3 ml-2.5 grid size-6 shrink-0 place-items-center self-start rounded-full",
+                      done ? "bg-success text-white" : live ? "border-2 border-primary" : "border-2 border-border",
+                    )}
+                  >
+                    {done ? <Check className="size-3.5" strokeWidth={3.5} /> : null}
+                  </span>
+                )}
+
+                {/* Horário */}
+                <div className="my-3 ml-2.5 flex w-[52px] shrink-0 flex-col items-start">
+                  <span className={cn("text-sm font-bold tabular-nums", done && "line-through")}>{fmt(startMs)}</span>
+                  {live && now != null ? (
+                    <span className={cn("text-[12px] font-bold tabular-nums", overMin >= 0 ? "text-destructive" : "text-primary")}>
+                      {clock(now - startMs)}
+                    </span>
+                  ) : (
+                    <span className="text-[11px] tabular-nums text-muted-foreground">{it.durationMin}min</span>
+                  )}
+                </div>
+
+                {/* Conteúdo */}
+                <div className="my-3 min-w-0 flex-1 pr-1">
+                  <p className={cn("font-semibold leading-tight", done && "line-through")}>{it.title}</p>
+                  <p className="text-[12px] text-muted-foreground">
+                    {it.kind}
+                    {it.responsible ? ` · ${it.responsible}` : ""}
+                    {live && overMin >= 1 ? <span className="font-bold text-destructive"> · +{overMin}min</span> : ""}
+                  </p>
+                  {it.note ? <p className="mt-0.5 text-[13px] text-muted-foreground">{it.note}</p> : null}
+                  {it.link ? (
+                    <a
+                      href={it.link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="mt-0.5 inline-flex items-center gap-1 text-[13px] font-semibold text-primary"
+                    >
+                      <ExternalLink className="size-3.5" /> Abrir link
+                    </a>
+                  ) : null}
+                </div>
+
+                {/* Alça de reordenar */}
+                {canEdit ? (
+                  <button
+                    onPointerDown={(e) => beginReorder(e, it)}
+                    onClick={(e) => e.stopPropagation()}
+                    aria-label="Arrastar pra reordenar"
+                    style={{ touchAction: "none" }}
+                    className="my-2 mr-1 grid w-8 shrink-0 cursor-grab place-items-center self-center rounded-lg text-muted-foreground/60 hover:bg-muted active:cursor-grabbing"
+                  >
+                    <GripVertical className="size-5" />
+                  </button>
+                ) : null}
+
+                {/* Alça de redimensionar (borda de baixo) */}
+                {canEdit ? (
+                  <div
+                    onPointerDown={(e) => beginResize(e, it)}
+                    onClick={(e) => e.stopPropagation()}
+                    style={{ touchAction: "none" }}
+                    className="absolute inset-x-0 bottom-0 flex h-4 cursor-ns-resize items-center justify-center"
+                    aria-label="Arrastar pra mudar a duração"
+                  >
+                    <span className="h-1 w-10 rounded-full bg-border" />
+                    {resizingThis ? (
+                      <span className="absolute bottom-1 right-2 rounded-full bg-foreground px-2 py-0.5 text-[11px] font-bold text-background tabular-nums">
+                        {it.durationMin} min
+                      </span>
+                    ) : null}
+                  </div>
+                ) : null}
+              </li>
+            );
+          })}
+        </ol>
+      )}
+
+      {canEdit ? (
+        <div className="mt-2 flex gap-2">
+          <button
+            onClick={() => setEditing("new")}
+            className="press flex flex-1 items-center justify-center gap-2 rounded-2xl border border-dashed border-primary/40 py-3 text-sm font-bold text-primary"
+          >
+            <Plus className="size-4" /> Adicionar bloco
+          </button>
+          <button
+            onClick={() => setManageKinds(true)}
+            aria-label="Gerenciar tipos"
+            className="press grid w-12 place-items-center rounded-2xl border border-dashed border-border text-muted-foreground"
+          >
+            <Settings2 className="size-5" />
+          </button>
+        </div>
+      ) : null}
+
+      {editing ? (
+        <BlocoModal
+          eventId={eventId}
+          item={editing === "new" ? null : editing}
+          kinds={kinds}
+          onManageKinds={() => setManageKinds(true)}
+          onDelete={editing !== "new" ? () => remove((editing as RundownItem).id) : undefined}
+          onClose={() => setEditing(null)}
+        />
+      ) : null}
+
+      {manageKinds ? <KindsManager kinds={kinds} onClose={() => setManageKinds(false)} /> : null}
+    </section>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// Modal do bloco — tipo primeiro, nome já preenchido
+// -----------------------------------------------------------------------------
+const inputCls = "w-full rounded-[12px] border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary";
+
+function BlocoModal({
+  eventId,
+  item,
+  kinds,
+  onManageKinds,
+  onDelete,
+  onClose,
+}: {
+  eventId: string;
+  item: RundownItem | null;
+  kinds: RundownKind[];
+  onManageKinds: () => void;
+  onDelete?: () => void;
+  onClose: () => void;
+}) {
+  const router = useRouter();
+  const { showToast } = useToast();
+  const [pending, startTx] = useTransition();
+  const [kind, setKind] = useState(item?.kind ?? "");
+  const [color, setColor] = useState(item?.color ?? null);
+  const [title, setTitle] = useState(item?.title ?? "");
+  const [duration, setDuration] = useState(String(item?.durationMin ?? 5));
+  const [responsible, setResponsible] = useState(item?.responsible ?? "");
+  const [note, setNote] = useState(item?.note ?? "");
+  const [link, setLink] = useState(item?.link ?? "");
+  const [error, setError] = useState<string | null>(null);
+
+  const pickKind = (k: RundownKind) => {
+    setKind(k.label);
+    setColor(k.color);
+    // Preenche o nome com o tipo se ainda estiver vazio ou igual ao tipo anterior.
+    if (!title.trim() || title.trim() === kind.trim()) setTitle(k.label);
+  };
+
+  const save = () => {
+    setError(null);
+    startTx(async () => {
+      const input = {
+        title: title.trim() || kind,
+        kind: kind || "Outro",
+        color: color ?? undefined,
+        durationMin: Number(duration) || 0,
+        responsible,
+        note,
+        link,
+      };
+      const r = item
+        ? await atualizarBlocoCronograma(item.id, eventId, input)
+        : await adicionarBlocoCronograma(eventId, input);
+      if (r.ok) {
+        onClose();
+        router.refresh();
+        showToast(item ? "Bloco atualizado." : "Bloco adicionado.");
+      } else {
+        setError(r.error);
+      }
+    });
+  };
+
+  return (
+    <Modal open onClose={() => !pending && onClose()} sheet title={item ? "Editar bloco" : "Novo bloco"}>
+      <div className="mt-1 space-y-4">
+        <div>
+          <div className="mb-1.5 flex items-center justify-between">
+            <p className="text-sm font-medium">Tipo</p>
+            <button onClick={onManageKinds} className="press-sm inline-flex items-center gap-1 text-[13px] font-semibold text-primary">
+              <Settings2 className="size-3.5" /> Gerenciar
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {kinds.map((k) => (
+              <button
+                key={k.id}
+                type="button"
+                onClick={() => pickKind(k)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-semibold",
+                  kind === k.label ? "border-primary bg-primary/5 text-primary" : "border-border text-muted-foreground",
+                )}
+              >
+                <span className="size-2.5 rounded-full" style={{ backgroundColor: k.color }} /> {k.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium">Nome do bloco</span>
+          <input
+            className={inputCls}
+            placeholder="Ex.: Louvor de entrada"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+          />
+        </label>
+
+        <div className="flex gap-2">
+          <label className="flex-1">
+            <span className="mb-1 block text-sm font-medium">Duração (min)</span>
+            <input type="number" inputMode="numeric" min={1} className={inputCls} value={duration} onChange={(e) => setDuration(e.target.value)} />
+          </label>
+          <label className="flex-[2]">
+            <span className="mb-1 block text-sm font-medium">Quem faz (opcional)</span>
+            <input className={inputCls} placeholder="Ex.: Banda / Pr. João" value={responsible} onChange={(e) => setResponsible(e.target.value)} />
+          </label>
+        </div>
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium">Observação (opcional)</span>
+          <textarea rows={2} className={cn(inputCls, "resize-none")} value={note} onChange={(e) => setNote(e.target.value)} />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium">Link (opcional)</span>
+          <input className={inputCls} placeholder="YouTube, Drive, letra…" value={link} onChange={(e) => setLink(e.target.value)} />
+        </label>
+        {error ? <p className="text-sm text-destructive">{error}</p> : null}
+        <button
+          onClick={save}
+          disabled={pending || (!title.trim() && !kind)}
+          className={cn(
+            "press h-[52px] w-full rounded-[15px] text-[15.5px] font-extrabold",
+            title.trim() || kind ? "bg-primary text-primary-foreground" : "cursor-not-allowed bg-muted text-muted-foreground",
+          )}
+        >
+          {pending ? "Salvando…" : item ? "Salvar" : "Adicionar"}
+        </button>
+        {onDelete ? (
+          <button
+            onClick={() => {
+              onDelete();
+              onClose();
+            }}
+            disabled={pending}
+            className="press-sm inline-flex w-full items-center justify-center gap-1.5 py-1 text-sm font-semibold text-destructive"
+          >
+            <Trash2 className="size-4" /> Remover bloco
+          </button>
+        ) : null}
+      </div>
+    </Modal>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// Gerenciar tipos (por igreja)
+// -----------------------------------------------------------------------------
+function KindsManager({ kinds, onClose }: { kinds: RundownKind[]; onClose: () => void }) {
+  const router = useRouter();
+  const { showToast } = useToast();
+  const [pending, startTx] = useTransition();
+  const [label, setLabel] = useState("");
+  const [color, setColor] = useState(SWATCHES[0]);
+
+  const add = () =>
+    startTx(async () => {
+      const r = await adicionarTipoBloco(label, color);
+      if (r.ok) {
+        setLabel("");
+        router.refresh();
+      } else {
+        showToast(r.error);
+      }
+    });
+  const del = (id: string) =>
+    startTx(async () => {
+      const r = await removerTipoBloco(id);
+      if (r.ok) router.refresh();
+      else showToast(r.error);
+    });
+
+  return (
+    <Modal open onClose={() => !pending && onClose()} sheet title="Tipos de bloco">
+      <div className="mt-1 space-y-4">
+        <p className="text-[13px] text-muted-foreground">
+          Os tipos são da igreja toda. Remover um tipo não altera blocos já criados.
+        </p>
+        <ul className="flex flex-col gap-1.5">
+          {kinds.map((k) => (
+            <li key={k.id} className="flex items-center gap-2.5 rounded-xl border border-border px-3 py-2">
+              <span className="size-3.5 shrink-0 rounded-full" style={{ backgroundColor: k.color }} />
+              <span className="min-w-0 flex-1 truncate text-sm font-medium">{k.label}</span>
+              <button
+                onClick={() => del(k.id)}
+                disabled={pending}
+                aria-label={`Remover ${k.label}`}
+                className="press-sm grid size-7 place-items-center rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+              >
+                <X className="size-4" />
+              </button>
+            </li>
+          ))}
+        </ul>
+
+        <div className="space-y-2 border-t border-border/60 pt-3">
+          <p className="text-sm font-medium">Novo tipo</p>
+          <input
+            className={inputCls}
+            placeholder="Nome do tipo (ex.: Batismo)"
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+          />
+          <div className="flex flex-wrap gap-2">
+            {SWATCHES.map((c) => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => setColor(c)}
+                aria-label={`Cor ${c}`}
+                style={{ backgroundColor: c }}
+                className={cn("size-7 rounded-full", color === c ? "ring-2 ring-foreground ring-offset-2 ring-offset-card" : "")}
+              />
+            ))}
+          </div>
+          <button
+            onClick={add}
+            disabled={pending || label.trim().length < 1}
+            className="press h-11 w-full rounded-[13px] bg-primary text-sm font-extrabold text-primary-foreground disabled:opacity-60"
+          >
+            {pending ? "Adicionando…" : "Adicionar tipo"}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}

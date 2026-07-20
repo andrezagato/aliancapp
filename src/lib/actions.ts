@@ -836,6 +836,7 @@ async function podeEditarCronograma(session: Session, eventId: string): Promise<
 type BlocoInput = {
   title: string;
   kind: string;
+  color?: string;
   durationMin: number;
   responsible?: string;
   note?: string;
@@ -860,7 +861,8 @@ export async function adicionarBlocoCronograma(eventId: string, input: BlocoInpu
     event_id: eventId,
     sort_order: (last?.sort_order ?? -1) + 1,
     title,
-    kind: input.kind || "outro",
+    kind: input.kind || "Outro",
+    color: input.color || null,
     duration_min: Math.max(0, Math.round(input.durationMin || 0)),
     responsible: input.responsible?.trim() || null,
     note: input.note?.trim() || null,
@@ -883,7 +885,8 @@ export async function atualizarBlocoCronograma(id: string, eventId: string, inpu
     .from("event_rundown")
     .update({
       title,
-      kind: input.kind || "outro",
+      kind: input.kind || "Outro",
+      color: input.color || null,
       duration_min: Math.max(0, Math.round(input.durationMin || 0)),
       responsible: input.responsible?.trim() || null,
       note: input.note?.trim() || null,
@@ -919,6 +922,107 @@ export async function reordenarCronograma(eventId: string, orderedIds: string[])
     ),
   );
   revalidatePath(`/escalas/${eventId}`);
+  revalidatePath("/cronograma");
+  return ok;
+}
+
+/** Ajusta só a duração de um bloco (usado pelo arrastar-a-borda no grid). */
+export async function ajustarDuracaoBloco(id: string, eventId: string, durationMin: number): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  if (!(await podeEditarCronograma(session, eventId))) return fail("Sem permissão.");
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("event_rundown")
+    .update({ duration_min: Math.max(0, Math.round(durationMin)) })
+    .eq("id", id);
+  if (error) return fail(error.message);
+  revalidatePath("/cronograma");
+  return ok;
+}
+
+// --- Modo ao vivo do cronograma -------------------------------------------
+
+/** Marca o START real do culto (âncora que desloca todos os horários). */
+export async function iniciarCronograma(eventId: string): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  if (!(await podeEditarCronograma(session, eventId))) return fail("Sem permissão.");
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("events")
+    .update({ rundown_started_at: new Date().toISOString() })
+    .eq("id", eventId);
+  if (error) return fail(error.message);
+  revalidatePath("/cronograma");
+  return ok;
+}
+
+/** Zera o modo ao vivo (limpa o start e todos os ticks de "feito"). */
+export async function reiniciarCronograma(eventId: string): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  if (!(await podeEditarCronograma(session, eventId))) return fail("Sem permissão.");
+  const supabase = await createClient();
+  await supabase.from("events").update({ rundown_started_at: null }).eq("id", eventId);
+  await supabase.from("event_rundown").update({ done_at: null }).eq("event_id", eventId);
+  revalidatePath("/cronograma");
+  return ok;
+}
+
+/** Marca/desmarca um bloco como feito (carimba a hora real de término). */
+export async function marcarBlocoFeito(id: string, eventId: string, done: boolean): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  if (!(await podeEditarCronograma(session, eventId))) return fail("Sem permissão.");
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("event_rundown")
+    .update({ done_at: done ? new Date().toISOString() : null })
+    .eq("id", id);
+  if (error) return fail(error.message);
+  revalidatePath("/cronograma");
+  return ok;
+}
+
+// --- Tipos de bloco (por igreja) ------------------------------------------
+
+export async function adicionarTipoBloco(label: string, color: string): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  const canManage = session.role === "admin" || session.profile.teams.some((t) => t.role === "leader");
+  if (!canManage) return fail("Só admin ou líderes gerenciam os tipos.");
+  if (!session.profile.church_id) return fail("Sua conta não está ligada a uma igreja.");
+  const l = label.trim();
+  if (!l) return fail("Dê um nome ao tipo.");
+  const supabase = await createClient();
+  const { data: last } = await supabase
+    .from("rundown_kinds")
+    .select("sort_order")
+    .eq("church_id", session.profile.church_id)
+    .order("sort_order", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const { error } = await supabase.from("rundown_kinds").insert({
+    church_id: session.profile.church_id,
+    label: l,
+    color: color || "#6b7280",
+    sort_order: (last?.sort_order ?? -1) + 1,
+  });
+  if (error) return fail(error.message);
+  revalidatePath("/cronograma");
+  return ok;
+}
+
+export async function removerTipoBloco(id: string): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  const canManage = session.role === "admin" || session.profile.teams.some((t) => t.role === "leader");
+  if (!canManage) return fail("Sem permissão.");
+  const supabase = await createClient();
+  // Remover o tipo não afeta blocos já criados (eles guardam nome+cor próprios).
+  const { error } = await supabase.from("rundown_kinds").delete().eq("id", id);
+  if (error) return fail(error.message);
   revalidatePath("/cronograma");
   return ok;
 }

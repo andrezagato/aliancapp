@@ -15,8 +15,7 @@ import {
 } from "@/components/leader-controls";
 import { STATUS_META } from "@/lib/status";
 import { getSession } from "@/lib/auth";
-import { getEventDetail, getEventRundown, listChurchProfiles, type DetailPosition, type DetailTeam } from "@/lib/data";
-import { RundownEditor } from "@/components/rundown-editor";
+import { getEventDetail, listChurchProfiles, type DetailPosition, type DetailTeam } from "@/lib/data";
 import { CheckinButton, SwapPending } from "@/components/slot-controls";
 import { EventTeams } from "@/components/event/event-teams";
 import { ResponsavelControls } from "@/components/responsavel-controls";
@@ -31,7 +30,6 @@ export default async function EventoPage({ params }: { params: Promise<{ id: str
   if (!session) return null;
   const ev = await getEventDetail(session, id);
   if (!ev) notFound();
-  const rundown = await getEventRundown(id);
 
   // Check-in liberado no dia do evento (ou depois).
   const nowISO = new Date().toISOString();
@@ -40,7 +38,6 @@ export default async function EventoPage({ params }: { params: Promise<{ id: str
   const profiles = session.role === "admin" ? await listChurchProfiles() : [];
   const manageTeams = ev.teams.filter((t) => t.canManage);
   const otherTeams = ev.teams.filter((t) => !t.canManage);
-  const canEditRundown = session.role === "admin" || ev.isResponsible || manageTeams.length > 0;
   const callHHMM = ev.callTime
     ? new Intl.DateTimeFormat("pt-BR", {
         timeZone: "America/Sao_Paulo",
@@ -119,8 +116,6 @@ export default async function EventoPage({ params }: { params: Promise<{ id: str
       {session.role === "admin" ? (
         <EventLocationControl eventId={ev.id} lat={ev.latitude} lng={ev.longitude} />
       ) : null}
-
-      <RundownEditor eventId={ev.id} startsAt={ev.starts_at} items={rundown} canEdit={canEditRundown} />
 
       {ev.teams.length === 0 ? (
         <Card className="border-dashed">

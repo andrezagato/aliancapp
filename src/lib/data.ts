@@ -832,17 +832,19 @@ export type RundownItem = {
   sortOrder: number;
   title: string;
   kind: string;
+  color: string | null;
   durationMin: number;
   responsible: string | null;
   note: string | null;
   link: string | null;
+  doneAt: string | null;
 };
 
 export async function getEventRundown(eventId: string): Promise<RundownItem[]> {
   const supabase = await createClient();
   const { data } = await supabase
     .from("event_rundown")
-    .select("id, sort_order, title, kind, duration_min, responsible, note, link")
+    .select("id, sort_order, title, kind, color, duration_min, responsible, note, link, done_at")
     .eq("event_id", eventId)
     .order("sort_order", { ascending: true });
   return ((data ?? []) as {
@@ -850,19 +852,46 @@ export async function getEventRundown(eventId: string): Promise<RundownItem[]> {
     sort_order: number;
     title: string;
     kind: string;
+    color: string | null;
     duration_min: number;
     responsible: string | null;
     note: string | null;
     link: string | null;
+    done_at: string | null;
   }[]).map((r) => ({
     id: r.id,
     sortOrder: r.sort_order,
     title: r.title,
     kind: r.kind,
+    color: r.color,
     durationMin: r.duration_min,
     responsible: r.responsible,
     note: r.note,
     link: r.link,
+    doneAt: r.done_at,
+  }));
+}
+
+/** Hora real em que o culto começou (âncora do modo ao vivo do cronograma). */
+export async function getRundownStartedAt(eventId: string): Promise<string | null> {
+  const supabase = await createClient();
+  const { data } = await supabase.from("events").select("rundown_started_at").eq("id", eventId).maybeSingle();
+  return data?.rundown_started_at ?? null;
+}
+
+export type RundownKind = { id: string; label: string; color: string };
+
+/** Tipos de bloco cadastrados pela igreja (para o seletor de tipo do cronograma). */
+export async function listRundownKinds(): Promise<RundownKind[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("rundown_kinds")
+    .select("id, label, color")
+    .order("sort_order", { ascending: true });
+  return ((data ?? []) as { id: string; label: string; color: string }[]).map((k) => ({
+    id: k.id,
+    label: k.label,
+    color: k.color,
   }));
 }
 

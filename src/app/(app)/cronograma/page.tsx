@@ -2,9 +2,9 @@ import Link from "next/link";
 import { CalendarDays, ChevronRight } from "lucide-react";
 import { TopBar } from "@/components/app-shell/top-bar";
 import { Card } from "@/components/ui/card";
-import { RundownEditor } from "@/components/rundown-editor";
+import { RundownGrid } from "@/components/rundown-grid";
 import { getSession } from "@/lib/auth";
-import { listUpcomingEvents, getEventRundown } from "@/lib/data";
+import { listUpcomingEvents, getEventRundown, listRundownKinds, getRundownStartedAt } from "@/lib/data";
 import { fmtEventWhen } from "@/lib/format";
 
 export default async function CronogramaPage() {
@@ -13,7 +13,9 @@ export default async function CronogramaPage() {
 
   const upcoming = await listUpcomingEvents(session, 6);
   const ev = upcoming[0] ?? null;
-  const rundown = ev ? await getEventRundown(ev.id) : [];
+  const [rundown, kinds, startedAt] = ev
+    ? await Promise.all([getEventRundown(ev.id), listRundownKinds(), getRundownStartedAt(ev.id)])
+    : [[], await listRundownKinds(), null];
   const leadIds = session.profile.teams.filter((t) => t.role === "leader").map((t) => t.id);
   const canEdit = ev
     ? session.role === "admin" || ev.responsibleId === session.userId || ev.teams.some((t) => leadIds.includes(t.teamId))
@@ -40,12 +42,19 @@ export default async function CronogramaPage() {
                   href={`/escalas/${ev.id}`}
                   className="press mt-3 inline-flex items-center gap-1 rounded-full bg-white/15 px-3.5 py-1.5 text-sm font-bold text-white"
                 >
-                  Ver no evento (escala + cronograma) →
+                  Ver a escala do culto →
                 </Link>
               </div>
             </div>
 
-            <RundownEditor eventId={ev.id} startsAt={ev.starts_at} items={rundown} canEdit={canEdit} />
+            <RundownGrid
+              eventId={ev.id}
+              startsAt={ev.starts_at}
+              startedAt={startedAt}
+              items={rundown}
+              kinds={kinds}
+              canEdit={canEdit}
+            />
 
             {upcoming.length > 1 ? (
               <section>
