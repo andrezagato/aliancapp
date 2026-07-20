@@ -745,6 +745,37 @@ export async function definirLocalIgreja(
   return ok;
 }
 
+/** Admin arquiva/desarquiva um evento (some das listas, mas mantém o histórico). */
+export async function arquivarEvento(eventId: string, arquivar: boolean): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  if (session.role !== "admin") return fail("Só o administrador arquiva eventos.");
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("events")
+    .update({ archived_at: arquivar ? new Date().toISOString() : null })
+    .eq("id", eventId);
+  if (error) return fail(error.message);
+  revalidatePath("/escalas");
+  revalidatePath("/calendario");
+  revalidatePath("/inicio");
+  return ok;
+}
+
+/** Admin exclui o evento de vez (assignments/requisitos/feedback caem em cascata). */
+export async function excluirEvento(eventId: string): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  if (session.role !== "admin") return fail("Só o administrador exclui eventos.");
+  const supabase = await createClient();
+  const { error } = await supabase.from("events").delete().eq("id", eventId);
+  if (error) return fail(error.message);
+  revalidatePath("/escalas");
+  revalidatePath("/calendario");
+  revalidatePath("/inicio");
+  return ok;
+}
+
 /** Admin adiciona outra equipe a um evento já criado (copia as posições da equipe). */
 export async function adicionarEquipeAoEvento(eventId: string, teamId: string): Promise<ActionResult> {
   const session = await getSession();

@@ -301,6 +301,7 @@ export async function listUpcomingEvents(session: Session, limit = 50): Promise<
   const { data: events } = await supabase
     .from("events")
     .select("id, title, starts_at, location, series_id, responsible_id, responsible:profiles!events_responsible_id_fkey ( full_name )")
+    .is("archived_at", null)
     .gte("starts_at", upcomingCutoffIso())
     .order("starts_at", { ascending: true })
     .limit(limit);
@@ -316,6 +317,7 @@ export async function listEventsInRange(
   const { data: events } = await supabase
     .from("events")
     .select("id, title, starts_at, location, series_id, responsible_id, responsible:profiles!events_responsible_id_fkey ( full_name )")
+    .is("archived_at", null)
     .gte("starts_at", fromIso)
     .lt("starts_at", toIso)
     .order("starts_at", { ascending: true });
@@ -868,6 +870,7 @@ export type EventDetail = {
   confirmedAt: string | null;
   confirmedByName: string | null;
   callTime: string | null;
+  archivedAt: string | null;
   teams: DetailTeam[];
   addableTeams: { id: string; name: string; color: string }[];
 };
@@ -877,7 +880,7 @@ export async function getEventDetail(session: Session, eventId: string): Promise
   const { data: ev } = await supabase
     .from("events")
     .select(
-      "id, title, starts_at, ends_at, call_time, location, notes, series_id, responsible_id, confirmed_at, responsible:profiles!events_responsible_id_fkey ( full_name ), confirmer:profiles!events_confirmed_by_fkey ( full_name )",
+      "id, title, starts_at, ends_at, call_time, archived_at, location, notes, series_id, responsible_id, confirmed_at, responsible:profiles!events_responsible_id_fkey ( full_name ), confirmer:profiles!events_confirmed_by_fkey ( full_name )",
     )
     .eq("id", eventId)
     .maybeSingle();
@@ -1052,6 +1055,7 @@ export async function getEventDetail(session: Session, eventId: string): Promise
     confirmedAt: ev.confirmed_at,
     confirmedByName: confirmer?.full_name ?? null,
     callTime: ev.call_time,
+    archivedAt: ev.archived_at,
     teams: detailTeams,
     addableTeams:
       session.role === "admin"
@@ -1195,7 +1199,7 @@ export async function getMyUpcomingAssignments(session: Session): Promise<MyAssi
     .from("assignments")
     .select(
       `id, status, decline_reason, team_id,
-       events!inner ( id, title, starts_at, location, call_time ),
+       events!inner ( id, title, starts_at, location, call_time, archived_at ),
        positions ( name ),
        teams ( name, color )`,
     )
@@ -1208,12 +1212,21 @@ export async function getMyUpcomingAssignments(session: Session): Promise<MyAssi
     status: AssignmentStatus;
     decline_reason: string | null;
     team_id: string;
-    events: { id: string; title: string; starts_at: string; location: string | null; call_time: string | null } | null;
+    events: {
+      id: string;
+      title: string;
+      starts_at: string;
+      location: string | null;
+      call_time: string | null;
+      archived_at: string | null;
+    } | null;
     positions: { name: string } | null;
     teams: { name: string; color: string } | null;
   }[];
 
-  const upcoming = rows.filter((r) => r.events && r.events.starts_at >= cutoff && r.status !== "recusado");
+  const upcoming = rows.filter(
+    (r) => r.events && !r.events.archived_at && r.events.starts_at >= cutoff && r.status !== "recusado",
+  );
 
   const ids = upcoming.map((r) => r.id);
   const checkedIn = new Set<string>();

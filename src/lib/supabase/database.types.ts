@@ -516,6 +516,7 @@ export type Database = {
       }
       events: {
         Row: {
+          archived_at: string | null
           call_time: string | null
           church_id: string
           confirmed_at: string | null
@@ -532,6 +533,7 @@ export type Database = {
           title: string
         }
         Insert: {
+          archived_at?: string | null
           call_time?: string | null
           church_id: string
           confirmed_at?: string | null
@@ -548,6 +550,7 @@ export type Database = {
           title: string
         }
         Update: {
+          archived_at?: string | null
           call_time?: string | null
           church_id?: string
           confirmed_at?: string | null
