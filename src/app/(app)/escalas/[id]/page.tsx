@@ -20,8 +20,7 @@ import { CheckinButton, SwapPending } from "@/components/slot-controls";
 import { EventTeams } from "@/components/event/event-teams";
 import { ResponsavelControls } from "@/components/responsavel-controls";
 import { CallTimeControl } from "@/components/call-time-control";
-import { EventAdminActions } from "@/components/event-admin-actions";
-import { EventLocationControl } from "@/components/event-location-control";
+import { EventHeroActions } from "@/components/event-hero-actions";
 import { fmtEventDate, fmtTime, churchDateISO } from "@/lib/format";
 
 export default async function EventoPage({ params }: { params: Promise<{ id: string }> }) {
@@ -64,6 +63,17 @@ export default async function EventoPage({ params }: { params: Promise<{ id: str
           style={{ background: "radial-gradient(circle, hsl(var(--accent) / 0.4), transparent 68%)" }}
           aria-hidden
         />
+        {session.role === "admin" ? (
+          <EventHeroActions
+            eventId={ev.id}
+            archived={!!ev.archivedAt}
+            location={ev.location}
+            lat={ev.latitude}
+            lng={ev.longitude}
+            churchLat={churchLoc?.latitude ?? null}
+            churchLng={churchLoc?.longitude ?? null}
+          />
+        ) : null}
         <div className="relative">
           <div className="flex items-center gap-2">
             <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-accent">{kicker}</p>
@@ -73,7 +83,9 @@ export default async function EventoPage({ params }: { params: Promise<{ id: str
               </span>
             ) : null}
           </div>
-          <h1 className="mt-1 font-display text-[27px] font-extrabold leading-[1.05] text-white">{ev.title}</h1>
+          <h1 className={`mt-1 font-display text-[27px] font-extrabold leading-[1.05] text-white ${session.role === "admin" ? "pr-24" : ""}`}>
+            {ev.title}
+          </h1>
           <p className="mt-1 text-[13.5px] capitalize text-primary-foreground/85">{fmtEventDate(ev.starts_at)}</p>
           <div className="mt-2 flex flex-wrap items-center gap-x-3.5 gap-y-1 text-[13.5px] text-primary-foreground/85">
             <span className="inline-flex items-center gap-1.5">
@@ -86,9 +98,14 @@ export default async function EventoPage({ params }: { params: Promise<{ id: str
               </span>
             ) : null}
             {ev.location ? (
-              <span className="inline-flex items-center gap-1.5">
+              <a
+                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(ev.location)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 underline-offset-2 hover:underline"
+              >
                 <MapPin className="size-3.5 text-accent" /> {ev.location}
-              </span>
+              </a>
             ) : null}
           </div>
         </div>
@@ -106,23 +123,12 @@ export default async function EventoPage({ params }: { params: Promise<{ id: str
           />
           {ev.notes ? <p className="text-sm text-muted-foreground">{ev.notes}</p> : null}
           {session.role === "admin" ? (
-            <div className="space-y-3 border-t border-border/60 pt-2">
+            <div className="border-t border-border/60 pt-2">
               <CallTimeControl eventId={ev.id} date={churchDateISO(ev.starts_at)} current={callHHMM} />
-              <EventAdminActions eventId={ev.id} archived={!!ev.archivedAt} />
             </div>
           ) : null}
         </CardContent>
       </Card>
-
-      {session.role === "admin" ? (
-        <EventLocationControl
-          eventId={ev.id}
-          lat={ev.latitude}
-          lng={ev.longitude}
-          churchLat={churchLoc?.latitude ?? null}
-          churchLng={churchLoc?.longitude ?? null}
-        />
-      ) : null}
 
       {ev.teams.length === 0 ? (
         <Card className="border-dashed">

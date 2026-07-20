@@ -850,14 +850,21 @@ export async function definirLocalEvento(
   eventId: string,
   lat: number | null,
   lng: number | null,
+  label?: string | null,
 ): Promise<ActionResult> {
   const session = await getSession();
   if (!session) return fail("Sessão expirada.");
   if (session.role !== "admin") return fail("Só o administrador define o local do evento.");
+  const patch: { latitude: number | null; longitude: number | null; location?: string | null } = {
+    latitude: lat,
+    longitude: lng,
+  };
+  if (label !== undefined) patch.location = label?.trim() || null;
   const supabase = await createClient();
-  const { error } = await supabase.from("events").update({ latitude: lat, longitude: lng }).eq("id", eventId);
+  const { error } = await supabase.from("events").update(patch).eq("id", eventId);
   if (error) return fail(error.message);
   revalidatePath(`/escalas/${eventId}`);
+  revalidatePath("/escalas");
   return ok;
 }
 

@@ -69,14 +69,19 @@ export function CheckinButton({
       );
     }
     return (
-      <div className="inline-flex items-center gap-2">
-        <span className="inline-flex h-9 items-center gap-1 text-sm font-medium text-success">
+      <div className="inline-flex items-center gap-1.5">
+        <span className="inline-flex h-8 items-center gap-1 rounded-full bg-success/12 px-2.5 text-[12px] font-bold text-success">
           <BadgeCheck className="size-4" /> Presente
         </span>
         {canMark ? (
-          <Button size="sm" variant="ghost" onClick={() => toggle(false)} disabled={pending}>
-            Desfazer
-          </Button>
+          <button
+            type="button"
+            onClick={() => toggle(false)}
+            disabled={pending}
+            className="press-sm text-[11px] font-semibold text-muted-foreground hover:underline"
+          >
+            desfazer
+          </button>
         ) : null}
       </div>
     );
@@ -92,9 +97,14 @@ export function CheckinButton({
     );
   }
   return (
-    <Button size="sm" variant="outline" onClick={() => toggle(true)} disabled={pending}>
-      <Check className="size-4" /> {pending ? "…" : "Marcar presença"}
-    </Button>
+    <button
+      type="button"
+      onClick={() => toggle(true)}
+      disabled={pending}
+      className="press-sm inline-flex h-8 items-center gap-1.5 rounded-full border border-border bg-card px-3 text-[13px] font-bold text-foreground disabled:opacity-60"
+    >
+      <Check className="size-4 text-success" /> {pending ? "…" : "Marcar presença"}
+    </button>
   );
 }
 

@@ -47,46 +47,56 @@ export function ResponsavelControls({
   return (
     <div className="mt-2 rounded-xl border border-border/70 bg-background/50 p-3 text-sm">
       {responsibleName ? (
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="text-muted-foreground">Responsável:</span>
+            <span className="font-medium">{responsibleName}</span>
+            {confirmedAt ? (
+              <span className="inline-flex items-center gap-1 text-success">
+                <BadgeCheck className="size-4" /> confirmou que vai acontecer
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 text-warning">
+                <Clock className="size-4" /> a confirmar
+              </span>
+            )}
+          </div>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {canConfirm ? (
+              confirmedAt ? (
+                <Button size="sm" variant="ghost" onClick={() => run(() => confirmarEvento(eventId, false))} disabled={pending}>
+                  Desmarcar confirmação
+                </Button>
+              ) : (
+                <Button size="sm" onClick={() => run(() => confirmarEvento(eventId, true))} disabled={pending}>
+                  <BadgeCheck className="size-4" /> Confirmar que vai acontecer
+                </Button>
+              )
+            ) : null}
+            {isAdmin ? (
+              <Button size="sm" variant="outline" onClick={() => setPicking(true)} disabled={pending}>
+                <UserCog className="size-4" /> Trocar
+              </Button>
+            ) : null}
+            {isAdmin ? (
+              <Button size="sm" variant="ghost" onClick={() => run(() => definirResponsavel(eventId, null))} disabled={pending}>
+                Remover
+              </Button>
+            ) : null}
+          </div>
+        </>
+      ) : (
+        <div className="flex flex-wrap items-center gap-2">
           <span className="text-muted-foreground">Responsável:</span>
-          <span className="font-medium">{responsibleName}</span>
-          {confirmedAt ? (
-            <span className="inline-flex items-center gap-1 text-success">
-              <BadgeCheck className="size-4" /> confirmou que vai acontecer
-            </span>
+          {isAdmin ? (
+            <Button size="sm" variant="outline" onClick={() => setPicking(true)} disabled={pending}>
+              <UserCog className="size-4" /> Definir responsável
+            </Button>
           ) : (
-            <span className="inline-flex items-center gap-1 text-warning">
-              <Clock className="size-4" /> a confirmar
-            </span>
+            <span className="text-muted-foreground">a definir</span>
           )}
         </div>
-      ) : (
-        <p className="text-muted-foreground">Sem responsável definido.</p>
       )}
-
-      <div className="mt-2 flex flex-wrap gap-2">
-        {canConfirm && responsibleName ? (
-          confirmedAt ? (
-            <Button size="sm" variant="ghost" onClick={() => run(() => confirmarEvento(eventId, false))} disabled={pending}>
-              Desmarcar confirmação
-            </Button>
-          ) : (
-            <Button size="sm" onClick={() => run(() => confirmarEvento(eventId, true))} disabled={pending}>
-              <BadgeCheck className="size-4" /> Confirmar que vai acontecer
-            </Button>
-          )
-        ) : null}
-        {isAdmin ? (
-          <Button size="sm" variant="outline" onClick={() => setPicking(true)} disabled={pending}>
-            <UserCog className="size-4" /> {responsibleName ? "Trocar responsável" : "Definir responsável"}
-          </Button>
-        ) : null}
-        {isAdmin && responsibleName ? (
-          <Button size="sm" variant="ghost" onClick={() => run(() => definirResponsavel(eventId, null))} disabled={pending}>
-            Remover
-          </Button>
-        ) : null}
-      </div>
 
       <Modal open={picking} onClose={() => !pending && setPicking(false)}>
         <div className="flex max-h-[80dvh] flex-col rounded-2xl border border-border bg-card shadow-lift">

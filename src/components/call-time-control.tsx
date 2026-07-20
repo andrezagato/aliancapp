@@ -16,16 +16,19 @@ export function CallTimeControl({ eventId, date, current }: { eventId: string; d
   const [time, setTime] = useState(current);
   const [busy, start] = useTransition();
 
-  const save = () =>
+  // Salva sozinho ao escolher a hora (sem botão).
+  const onPick = (v: string) => {
+    setTime(v);
     start(async () => {
-      const r = await definirCallTime(eventId, date, time);
+      const r = await definirCallTime(eventId, date, v);
       if (r.ok) {
-        showToast(time ? "Chegada da equipe salva." : "Horário de chegada removido.");
+        showToast(v ? "Chegada da equipe salva." : "Horário de chegada removido.");
         router.refresh();
       } else {
         showToast(r.error);
       }
     });
+  };
 
   return (
     <div className="flex items-center gap-2">
@@ -34,16 +37,10 @@ export function CallTimeControl({ eventId, date, current }: { eventId: string; d
       <input
         type="time"
         value={time}
-        onChange={(e) => setTime(e.target.value)}
-        className="rounded-[10px] border border-border bg-card px-2.5 py-1.5 text-sm outline-none focus:border-primary"
-      />
-      <button
-        onClick={save}
         disabled={busy}
-        className="press-sm rounded-full bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground disabled:opacity-60"
-      >
-        {busy ? "…" : "Salvar"}
-      </button>
+        onChange={(e) => onPick(e.target.value)}
+        className="rounded-[10px] border border-border bg-card px-2.5 py-1.5 text-sm outline-none focus:border-primary disabled:opacity-60"
+      />
     </div>
   );
 }
