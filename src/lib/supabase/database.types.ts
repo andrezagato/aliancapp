@@ -1363,6 +1363,7 @@ export type Database = {
           id: string
           name: string
           sort_order: number
+          whatsapp_group: string | null
         }
         Insert: {
           archived_at?: string | null
@@ -1373,6 +1374,7 @@ export type Database = {
           id?: string
           name: string
           sort_order?: number
+          whatsapp_group?: string | null
         }
         Update: {
           archived_at?: string | null
@@ -1383,6 +1385,7 @@ export type Database = {
           id?: string
           name?: string
           sort_order?: number
+          whatsapp_group?: string | null
         }
         Relationships: [
           {

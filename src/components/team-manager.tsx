@@ -9,11 +9,13 @@ import { Avatar } from "@/components/ui/avatar";
 import { Modal } from "@/components/modal";
 import { TeamDot } from "@/components/coverage-badge";
 import { PessoaConfigModal, type TeamOpt } from "@/components/pessoa-config-modal";
+import { WhatsAppGroupButton } from "@/components/whatsapp-button";
 import { cn } from "@/lib/utils";
 import {
   criarEquipe,
   renomearEquipe,
   arquivarEquipe,
+  definirGrupoEquipe,
   criarPosicao,
   renomearPosicao,
   arquivarPosicao,
@@ -266,6 +268,89 @@ function TeamHeader({ team, isAdmin }: { team: ManageableTeam; isAdmin: boolean 
   );
 }
 
+function TeamGroupControl({ team, isAdmin }: { team: ManageableTeam; isAdmin: boolean }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(team.whatsapp_group ?? "");
+  const [err, setErr] = useState<string | null>(null);
+
+  const persist = (link: string, closeAfter: boolean) =>
+    start(async () => {
+      const r = await definirGrupoEquipe(team.id, link);
+      if (r.ok) {
+        setErr(null);
+        if (closeAfter) setEditing(false);
+        router.refresh();
+      } else {
+        setErr(r.error);
+      }
+    });
+
+  if (editing) {
+    return (
+      <div className="space-y-2 border-b border-border px-4 py-3">
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Grupo do WhatsApp</p>
+        <input
+          className={inputClass}
+          placeholder="https://chat.whatsapp.com/..."
+          value={value}
+          autoFocus
+          onChange={(e) => setValue(e.target.value)}
+        />
+        <p className="text-[11px] text-muted-foreground">
+          No WhatsApp: grupo → <b>Convidar via link</b> → copiar e colar aqui.
+        </p>
+        {err ? <p className="text-xs text-destructive">{err}</p> : null}
+        <div className="flex gap-2">
+          <Button size="sm" onClick={() => persist(value, true)} disabled={pending}>
+            {pending ? "…" : "Salvar"}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              setEditing(false);
+              setValue(team.whatsapp_group ?? "");
+              setErr(null);
+            }}
+            disabled={pending}
+          >
+            Cancelar
+          </Button>
+          {team.whatsapp_group ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-destructive"
+              onClick={() => {
+                setValue("");
+                persist("", true);
+              }}
+              disabled={pending}
+            >
+              Remover
+            </Button>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+
+  if (!team.whatsapp_group && !isAdmin) return null;
+
+  return (
+    <div className="flex items-center gap-2 border-b border-border px-4 py-2.5">
+      <WhatsAppGroupButton href={team.whatsapp_group} label="Abrir grupo" className="h-8 px-3 text-[13px]" />
+      {isAdmin ? (
+        <button onClick={() => setEditing(true)} className="press-sm text-[13px] font-semibold text-primary">
+          {team.whatsapp_group ? "Editar grupo" : "Vincular grupo do WhatsApp"}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 function TeamCard({
   team,
   allProfiles,
@@ -280,6 +365,7 @@ function TeamCard({
   return (
     <Card className="self-start">
       <TeamHeader team={team} isAdmin={isAdmin} />
+      <TeamGroupControl team={team} isAdmin={isAdmin} />
 
       {/* Membros — tocar abre o modal de configuração */}
       <div className="border-b border-border">

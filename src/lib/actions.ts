@@ -1391,6 +1391,22 @@ export async function renomearEquipe(teamId: string, name: string): Promise<Acti
   return ok;
 }
 
+/** Admin vincula/limpa o link do grupo de WhatsApp da equipe (chat.whatsapp.com/...). */
+export async function definirGrupoEquipe(teamId: string, link: string): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  if (session.role !== "admin") return fail("Só o administrador vincula o grupo da equipe.");
+  const l = link.trim();
+  if (l && !/^https:\/\/chat\.whatsapp\.com\/\S+/i.test(l))
+    return fail("Cole o link de convite do grupo (começa com https://chat.whatsapp.com/).");
+  const supabase = await createClient();
+  const { error } = await supabase.from("teams").update({ whatsapp_group: l || null }).eq("id", teamId);
+  if (error) return fail(error.message);
+  revalidatePath("/equipes");
+  revalidatePath("/escalas");
+  return ok;
+}
+
 /** Admin arquiva/reativa uma equipe (some das listas; mantém histórico). */
 export async function arquivarEquipe(teamId: string, arquivar: boolean): Promise<ActionResult> {
   const session = await getSession();

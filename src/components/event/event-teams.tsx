@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronDown, CircleSlash, BadgeCheck, Pencil, Check, MessageCircle } from "lucide-react";
+import { ChevronDown, CircleSlash, BadgeCheck, Pencil, Check } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -9,6 +9,7 @@ import { CoverageBadge, TeamDot } from "@/components/coverage-badge";
 import { ConfirmationAlert } from "@/components/event/confirmation-alert";
 import { AssignmentResponse } from "@/components/assignment-response";
 import { CheckinButton, SwapPending } from "@/components/slot-controls";
+import { WhatsAppButton, WhatsAppGroupButton } from "@/components/whatsapp-button";
 import {
   EscalarDialog,
   RemoveAssignmentButton,
@@ -120,24 +121,33 @@ export function EventTeams({
         );
         return (
           <Card key={team.teamId} className="overflow-hidden">
-            <button
-              onClick={() => toggleTeam(team.teamId)}
-              className="press-sm flex w-full items-center gap-2.5 p-4 text-left"
-              aria-expanded={open}
-            >
-              <TeamDot color={team.color} className="size-3" />
-              <h2 className="font-display text-[17px] font-bold text-foreground">{team.name}</h2>
-              {needsAction ? (
-                <span
-                  title="Precisa de atenção"
-                  className="grid size-[18px] shrink-0 place-items-center rounded-full bg-warning/20 text-[11px] font-extrabold text-warning"
-                >
-                  !
-                </span>
-              ) : null}
-              <CoverageBadge tone={team.tone} assigned={team.confirmed} needed={team.needed} className="ml-auto" />
-              <ChevronDown className={cn("size-5 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")} />
-            </button>
+            <div className="flex w-full items-center gap-2 p-4">
+              <button
+                onClick={() => toggleTeam(team.teamId)}
+                className="press-sm flex min-w-0 flex-1 items-center gap-2.5 text-left"
+                aria-expanded={open}
+              >
+                <TeamDot color={team.color} className="size-3" />
+                <h2 className="truncate font-display text-[17px] font-bold text-foreground">{team.name}</h2>
+                {needsAction ? (
+                  <span
+                    title="Precisa de atenção"
+                    className="grid size-[18px] shrink-0 place-items-center rounded-full bg-warning/20 text-[11px] font-extrabold text-warning"
+                  >
+                    !
+                  </span>
+                ) : null}
+                <CoverageBadge tone={team.tone} assigned={team.confirmed} needed={team.needed} className="ml-auto" />
+              </button>
+              <WhatsAppGroupButton href={team.whatsappGroup} label="Grupo" className="h-8 shrink-0 px-2.5 text-[13px]" />
+              <button
+                onClick={() => toggleTeam(team.teamId)}
+                aria-label={open ? "Recolher" : "Expandir"}
+                className="press-sm shrink-0"
+              >
+                <ChevronDown className={cn("size-5 text-muted-foreground transition-transform", open && "rotate-180")} />
+              </button>
+            </div>
 
             {open ? (
               <ul className="divide-y divide-border/70 border-t border-border">
@@ -285,9 +295,7 @@ function EditablePosition({
                     {person.phone && !person.isMe ? (
                       <WhatsAppButton
                         phone={person.phone}
-                        name={person.name}
-                        teamName={team.name}
-                        startsAt={startsAt}
+                        message={`Oi ${person.name.split(/\s+/)[0]}! Passando pra confirmar sua presença na escala de ${team.name} (${fmtEventWhen(startsAt)}). Consegue? 🙏`}
                       />
                     ) : null}
                     {canCheckin ? (
@@ -334,36 +342,3 @@ function EditablePosition({
   );
 }
 
-/**
- * Abre o WhatsApp DO PRÓPRIO líder já com a mensagem pronta pra pessoa (sem API
- * oficial — é só um link wa.me). Assume que o telefone cadastrado é o do WhatsApp.
- */
-function WhatsAppButton({
-  phone,
-  name,
-  teamName,
-  startsAt,
-}: {
-  phone: string;
-  name: string;
-  teamName: string;
-  startsAt: string;
-}) {
-  const digits = phone.replace(/\D/g, "");
-  // Brasil: 10–11 dígitos = DDD+número (sem país) → prefixa 55; 12–13 = já veio com o país.
-  // Decidir pelo TAMANHO (não por "começa com 55") evita quebrar DDD 55 (Santa Maria/RS).
-  const num = digits.length === 10 || digits.length === 11 ? `55${digits}` : digits;
-  if (num.length < 12 || num.length > 13) return null;
-  const first = name.split(/\s+/)[0];
-  const msg = `Oi ${first}! Passando pra confirmar sua presença na escala de ${teamName} (${fmtEventWhen(startsAt)}). Consegue? 🙏`;
-  return (
-    <a
-      href={`https://wa.me/${num}?text=${encodeURIComponent(msg)}`}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="press-sm inline-flex h-9 items-center gap-1.5 rounded-full border border-success/40 bg-success/10 px-3 text-sm font-bold text-success"
-    >
-      <MessageCircle className="size-4" /> WhatsApp
-    </a>
-  );
-}

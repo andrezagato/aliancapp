@@ -7,6 +7,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Modal } from "@/components/modal";
 import { TeamDot } from "@/components/coverage-badge";
+import { WhatsAppButton } from "@/components/whatsapp-button";
 import { cn, displayName } from "@/lib/utils";
 import {
   adicionarMembro,
@@ -88,6 +89,13 @@ export function PessoaConfigModal({
             </p>
             {person.email ? <p className="truncate text-sm text-muted-foreground">{person.email}</p> : null}
           </div>
+          {person.phone && !isSelf ? (
+            <WhatsAppButton
+              phone={person.phone}
+              message={`Oi ${person.fullName.split(/\s+/)[0]}! 👋`}
+              className="ml-auto shrink-0"
+            />
+          ) : null}
         </div>
 
         {isAdmin ? (

@@ -37,6 +37,7 @@ export type TeamMeta = {
   color: string;
   icon: string;
   sort_order: number;
+  whatsapp_group: string | null;
 };
 
 export type PositionMeta = {
@@ -50,7 +51,7 @@ export async function listTeams(): Promise<TeamMeta[]> {
   const supabase = await createClient();
   const { data } = await supabase
     .from("teams")
-    .select("id, name, color, icon, sort_order")
+    .select("id, name, color, icon, sort_order, whatsapp_group")
     .is("archived_at", null)
     .order("sort_order");
   return data ?? [];
@@ -63,7 +64,7 @@ export async function listTeamsWithPositions(): Promise<TeamWithPositions[]> {
   const { data } = await supabase
     .from("teams")
     .select(
-      "id, name, color, icon, sort_order, positions ( id, team_id, name, sort_order, archived_at ), memberships ( role, profile:profiles ( full_name ) )",
+      "id, name, color, icon, sort_order, whatsapp_group, positions ( id, team_id, name, sort_order, archived_at ), memberships ( role, profile:profiles ( full_name ) )",
     )
     .is("archived_at", null)
     .order("sort_order");
@@ -73,6 +74,7 @@ export async function listTeamsWithPositions(): Promise<TeamWithPositions[]> {
     color: t.color,
     icon: t.icon,
     sort_order: t.sort_order,
+    whatsapp_group: t.whatsapp_group,
     positions: ((t.positions ?? []) as (PositionMeta & { archived_at: string | null })[])
       .filter((p) => !p.archived_at)
       .sort((a, b) => a.sort_order - b.sort_order)
@@ -932,6 +934,7 @@ export type DetailTeam = {
   assigned: number;
   confirmed: number;
   tone: CoverageTone;
+  whatsappGroup: string | null;
   positions: DetailPosition[];
 };
 
@@ -1113,6 +1116,7 @@ export async function getEventDetail(session: Session, eventId: string): Promise
         assigned,
         confirmed,
         tone: confirmTone(needed, confirmed, assigned),
+        whatsappGroup: meta.whatsapp_group,
         positions: visiblePositions,
       } satisfies DetailTeam;
     })
