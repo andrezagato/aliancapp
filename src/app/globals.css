@@ -152,6 +152,17 @@
   .nav-pop       { animation: nav-pop .4s ease; }
 }
 
+/* valor dos inputs de data/hora à esquerda (o iOS centraliza por padrão →
+   desalinhava do rótulo) */
+input[type="date"]::-webkit-date-and-time-value,
+input[type="time"]::-webkit-date-and-time-value {
+  text-align: left;
+}
+input[type="date"],
+input[type="time"] {
+  text-align: left;
+}
+
 /* scrollbar discreta e quente (desktop) */
 @media (pointer: fine) {
   * { scrollbar-width: thin; scrollbar-color: hsl(var(--border)) transparent; }
