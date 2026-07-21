@@ -35,24 +35,21 @@ export default async function CronogramaPage({ searchParams }: { searchParams: P
       <div className="animate-fade-in space-y-3 py-3">
         {ev ? (
           <>
-            {/* Herói do próximo culto */}
-            <div className="relative overflow-hidden rounded-[22px] bg-gradient-to-br from-primary to-[hsl(349_74%_19%)] p-5 text-primary-foreground shadow-lift">
-              <div
-                className="pointer-events-none absolute -right-10 -top-10 size-40 rounded-full opacity-70"
-                style={{ background: "radial-gradient(circle, hsl(var(--accent) / 0.45), transparent 70%)" }}
-                aria-hidden
-              />
-              <div className="relative">
-                <p className="text-xs font-semibold uppercase tracking-wider text-accent">Próximo culto</p>
-                <h1 className="mt-1 font-display text-2xl font-extrabold text-white">{ev.title}</h1>
-                <p className="mt-0.5 text-sm capitalize text-primary-foreground/85">{fmtEventWhen(ev.starts_at)}</p>
-                <Link
-                  href={`/escalas/${ev.id}`}
-                  className="press mt-3 inline-flex items-center gap-1 rounded-full bg-white/15 px-3.5 py-1.5 text-sm font-bold text-white"
-                >
-                  Ver a escala do culto →
-                </Link>
+            {/* Barra compacta do culto (a régua abaixo é o foco) */}
+            <div className="flex items-center gap-3 rounded-2xl border border-border bg-card p-3">
+              <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+                <CalendarDays className="size-5" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-semibold leading-tight">{ev.title}</p>
+                <p className="truncate text-[13px] capitalize text-muted-foreground">{fmtEventWhen(ev.starts_at)}</p>
               </div>
+              <Link
+                href={`/escalas/${ev.id}`}
+                className="press-sm shrink-0 rounded-full border border-border px-3 py-1.5 text-[13px] font-bold text-primary"
+              >
+                Escala
+              </Link>
             </div>
 
             <RundownGrid

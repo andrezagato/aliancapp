@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft, MapPin, Clock, CircleDashed, CircleSlash } from "lucide-react";
+import { ChevronLeft, CircleDashed, CircleSlash } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
@@ -20,7 +20,8 @@ import { CheckinButton, SwapPending } from "@/components/slot-controls";
 import { EventTeams } from "@/components/event/event-teams";
 import { ResponsavelControls } from "@/components/responsavel-controls";
 import { EventHeroActions } from "@/components/event-hero-actions";
-import { fmtEventDate, fmtTime, churchDateISO } from "@/lib/format";
+import { EventHeroInfo } from "@/components/event-hero-info";
+import { fmtEventDate, churchDateISO } from "@/lib/format";
 
 export default async function EventoPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -37,14 +38,6 @@ export default async function EventoPage({ params }: { params: Promise<{ id: str
   const churchLoc = session.role === "admin" ? await getChurchLocation(session) : null;
   const manageTeams = ev.teams.filter((t) => t.canManage);
   const otherTeams = ev.teams.filter((t) => !t.canManage);
-  const callHHMM = ev.callTime
-    ? new Intl.DateTimeFormat("pt-BR", {
-        timeZone: "America/Sao_Paulo",
-        hour: "2-digit",
-        minute: "2-digit",
-        hourCycle: "h23",
-      }).format(new Date(ev.callTime))
-    : "";
 
   return (
     <div className="space-y-3.5 pb-4">
@@ -62,19 +55,7 @@ export default async function EventoPage({ params }: { params: Promise<{ id: str
           style={{ background: "radial-gradient(circle, hsl(var(--accent) / 0.4), transparent 68%)" }}
           aria-hidden
         />
-        {session.role === "admin" ? (
-          <EventHeroActions
-            eventId={ev.id}
-            archived={!!ev.archivedAt}
-            location={ev.location}
-            lat={ev.latitude}
-            lng={ev.longitude}
-            churchLat={churchLoc?.latitude ?? null}
-            churchLng={churchLoc?.longitude ?? null}
-            date={churchDateISO(ev.starts_at)}
-            callTime={callHHMM}
-          />
-        ) : null}
+        {session.role === "admin" ? <EventHeroActions eventId={ev.id} archived={!!ev.archivedAt} /> : null}
         <div className="relative">
           <div className="flex items-center gap-2">
             <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-accent">{kicker}</p>
@@ -88,27 +69,18 @@ export default async function EventoPage({ params }: { params: Promise<{ id: str
             {ev.title}
           </h1>
           <p className="mt-1 text-[13.5px] capitalize text-primary-foreground/85">{fmtEventDate(ev.starts_at)}</p>
-          <div className="mt-2 flex flex-wrap items-center gap-x-3.5 gap-y-1 text-[13.5px] text-primary-foreground/85">
-            <span className="inline-flex items-center gap-1.5">
-              <Clock className="size-3.5 text-accent" /> {fmtTime(ev.starts_at)}
-              {ev.ends_at ? ` – ${fmtTime(ev.ends_at)}` : ""}
-            </span>
-            {ev.callTime ? (
-              <span className="inline-flex items-center gap-1.5 font-semibold text-accent">
-                Equipe às {fmtTime(ev.callTime)}
-              </span>
-            ) : null}
-            {ev.location ? (
-              <a
-                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(ev.location)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 underline-offset-2 hover:underline"
-              >
-                <MapPin className="size-3.5 text-accent" /> {ev.location}
-              </a>
-            ) : null}
-          </div>
+          <EventHeroInfo
+            eventId={ev.id}
+            canEdit={session.role === "admin"}
+            startsAt={ev.starts_at}
+            endsAt={ev.ends_at}
+            callTimeIso={ev.callTime}
+            location={ev.location}
+            lat={ev.latitude}
+            lng={ev.longitude}
+            churchLat={churchLoc?.latitude ?? null}
+            churchLng={churchLoc?.longitude ?? null}
+          />
         </div>
       </div>
 

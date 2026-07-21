@@ -845,6 +845,51 @@ export async function buscarEndereco(query: string): Promise<{ label: string; la
   }
 }
 
+/** Admin edita o culto de uma vez (data/hora/fim/chegada/local/GPS). */
+export async function atualizarEvento(
+  eventId: string,
+  input: {
+    date: string;
+    time: string;
+    endTime?: string;
+    callTime?: string;
+    location?: string;
+    lat?: number | null;
+    lng?: number | null;
+  },
+): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  if (session.role !== "admin") return fail("Só o administrador edita o evento.");
+  let startsAt: string;
+  let endsAt: string | null = null;
+  let callAt: string | null = null;
+  try {
+    startsAt = saoPauloToIso(input.date, input.time || "18:00");
+    if (input.endTime) endsAt = saoPauloToIso(input.date, input.endTime);
+    if (input.callTime) callAt = saoPauloToIso(input.date, input.callTime);
+  } catch {
+    return fail("Data ou horário inválidos.");
+  }
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("events")
+    .update({
+      starts_at: startsAt,
+      ends_at: endsAt,
+      call_time: callAt,
+      location: input.location?.trim() || null,
+      latitude: input.lat ?? null,
+      longitude: input.lng ?? null,
+    })
+    .eq("id", eventId);
+  if (error) return fail(error.message);
+  revalidatePath(`/escalas/${eventId}`);
+  revalidatePath("/escalas");
+  revalidatePath("/cronograma");
+  return ok;
+}
+
 /** Admin define/limpa a localização de um evento (override do local da igreja). */
 export async function definirLocalEvento(
   eventId: string,
@@ -1158,6 +1203,40 @@ export async function confirmarEvento(eventId: string, confirmar: boolean): Prom
   const supabase = await createClient();
   const { error } = await supabase.rpc("confirmar_evento", { p_event: eventId, p_confirmar: confirmar });
   if (error) return fail(error.message);
+  revalidatePath(`/escalas/${eventId}`);
+  revalidatePath("/inicio");
+  return ok;
+}
+
+/**
+ * Resposta do responsável ao "convite" de responsável: confirma que vai
+ * acontecer (aceita) ou avisa que não vai poder — em ambos os casos manda a
+ * mensagem (opcional) pros admins. Recusar não mexe no evento (RLS é do admin);
+ * o admin reatribui.
+ */
+export async function responderResponsavel(eventId: string, aceita: boolean, note?: string): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  const supabase = await createClient();
+  if (aceita) {
+    const { error } = await supabase.rpc("confirmar_evento", { p_event: eventId, p_confirmar: true });
+    if (error) return fail(error.message);
+  }
+  if (session.profile.church_id) {
+    const { data: admins } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("church_id", session.profile.church_id)
+      .eq("system_role", "admin");
+    const quem = session.profile.full_name || "O responsável";
+    const msg = note?.trim();
+    await notifyMany((admins ?? []).map((a) => a.id), {
+      kind: "evento_resolvido",
+      title: aceita ? "Responsável confirmou o culto" : "Responsável não vai poder",
+      body: `${quem} ${aceita ? "confirmou que vai acontecer" : "avisou que não vai poder ser responsável"}${msg ? `: “${msg}”` : "."}`,
+      link: `/escalas/${eventId}`,
+    });
+  }
   revalidatePath(`/escalas/${eventId}`);
   revalidatePath("/inicio");
   return ok;
