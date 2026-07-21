@@ -2,8 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, X } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Check, Users } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { Modal } from "@/components/modal";
 import { useToast } from "@/components/ui/toast";
@@ -12,6 +11,14 @@ import { warm } from "@/lib/toasts";
 import { confirmarEscalacao, recusarEscalacao, pedirTroca, listMembrosParaTroca } from "@/lib/actions";
 import type { AssignmentStatus } from "@/lib/supabase/database.types";
 
+const REASONS = ["Viajando", "Trabalho", "Saúde", "Compromisso", "Outro"];
+type Sub = { profileId: string; name: string; avatarUrl: string | null };
+
+/**
+ * Resposta do escalado — um único botão "Responder" que abre um sheet com
+ * Confirmar presença OU "não vou poder" (motivo + sugerir substituto). Mesmo
+ * padrão do sheet da home. Usado na escala (modal) e no histórico do líder.
+ */
 export function AssignmentResponse({
   assignmentId,
   status,
@@ -24,31 +31,42 @@ export function AssignmentResponse({
   const router = useRouter();
   const { showToast } = useToast();
   const [pending, start] = useTransition();
-  const [showDecline, setShowDecline] = useState(false);
+  const [open, setOpen] = useState(false);
   const [motivo, setMotivo] = useState("");
   const [chosen, setChosen] = useState<string | null>(null);
-  const [members, setMembers] = useState<{ profileId: string; name: string; avatarUrl: string | null }[] | null>(null);
+  const [subOpen, setSubOpen] = useState(false);
+  const [members, setMembers] = useState<Sub[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  function confirmar() {
+  const openSheet = () => {
+    setError(null);
+    setMotivo("");
+    setChosen(null);
+    setSubOpen(false);
+    setOpen(true);
+  };
+
+  const loadSubs = async () => {
+    setSubOpen(true);
+    if (members === null) setMembers(await listMembrosParaTroca(teamId));
+  };
+
+  const confirmar = () => {
     setError(null);
     start(async () => {
       const r = await confirmarEscalacao(assignmentId);
-      if (!r.ok) setError(r.error);
-      else {
-        showToast(warm("presencaConfirmada"));
-        router.refresh();
+      if (!r.ok) {
+        setError(r.error);
+        return;
       }
+      showToast(warm("presencaConfirmada"));
+      setOpen(false);
+      router.refresh();
     });
-  }
+  };
 
-  async function openDecline() {
-    setShowDecline(true);
-    setError(null);
-    if (members === null) setMembers(await listMembrosParaTroca(teamId));
-  }
-
-  function submitDecline() {
+  const submitDecline = () => {
+    if (motivo.trim().length < 3) return;
     setError(null);
     start(async () => {
       const r = chosen
@@ -59,118 +77,139 @@ export function AssignmentResponse({
         return;
       }
       showToast(warm(chosen ? "trocaPedida" : "presencaRecusada"));
-      setShowDecline(false);
-      setMotivo("");
-      setChosen(null);
+      setOpen(false);
       router.refresh();
     });
-  }
+  };
 
-  const declineModal = (
-    <Modal open={showDecline} onClose={() => !pending && setShowDecline(false)}>
-      <div className="flex max-h-[80dvh] flex-col rounded-2xl border border-border bg-card shadow-lift">
-        <div className="border-b border-border p-4">
-          <h3 className="text-lg font-semibold">Não vou poder servir</h3>
-          <p className="text-sm text-muted-foreground">
-            Conta o motivo. Se quiser, sugira alguém pra te substituir — a pessoa confirma e o líder aprova.
-          </p>
-        </div>
-        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+  // --- gatilho (uma linha) ---
+  if (status === "presente") {
+    return (
+      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-success/12 px-2.5 py-1 text-[12px] font-bold text-success">
+        <Check className="size-3.5" strokeWidth={3} /> Presente
+      </span>
+    );
+  }
+  if (status === "recusado") return <span className="shrink-0 text-[12px] text-muted-foreground">Você recusou</span>;
+  if (status === "vaga_aberta") return null;
+
+  const confirmed = status === "confirmado";
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={openSheet}
+        className={cn(
+          "press-sm inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-[13px] font-bold",
+          confirmed
+            ? "bg-success/12 text-success"
+            : "bg-primary text-primary-foreground",
+        )}
+      >
+        {confirmed ? <Check className="size-3.5" strokeWidth={3} /> : null}
+        {confirmed ? "Confirmado" : "Responder"}
+      </button>
+
+      <Modal open={open} onClose={() => !pending && setOpen(false)} sheet title="Responder escala">
+        <div className="mt-1 space-y-3">
+          <button
+            onClick={confirmar}
+            disabled={pending}
+            className="press flex h-[52px] w-full items-center justify-center gap-2 rounded-[15px] bg-success text-[15.5px] font-extrabold text-white disabled:opacity-60"
+          >
+            <Check className="size-5" strokeWidth={2.8} /> Confirmar presença
+          </button>
+
+          <div className="my-1 flex items-center gap-3">
+            <span className="h-px flex-1 bg-border" />
+            <span className="text-[12px] font-semibold text-muted-foreground">ou, se não puder</span>
+            <span className="h-px flex-1 bg-border" />
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {REASONS.map((r) => (
+              <button
+                key={r}
+                onClick={() => setMotivo(r === "Outro" ? "" : r)}
+                className={cn(
+                  "press rounded-full border px-3.5 py-2 text-sm font-bold",
+                  motivo === r && r !== "Outro"
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-destructive/25 bg-card text-primary",
+                )}
+              >
+                {r}
+              </button>
+            ))}
+          </div>
+
           <textarea
-            autoFocus
             value={motivo}
             onChange={(e) => setMotivo(e.target.value)}
             rows={2}
-            placeholder="Ex.: viagem nesse fim de semana"
-            className="w-full rounded-2xl border border-input bg-background px-4 py-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            placeholder="Escreva o motivo…"
+            className="w-full resize-none rounded-[14px] border border-border bg-card px-3.5 py-3 text-sm outline-none focus:border-primary"
           />
-          <div>
-            <p className="mb-1.5 text-sm font-medium">Sugerir substituto (opcional)</p>
-            {members === null ? (
-              <p className="text-sm text-muted-foreground">Carregando…</p>
-            ) : members.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Ninguém mais na equipe pra sugerir.</p>
-            ) : (
-              <ul className="space-y-1">
-                {members.map((m) => (
-                  <li key={m.profileId}>
+
+          {!subOpen ? (
+            <button
+              onClick={loadSubs}
+              className="press-sm flex w-full items-center gap-2.5 rounded-[14px] border border-border bg-card px-3.5 py-3 text-left"
+            >
+              <Users className="size-[18px] text-muted-foreground" />
+              <span className="flex-1 text-[13.5px] text-muted-foreground">
+                Sugerir substituto <span className="text-muted-foreground/60">(opcional)</span>
+              </span>
+              <span className="text-[13px] font-bold text-primary">Escolher ›</span>
+            </button>
+          ) : (
+            <div className="max-h-52 overflow-y-auto rounded-[14px] border border-border bg-card p-1.5">
+              {members === null ? (
+                <p className="p-3 text-sm text-muted-foreground">Carregando…</p>
+              ) : members.length > 0 ? (
+                members.map((s) => {
+                  const on = chosen === s.profileId;
+                  return (
                     <button
-                      type="button"
-                      onClick={() => setChosen(chosen === m.profileId ? null : m.profileId)}
+                      key={s.profileId}
+                      onClick={() => setChosen(on ? null : s.profileId)}
                       className={cn(
-                        "flex w-full items-center gap-3 rounded-xl border p-2 text-left",
-                        chosen === m.profileId ? "border-primary bg-primary/5" : "border-transparent hover:bg-muted",
+                        "press-sm flex w-full items-center gap-2.5 rounded-[11px] px-2.5 py-2 text-left",
+                        on && "bg-accent/20",
                       )}
                     >
-                      <Avatar name={m.name} src={m.avatarUrl} className="size-8" />
-                      <span className="min-w-0 flex-1 truncate text-sm font-medium">{m.name}</span>
-                      {chosen === m.profileId ? <Check className="size-4 text-primary" /> : null}
+                      <Avatar name={s.name} src={s.avatarUrl} className="size-9" />
+                      <span className="flex-1 text-sm font-semibold">{s.name}</span>
+                      {on ? <Check className="size-4 text-primary" strokeWidth={2.6} /> : null}
                     </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
+                  );
+                })
+              ) : (
+                <p className="p-3 text-sm text-muted-foreground">Ninguém disponível pra sugerir agora.</p>
+              )}
+            </div>
+          )}
+
           {error ? <p className="text-sm text-destructive">{error}</p> : null}
-        </div>
-        <div className="flex gap-2 border-t border-border p-3">
-          <Button variant="ghost" className="flex-1" onClick={() => setShowDecline(false)} disabled={pending}>
-            Voltar
-          </Button>
-          <Button
-            variant={chosen ? "primary" : "destructive"}
-            className="flex-1"
+
+          <button
             onClick={submitDecline}
             disabled={pending || motivo.trim().length < 3}
+            className={cn(
+              "press h-[52px] w-full rounded-[15px] text-[15.5px] font-extrabold transition-opacity",
+              motivo.trim().length >= 3
+                ? "bg-destructive text-destructive-foreground"
+                : "cursor-not-allowed bg-muted text-muted-foreground",
+            )}
           >
-            {pending ? "Enviando…" : chosen ? "Pedir troca" : "Não vou poder"}
-          </Button>
-        </div>
-      </div>
-    </Modal>
-  );
-
-  if (status === "confirmado" || status === "presente") {
-    return (
-      <div className="flex shrink-0 items-center gap-1">
-        <span className="inline-flex items-center gap-1 rounded-full bg-success/12 px-2 py-0.5 text-[12px] font-bold text-success">
-          <Check className="size-3.5" strokeWidth={3} /> {status === "presente" ? "Presente" : "Confirmado"}
-        </span>
-        {status === "confirmado" ? (
-          <button
-            type="button"
-            onClick={openDecline}
-            title="Não poderei mais"
-            aria-label="Não poderei mais"
-            className="press-sm grid size-7 place-items-center rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-          >
-            <X className="size-4" />
+            {chosen ? "Pedir troca" : "Não vou poder"}
           </button>
-        ) : null}
-        {declineModal}
-      </div>
-    );
-  }
-
-  if (status === "recusado") {
-    return <span className="shrink-0 text-sm text-muted-foreground">Você recusou</span>;
-  }
-
-  if (status === "vaga_aberta") return null;
-
-  // convidado
-  return (
-    <div className="flex shrink-0 flex-col items-stretch gap-1">
-      <div className="flex gap-1.5">
-        <Button size="sm" onClick={confirmar} disabled={pending} className="h-8 px-3 text-[13px]">
-          {pending ? "…" : "Confirmar"}
-        </Button>
-        <Button size="sm" variant="outline" onClick={openDecline} disabled={pending} className="h-8 px-3 text-[13px]">
-          Não posso
-        </Button>
-      </div>
-      {error && !showDecline ? <p className="text-xs text-destructive">{error}</p> : null}
-      {declineModal}
-    </div>
+          <button onClick={() => setOpen(false)} className="press-sm h-10 w-full text-[14.5px] font-bold text-muted-foreground">
+            Fechar
+          </button>
+        </div>
+      </Modal>
+    </>
   );
 }
