@@ -1875,7 +1875,8 @@ export async function carregarEventoParaModal(eventId: string): Promise<EventoMo
     title: ev.title,
     startsAt: ev.starts_at,
     canCheckin,
-    teams: ev.teams.filter((t) => t.canManage),
+    // Visão única: todas as equipes que o usuário enxerga (gerencia OU está escalado).
+    teams: ev.teams,
   };
 }
 
