@@ -113,7 +113,7 @@ export function TeamCalendar({
         </div>
       </Modal>
 
-      <EventEscalaModal event={openEvent} revalidateKey={events} onClose={() => setOpenEvent(null)} />
+      <EventEscalaModal eventId={openEvent?.id ?? null} revalidateKey={events} onClose={() => setOpenEvent(null)} />
     </>
   );
 }

@@ -2,25 +2,30 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Clock, MapPin, LocateFixed, Pencil } from "lucide-react";
+import { LocateFixed, Archive, ArchiveRestore, Trash2 } from "lucide-react";
 import { Modal } from "@/components/modal";
 import { useToast } from "@/components/ui/toast";
 import { AddressSearch } from "@/components/address-search";
+import { ResponsavelControls } from "@/components/responsavel-controls";
 import { getCoords } from "@/lib/geo-client";
 import { warm } from "@/lib/toasts";
-import { atualizarEvento } from "@/lib/actions";
+import { atualizarEvento, arquivarEvento, excluirEvento } from "@/lib/actions";
 import { fmtTime, churchDateISO } from "@/lib/format";
 
 const inputCls = "w-full rounded-[12px] border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary";
 
+type Profile = { id: string; name: string; avatarUrl: string | null };
+
 /**
- * Linha de infos do hero do evento (hora · chegada · local). Pro admin, tocar
- * abre o modal "Editar culto" (data/hora/fim/chegada/local/GPS num salvar só).
- * Pros demais, é só leitura — com o local abrindo o mapa.
+ * Sheet "Gerenciar culto" (admin) — abre POR CIMA do modal da escala (não sai
+ * dele). Edita data/hora/local/chegada, define responsável e arquiva/exclui.
  */
-export function EventHeroInfo({
+export function GerenciarEventoSheet({
+  open,
+  onClose,
+  onChanged,
+  onDeleted,
   eventId,
-  canEdit,
   startsAt,
   endsAt,
   callTimeIso,
@@ -29,9 +34,17 @@ export function EventHeroInfo({
   lng,
   churchLat,
   churchLng,
+  archived,
+  isResponsible,
+  responsibleName,
+  confirmedAt,
+  profiles,
 }: {
+  open: boolean;
+  onClose: () => void;
+  onChanged: () => void;
+  onDeleted: () => void;
   eventId: string;
-  canEdit: boolean;
   startsAt: string;
   endsAt: string | null;
   callTimeIso: string | null;
@@ -40,10 +53,14 @@ export function EventHeroInfo({
   lng: number | null;
   churchLat: number | null;
   churchLng: number | null;
+  archived: boolean;
+  isResponsible: boolean;
+  responsibleName: string | null;
+  confirmedAt: string | null;
+  profiles: Profile[];
 }) {
   const router = useRouter();
   const { showToast } = useToast();
-  const [open, setOpen] = useState(false);
   const [busy, start] = useTransition();
 
   const [date, setDate] = useState(churchDateISO(startsAt));
@@ -53,9 +70,6 @@ export function EventHeroInfo({
   const [name, setName] = useState(location ?? "");
   const [la, setLa] = useState((lat ?? churchLat) != null ? String(lat ?? churchLat) : "");
   const [lo, setLo] = useState((lng ?? churchLng) != null ? String(lng ?? churchLng) : "");
-
-  const timeStr = fmtTime(startsAt) + (endsAt ? ` – ${fmtTime(endsAt)}` : "");
-  const mapsHref = location ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location)}` : null;
 
   const useMy = async () => {
     const c = await getCoords();
@@ -87,57 +101,50 @@ export function EventHeroInfo({
       });
       if (r.ok) {
         showToast(warm("salvo"));
-        setOpen(false);
+        onChanged();
+      } else {
+        showToast(r.error);
+      }
+    });
+
+  const toggleArchive = () =>
+    start(async () => {
+      const r = await arquivarEvento(eventId, !archived);
+      if (r.ok) {
+        showToast(warm(archived ? "eventoReativado" : "eventoArquivado"));
+        onChanged();
+      } else {
+        showToast(r.error);
+      }
+    });
+
+  const del = () =>
+    start(async () => {
+      const r = await excluirEvento(eventId);
+      if (r.ok) {
+        showToast(warm("eventoExcluido"));
+        onDeleted();
+        router.push("/escalas");
         router.refresh();
       } else {
         showToast(r.error);
       }
     });
 
-  // Leitura (voluntário/líder): local abre o mapa.
-  if (!canEdit) {
-    return (
-      <div className="mt-2 flex flex-wrap items-center gap-x-3.5 gap-y-1 text-[13.5px] text-primary-foreground/85">
-        <span className="inline-flex items-center gap-1.5">
-          <Clock className="size-3.5 text-accent" /> {timeStr}
-        </span>
-        {callTimeIso ? (
-          <span className="inline-flex items-center gap-1.5 font-semibold text-accent">Equipe às {fmtTime(callTimeIso)}</span>
-        ) : null}
-        {location ? (
-          <a href={mapsHref!} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 underline-offset-2 hover:underline">
-            <MapPin className="size-3.5 text-accent" /> {location}
-          </a>
-        ) : null}
-      </div>
-    );
-  }
-
   return (
-    <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="press-sm -ml-1 mt-2 flex flex-wrap items-center gap-x-3.5 gap-y-1 rounded-lg px-1 py-0.5 text-left text-[13.5px] text-primary-foreground/85"
-      >
-        <span className="inline-flex items-center gap-1.5">
-          <Clock className="size-3.5 text-accent" /> {timeStr}
-        </span>
-        {callTimeIso ? (
-          <span className="inline-flex items-center gap-1.5 font-semibold text-accent">Equipe às {fmtTime(callTimeIso)}</span>
-        ) : null}
-        {location ? (
-          <span className="inline-flex items-center gap-1.5">
-            <MapPin className="size-3.5 text-accent" /> {location}
-          </span>
-        ) : null}
-        <span className="inline-flex items-center gap-1 font-semibold text-accent">
-          <Pencil className="size-3" /> editar
-        </span>
-      </button>
+    <Modal open={open} onClose={() => !busy && onClose()} sheet title="Gerenciar culto">
+      <div className="mt-1 space-y-4">
+        <ResponsavelControls
+          eventId={eventId}
+          isAdmin
+          isResponsible={isResponsible}
+          responsibleName={responsibleName}
+          confirmedAt={confirmedAt}
+          profiles={profiles}
+        />
 
-      <Modal open={open} onClose={() => !busy && setOpen(false)} sheet title="Editar culto">
-        <div className="mt-1 space-y-3">
+        <div className="space-y-3 border-t border-border/60 pt-3">
+          <p className="text-sm font-semibold">Editar culto</p>
           <div className="grid grid-cols-2 gap-2">
             <label className="block">
               <span className="mb-1 block text-sm font-medium">Data</span>
@@ -156,12 +163,10 @@ export function EventHeroInfo({
               <input type="time" value={call} onChange={(e) => setCall(e.target.value)} className={inputCls} />
             </label>
           </div>
-
           <label className="block">
             <span className="mb-1 block text-sm font-medium">Nome do local</span>
             <input className={inputCls} placeholder="Ex.: Templo / Chácara do retiro" value={name} onChange={(e) => setName(e.target.value)} />
           </label>
-
           <div className="rounded-[14px] border border-border/70 bg-muted/20 p-3">
             <p className="mb-2 text-[12px] text-muted-foreground">
               Local pro check-in por GPS (opcional). Buscar o endereço já preenche o nome e o ponto.
@@ -190,16 +195,33 @@ export function EventHeroInfo({
               </div>
             </details>
           </div>
-
           <button
             onClick={save}
             disabled={busy}
             className="press h-[52px] w-full rounded-[15px] bg-primary text-[15.5px] font-extrabold text-primary-foreground disabled:opacity-60"
           >
-            {busy ? "Salvando…" : "Salvar"}
+            {busy ? "Salvando…" : "Salvar culto"}
           </button>
         </div>
-      </Modal>
-    </>
+
+        <div className="flex gap-2 border-t border-border/60 pt-3">
+          <button
+            onClick={() => window.confirm(archived ? "Reativar este evento?" : "Arquivar este evento?") && toggleArchive()}
+            disabled={busy}
+            className="press-sm inline-flex flex-1 items-center justify-center gap-1.5 rounded-[13px] border border-border py-2.5 text-sm font-semibold text-muted-foreground disabled:opacity-60"
+          >
+            {archived ? <ArchiveRestore className="size-4" /> : <Archive className="size-4" />}
+            {archived ? "Reativar" : "Arquivar"}
+          </button>
+          <button
+            onClick={() => window.confirm("Excluir o evento de vez? Não dá pra desfazer.") && del()}
+            disabled={busy}
+            className="press-sm inline-flex flex-1 items-center justify-center gap-1.5 rounded-[13px] border border-destructive/30 py-2.5 text-sm font-semibold text-destructive disabled:opacity-60"
+          >
+            <Trash2 className="size-4" /> Excluir
+          </button>
+        </div>
+      </div>
+    </Modal>
   );
 }

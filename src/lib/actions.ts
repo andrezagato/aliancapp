@@ -3,7 +3,15 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getSession, canManageTeam, type Session } from "@/lib/auth";
-import { getEligibleMembers, getEventDetail, syncAchievements, type EligibleMember, type DetailTeam } from "@/lib/data";
+import {
+  getEligibleMembers,
+  getEventDetail,
+  getChurchLocation,
+  listChurchProfiles,
+  syncAchievements,
+  type EligibleMember,
+  type DetailTeam,
+} from "@/lib/data";
 import { BADGE_BY_CODE, type UnlockedBadge } from "@/lib/achievements";
 import { logActivity } from "@/lib/activity";
 import { notify, notifyMany, teamLeaderIds } from "@/lib/notify";
@@ -1857,11 +1865,25 @@ export async function excluirPessoa(profileId: string): Promise<ActionResult> {
 // =============================================================================
 export type EventoModalData = {
   ok: boolean;
+  error?: string;
+  role?: "admin" | "leader" | "volunteer";
+  canCheckin?: boolean;
   title?: string;
   startsAt?: string;
-  canCheckin?: boolean;
+  endsAt?: string | null;
+  location?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  callTime?: string | null;
+  archivedAt?: string | null;
+  notes?: string | null;
+  isResponsible?: boolean;
+  responsibleName?: string | null;
+  confirmedAt?: string | null;
+  churchLat?: number | null;
+  churchLng?: number | null;
+  profiles?: { id: string; name: string; avatarUrl: string | null }[];
   teams?: DetailTeam[];
-  error?: string;
 };
 
 export async function carregarEventoParaModal(eventId: string): Promise<EventoModalData> {
@@ -1870,11 +1892,30 @@ export async function carregarEventoParaModal(eventId: string): Promise<EventoMo
   const ev = await getEventDetail(session, eventId);
   if (!ev) return { ok: false, error: "Evento não encontrado." };
   const canCheckin = churchDateISO(ev.starts_at) <= churchDateISO(new Date().toISOString());
+  const isAdmin = session.role === "admin";
+  const [churchLoc, profiles] = await Promise.all([
+    isAdmin ? getChurchLocation(session) : Promise.resolve(null),
+    isAdmin ? listChurchProfiles() : Promise.resolve([]),
+  ]);
   return {
     ok: true,
+    role: session.role,
+    canCheckin,
     title: ev.title,
     startsAt: ev.starts_at,
-    canCheckin,
+    endsAt: ev.ends_at,
+    location: ev.location,
+    latitude: ev.latitude,
+    longitude: ev.longitude,
+    callTime: ev.callTime,
+    archivedAt: ev.archivedAt,
+    notes: ev.notes,
+    isResponsible: ev.isResponsible,
+    responsibleName: ev.responsibleName,
+    confirmedAt: ev.confirmedAt,
+    churchLat: churchLoc?.latitude ?? null,
+    churchLng: churchLoc?.longitude ?? null,
+    profiles,
     // Visão única: todas as equipes que o usuário enxerga (gerencia OU está escalado).
     teams: ev.teams,
   };

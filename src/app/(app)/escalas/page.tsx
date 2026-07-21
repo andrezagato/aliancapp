@@ -3,7 +3,7 @@ import { CalendarDays, Plus } from "lucide-react";
 import { TopBar } from "@/components/app-shell/top-bar";
 import { buttonVariants } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
-import { EscalasList } from "@/components/escalas-list";
+import { EscalasView } from "@/components/escalas-view";
 import { cn } from "@/lib/utils";
 import { getSession } from "@/lib/auth";
 import { listUpcomingEvents } from "@/lib/data";
@@ -38,7 +38,7 @@ export default async function EscalasPage() {
             }
           />
         ) : (
-          <EscalasList events={events} canManage={session.role !== "volunteer"} />
+          <EscalasView events={events} canManage={session.role !== "volunteer"} openId={null} />
         )}
       </div>
     </>
