@@ -6,7 +6,9 @@ import { Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
 import { Modal } from "@/components/modal";
+import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
+import { warm } from "@/lib/toasts";
 import { confirmarEscalacao, recusarEscalacao, pedirTroca, listMembrosParaTroca } from "@/lib/actions";
 import type { AssignmentStatus } from "@/lib/supabase/database.types";
 
@@ -20,6 +22,7 @@ export function AssignmentResponse({
   teamId: string;
 }) {
   const router = useRouter();
+  const { showToast } = useToast();
   const [pending, start] = useTransition();
   const [showDecline, setShowDecline] = useState(false);
   const [motivo, setMotivo] = useState("");
@@ -32,7 +35,10 @@ export function AssignmentResponse({
     start(async () => {
       const r = await confirmarEscalacao(assignmentId);
       if (!r.ok) setError(r.error);
-      else router.refresh();
+      else {
+        showToast(warm("presencaConfirmada"));
+        router.refresh();
+      }
     });
   }
 
@@ -52,6 +58,7 @@ export function AssignmentResponse({
         setError(r.error);
         return;
       }
+      showToast(warm(chosen ? "trocaPedida" : "presencaRecusada"));
       setShowDecline(false);
       setMotivo("");
       setChosen(null);

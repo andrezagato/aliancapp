@@ -138,7 +138,7 @@ export function VolunteerHome({
     const motivo = reason.trim();
     closeRespond();
     if (sub) {
-      showToast("Pedido de troca enviado ao líder.");
+      showToast(warm("trocaPedida"));
       startTransition(async () => {
         const r = await pedirTroca(id, motivo, sub.profileId);
         if (!r.ok) showToast(r.error);

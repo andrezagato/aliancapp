@@ -6,6 +6,8 @@ import { BadgeCheck, UserCog, Clock, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
 import { Modal } from "@/components/modal";
+import { useToast } from "@/components/ui/toast";
+import { warm } from "@/lib/toasts";
 import { definirResponsavel, confirmarEvento, responderResponsavel } from "@/lib/actions";
 
 type Profile = { id: string; name: string; avatarUrl: string | null };
@@ -26,16 +28,18 @@ export function ResponsavelControls({
   profiles: Profile[];
 }) {
   const router = useRouter();
+  const { showToast } = useToast();
   const [pending, start] = useTransition();
   const [picking, setPicking] = useState(false);
   const [responder, setResponder] = useState(false);
   const [note, setNote] = useState("");
   const [q, setQ] = useState("");
 
-  function run(fn: () => Promise<{ ok: boolean }>) {
+  function run(fn: () => Promise<{ ok: boolean }>, msg?: string) {
     start(async () => {
       const r = await fn();
       if (r.ok) {
+        if (msg) showToast(msg);
         setPicking(false);
         setResponder(false);
         setNote("");
@@ -151,14 +155,14 @@ export function ResponsavelControls({
             className="w-full resize-none rounded-[14px] border border-border bg-card px-3.5 py-3 text-sm outline-none focus:border-primary"
           />
           <button
-            onClick={() => run(() => responderResponsavel(eventId, true, note))}
+            onClick={() => run(() => responderResponsavel(eventId, true, note), warm("responsavelConfirmou"))}
             disabled={pending}
             className="press flex h-[52px] w-full items-center justify-center gap-2 rounded-[15px] bg-success text-[15.5px] font-extrabold text-white disabled:opacity-60"
           >
             <Check className="size-5" strokeWidth={2.8} /> Confirmar que vai acontecer
           </button>
           <button
-            onClick={() => run(() => responderResponsavel(eventId, false, note))}
+            onClick={() => run(() => responderResponsavel(eventId, false, note), "Avisamos o admin — obrigado! 🙏")}
             disabled={pending}
             className="press-sm h-11 w-full rounded-[13px] border border-border text-sm font-semibold text-muted-foreground disabled:opacity-60"
           >

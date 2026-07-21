@@ -7,6 +7,7 @@ import { Modal } from "@/components/modal";
 import { TeamDot } from "@/components/coverage-badge";
 import { useToast } from "@/components/ui/toast";
 import { solicitarEvento, resolverEventoSolicitado } from "@/lib/actions";
+import { warm } from "@/lib/toasts";
 import { fmtEventWhen } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { PendingEventRequest } from "@/lib/data";
@@ -55,7 +56,7 @@ export function SugerirEventoForm({
     start(async () => {
       const r = await solicitarEvento({ title, date, time, location, note, teamIds });
       if (r.ok) {
-        showToast("Pedido enviado! A administração vai avaliar.");
+        showToast(warm("pedidoEnviado"));
         onDone();
       } else {
         setError(r.error);
@@ -196,10 +197,10 @@ function EventRequestCard({ req }: { req: PendingEventRequest }) {
         setOpen(false);
         setNote("");
         if (aprovar && r.eventId) {
-          showToast("Evento criado — ajuste as equipes.");
+          showToast(warm("eventoAprovado"));
           router.push(`/escalas/${r.eventId}`);
         } else {
-          showToast(aprovar ? "Evento criado no calendário." : "Pedido recusado — avisamos quem pediu.");
+          showToast(warm(aprovar ? "eventoAprovado" : "pedidoRecusado"));
           router.refresh();
         }
       } else {

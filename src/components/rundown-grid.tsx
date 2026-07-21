@@ -34,6 +34,7 @@ import {
   excluirModeloCronograma,
   aplicarModeloCronograma,
 } from "@/lib/actions";
+import { warm } from "@/lib/toasts";
 import type { RundownItem, RundownKind, RundownTemplate } from "@/lib/data";
 
 const PX_PER_MIN = 6; // altura do bloco = duração × isto (arrastar 1min = 6px)
@@ -324,8 +325,12 @@ export function RundownGrid({
     setEnded(new Date().toISOString());
     startTx(async () => {
       const r = await encerrarCronograma(eventId);
-      if (r.ok) router.refresh();
-      else showToast(r.error);
+      if (r.ok) {
+        showToast(warm("cultoEncerrado"));
+        router.refresh();
+      } else {
+        showToast(r.error);
+      }
     });
   };
   const remove = (id: string) =>
@@ -674,7 +679,7 @@ function BlocoModal({
       if (r.ok) {
         onClose();
         router.refresh();
-        showToast(item ? "Bloco atualizado." : "Bloco adicionado.");
+        showToast(warm("blocoSalvo"));
       } else {
         setError(r.error);
       }

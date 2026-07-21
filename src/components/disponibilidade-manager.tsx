@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useToast } from "@/components/ui/toast";
 import { adicionarIndisponibilidade, removerIndisponibilidade } from "@/lib/actions";
+import { warm } from "@/lib/toasts";
 import { churchDateISO } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { AvailabilityBlock } from "@/lib/data";
@@ -119,7 +120,7 @@ export function DisponibilidadeManager({
         const r = await adicionarIndisponibilidade(d, d);
         if (!r.ok) return showToast(r.error);
       }
-      showToast("Disponibilidade salva.");
+      showToast(warm("disponibilidadeSalva"));
       router.refresh();
     });
   }

@@ -9,6 +9,7 @@ import { TeamDot } from "@/components/coverage-badge";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 import { criarInteresse, responderInteresse } from "@/lib/actions";
+import { warm } from "@/lib/toasts";
 import type { TeamWithPositions } from "@/lib/data";
 
 // -----------------------------------------------------------------------------
@@ -37,7 +38,7 @@ export function InteresseButton({ teams }: { teams: TeamWithPositions[] }) {
       setOpen(false);
       setTeamId(null);
       setNote("");
-      showToast("Interesse enviado! A liderança já foi avisada. 🙌");
+      showToast(warm("interesseEnviado"));
       router.refresh();
     });
   }
@@ -154,7 +155,7 @@ export function InteresseResolveButton({
       if (r.ok) {
         setOpen(false);
         setNote("");
-        showToast(aceitar ? `${personName} entrou na equipe! Avisamos a pessoa.` : "Resposta enviada à pessoa.");
+        showToast(warm(aceitar ? "interesseAceito" : "interesseRecusado"));
         router.refresh();
       } else {
         showToast(r.error);

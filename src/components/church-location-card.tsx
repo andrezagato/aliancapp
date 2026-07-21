@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { LocateFixed } from "lucide-react";
 import { useToast } from "@/components/ui/toast";
 import { AddressSearch } from "@/components/address-search";
+import { warm } from "@/lib/toasts";
 import { definirLocalIgreja } from "@/lib/actions";
 import { getCoords } from "@/lib/geo-client";
 import type { ChurchLocation } from "@/lib/data";
@@ -44,7 +45,7 @@ export function ChurchLocationCard({ location }: { location: ChurchLocation | nu
       }
       const r = await definirLocalIgreja(la, lo, Number(radius) || 200);
       if (r.ok) {
-        showToast("Local da igreja salvo.");
+        showToast(warm("localSalvo"));
         router.refresh();
       } else {
         showToast(r.error);
