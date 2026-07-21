@@ -93,7 +93,7 @@ export function NextEventHero({
           </Link>
         ) : null}
 
-        {ev.teams.length > 0 ? (
+        {ev.teams.length > 1 ? (
           <div className="mt-4 flex flex-wrap gap-1.5">
             {ev.teams.map((t) => (
               <span

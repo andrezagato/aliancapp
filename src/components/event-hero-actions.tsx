@@ -2,12 +2,12 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { MapPin, Archive, ArchiveRestore, Trash2, LocateFixed } from "lucide-react";
+import { MapPin, Archive, ArchiveRestore, Trash2, LocateFixed, Clock } from "lucide-react";
 import { Modal } from "@/components/modal";
 import { useToast } from "@/components/ui/toast";
 import { AddressSearch } from "@/components/address-search";
 import { getCoords } from "@/lib/geo-client";
-import { definirLocalEvento, arquivarEvento, excluirEvento } from "@/lib/actions";
+import { definirLocalEvento, definirCallTime, arquivarEvento, excluirEvento } from "@/lib/actions";
 
 const inputCls = "w-full rounded-[12px] border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary";
 const heroBtn =
@@ -25,6 +25,8 @@ export function EventHeroActions({
   lng,
   churchLat,
   churchLng,
+  date,
+  callTime,
 }: {
   eventId: string;
   archived: boolean;
@@ -33,6 +35,8 @@ export function EventHeroActions({
   lng: number | null;
   churchLat: number | null;
   churchLng: number | null;
+  date: string;
+  callTime: string;
 }) {
   const router = useRouter();
   const { showToast } = useToast();
@@ -43,6 +47,20 @@ export function EventHeroActions({
   const [name, setName] = useState(location ?? "");
   const [la, setLa] = useState((lat ?? churchLat) != null ? String(lat ?? churchLat) : "");
   const [lo, setLo] = useState((lng ?? churchLng) != null ? String(lng ?? churchLng) : "");
+  const [call, setCall] = useState(callTime);
+
+  const pickCall = (v: string) => {
+    setCall(v);
+    start(async () => {
+      const r = await definirCallTime(eventId, date, v);
+      if (r.ok) {
+        showToast(v ? "Chegada da equipe salva." : "Horário de chegada removido.");
+        router.refresh();
+      } else {
+        showToast(r.error);
+      }
+    });
+  };
 
   const useMy = async () => {
     const c = await getCoords();
@@ -113,7 +131,7 @@ export function EventHeroActions({
 
   return (
     <div className="absolute right-3 top-3 z-10 flex gap-1.5">
-      <button onClick={() => setOpenLoc(true)} aria-label="Editar local" className={heroBtn}>
+      <button onClick={() => setOpenLoc(true)} aria-label="Editar local e chegada" className={heroBtn}>
         <MapPin className="size-[18px]" />
       </button>
       <button
@@ -133,7 +151,7 @@ export function EventHeroActions({
         <Trash2 className="size-[18px]" />
       </button>
 
-      <Modal open={openLoc} onClose={() => !busy && setOpenLoc(false)} sheet title="Local do evento">
+      <Modal open={openLoc} onClose={() => !busy && setOpenLoc(false)} sheet title="Local e chegada">
         <div className="mt-1 space-y-3">
           <label className="block">
             <span className="mb-1 block text-sm font-medium">Nome do local</span>
@@ -181,6 +199,20 @@ export function EventHeroActions({
                 Remover
               </button>
             ) : null}
+          </div>
+
+          <div className="border-t border-border/60 pt-3">
+            <label className="flex items-center gap-2">
+              <Clock className="size-4 text-muted-foreground" />
+              <span className="text-sm font-medium">Chegada da equipe</span>
+              <input
+                type="time"
+                value={call}
+                disabled={busy}
+                onChange={(e) => pickCall(e.target.value)}
+                className="ml-auto rounded-[10px] border border-border bg-card px-2.5 py-1.5 text-sm outline-none focus:border-primary disabled:opacity-60"
+              />
+            </label>
           </div>
         </div>
       </Modal>

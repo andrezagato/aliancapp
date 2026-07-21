@@ -4,15 +4,18 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Avatar } from "@/components/ui/avatar";
 import { SignOutButton } from "@/components/sign-out-button";
 import { ProfileEditableField } from "@/components/profile-field";
+import { ChurchLocationCard } from "@/components/church-location-card";
 import { atualizarNome, atualizarApelido, atualizarTelefone, atualizarAniversario } from "@/lib/actions";
 import { cn, displayName } from "@/lib/utils";
 import { getSession } from "@/lib/auth";
+import { getChurchLocation } from "@/lib/data";
 import { fmtBirthday } from "@/lib/format";
 
 export default async function PerfilPage() {
   const session = await getSession();
   if (!session) return null;
   const p = session.profile;
+  const churchLoc = session.role === "admin" ? await getChurchLocation(session) : null;
 
   const roleLabel =
     session.role === "admin" ? "Administrador" : session.role === "leader" ? "Líder" : "Voluntário";
@@ -129,6 +132,8 @@ export default async function PerfilPage() {
           </li>
         </ul>
       </Card>
+
+      {session.role === "admin" ? <ChurchLocationCard location={churchLoc} /> : null}
 
       <p className="text-center font-display text-xs italic text-muted-foreground/70">Sirvo · Aliança · v1.0</p>
     </div>

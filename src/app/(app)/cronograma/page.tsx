@@ -7,15 +7,23 @@ import { getSession } from "@/lib/auth";
 import { listUpcomingEvents, getEventRundown, listRundownKinds, getRundownState } from "@/lib/data";
 import { fmtEventWhen } from "@/lib/format";
 
-export default async function CronogramaPage() {
+export default async function CronogramaPage({ searchParams }: { searchParams: Promise<{ ev?: string }> }) {
   const session = await getSession();
   if (!session) return null;
+  const { ev: evParam } = await searchParams;
 
-  const upcoming = await listUpcomingEvents(session, 6);
-  const ev = upcoming[0] ?? null;
-  const [rundown, kinds, state] = ev
-    ? await Promise.all([getEventRundown(ev.id), listRundownKinds(), getRundownState(ev.id)])
-    : [[], await listRundownKinds(), null];
+  const upcoming = await listUpcomingEvents(session, 8);
+  // Encerrados saem: escolhe o primeiro não-encerrado (ou o pedido via ?ev=).
+  const states = await Promise.all(upcoming.map((e) => getRundownState(e.id)));
+  const firstOpen = upcoming.findIndex((_, i) => !states[i].endedAt);
+  const chosen = evParam ? upcoming.findIndex((e) => e.id === evParam) : -1;
+  const idx = chosen >= 0 ? chosen : firstOpen;
+  const ev = idx >= 0 ? upcoming[idx] : null;
+  const state = idx >= 0 ? states[idx] : null;
+  const [rundown, kinds] = ev
+    ? await Promise.all([getEventRundown(ev.id), listRundownKinds()])
+    : [[], await listRundownKinds()];
+  const proximos = upcoming.filter((e, i) => i !== idx && !states[i].endedAt);
   const leadIds = session.profile.teams.filter((t) => t.role === "leader").map((t) => t.id);
   const canEdit = ev
     ? session.role === "admin" || ev.responsibleId === session.userId || ev.teams.some((t) => leadIds.includes(t.teamId))
@@ -57,14 +65,14 @@ export default async function CronogramaPage() {
               canEdit={canEdit}
             />
 
-            {upcoming.length > 1 ? (
+            {proximos.length > 0 ? (
               <section>
                 <h3 className="mb-2 px-1 text-base font-semibold">Próximos cultos</h3>
                 <Card>
                   <ul className="divide-y divide-border">
-                    {upcoming.slice(1).map((e) => (
+                    {proximos.map((e) => (
                       <li key={e.id}>
-                        <Link href={`/escalas/${e.id}`} className="press-sm flex items-center gap-3 p-4">
+                        <Link href={`/cronograma?ev=${e.id}`} className="press-sm flex items-center gap-3 p-4">
                           <span className="grid size-9 shrink-0 place-items-center rounded-[11px] bg-primary/10 text-primary">
                             <CalendarDays className="size-[18px]" />
                           </span>

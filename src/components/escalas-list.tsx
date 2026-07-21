@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { CalendarDays, ChevronRight, MapPin } from "lucide-react";
+import { ChevronRight, MapPin } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { CoverageBadge } from "@/components/coverage-badge";
 import { EventEscalaModal } from "@/components/event/event-escala-modal";
-import { fmtEventDate, fmtTime } from "@/lib/format";
+import { fmtWeekdayShort, fmtDayMonthShort, fmtTime } from "@/lib/format";
 import type { EventListItem } from "@/lib/data";
 
 /**
@@ -21,41 +21,40 @@ export function EscalasList({ events, asModal }: { events: EventListItem[]; asMo
       <div className="space-y-3">
         {events.map((ev) => {
           const body = (
-            <>
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="font-medium">{ev.title}</p>
-                  <p className="text-sm capitalize text-muted-foreground">{fmtEventDate(ev.starts_at)}</p>
-                  <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-                    <span className="inline-flex items-center gap-1">
-                      <CalendarDays className="size-3" /> {fmtTime(ev.starts_at)}
-                    </span>
-                    {ev.location ? (
-                      <span className="inline-flex items-center gap-1">
-                        <MapPin className="size-3" /> {ev.location}
-                      </span>
-                    ) : null}
-                  </p>
-                </div>
-                <ChevronRight className="mt-1 size-5 shrink-0 text-muted-foreground" />
+            <div className="flex items-center gap-3">
+              <div className="flex w-12 shrink-0 flex-col items-center rounded-xl bg-muted py-1.5 text-center">
+                <span className="text-[10px] font-bold uppercase text-muted-foreground">{fmtWeekdayShort(ev.starts_at)}</span>
+                <span className="font-display text-lg font-extrabold leading-none text-primary">
+                  {fmtDayMonthShort(ev.starts_at).split(" ")[0]}
+                </span>
+                <span className="text-[10px] tabular-nums text-muted-foreground">{fmtTime(ev.starts_at)}</span>
               </div>
-              {ev.teams.length > 0 ? (
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {ev.teams.map((t) => (
-                    <CoverageBadge key={t.teamId} tone={t.tone} label={`${t.name} ${t.assigned}/${t.needed}`} />
-                  ))}
-                </div>
-              ) : null}
-            </>
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-semibold leading-tight">{ev.title}</p>
+                {ev.teams.length > 0 ? (
+                  <div className="mt-1 flex flex-wrap gap-1.5">
+                    {ev.teams.map((t) => (
+                      <CoverageBadge key={t.teamId} tone={t.tone} label={`${t.name} ${t.assigned}/${t.needed}`} />
+                    ))}
+                  </div>
+                ) : null}
+                {ev.location ? (
+                  <p className="mt-0.5 inline-flex max-w-full items-center gap-1 truncate text-[12px] text-muted-foreground">
+                    <MapPin className="size-3 shrink-0" /> {ev.location}
+                  </p>
+                ) : null}
+              </div>
+              <ChevronRight className="size-5 shrink-0 text-muted-foreground/60" />
+            </div>
           );
           return (
             <Card key={ev.id}>
               {asModal ? (
-                <button type="button" onClick={() => setOpenEvent(ev)} className="press-sm block w-full p-4 text-left">
+                <button type="button" onClick={() => setOpenEvent(ev)} className="press-sm block w-full p-3 text-left">
                   {body}
                 </button>
               ) : (
-                <Link href={`/escalas/${ev.id}`} className="press-sm block p-4">
+                <Link href={`/escalas/${ev.id}`} className="press-sm block p-3">
                   {body}
                 </Link>
               )}

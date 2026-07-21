@@ -19,7 +19,6 @@ import { getEventDetail, listChurchProfiles, getChurchLocation, type DetailPosit
 import { CheckinButton, SwapPending } from "@/components/slot-controls";
 import { EventTeams } from "@/components/event/event-teams";
 import { ResponsavelControls } from "@/components/responsavel-controls";
-import { CallTimeControl } from "@/components/call-time-control";
 import { EventHeroActions } from "@/components/event-hero-actions";
 import { fmtEventDate, fmtTime, churchDateISO } from "@/lib/format";
 
@@ -72,6 +71,8 @@ export default async function EventoPage({ params }: { params: Promise<{ id: str
             lng={ev.longitude}
             churchLat={churchLoc?.latitude ?? null}
             churchLng={churchLoc?.longitude ?? null}
+            date={churchDateISO(ev.starts_at)}
+            callTime={callHHMM}
           />
         ) : null}
         <div className="relative">
@@ -122,11 +123,6 @@ export default async function EventoPage({ params }: { params: Promise<{ id: str
             profiles={profiles}
           />
           {ev.notes ? <p className="text-sm text-muted-foreground">{ev.notes}</p> : null}
-          {session.role === "admin" ? (
-            <div className="border-t border-border/60 pt-2">
-              <CallTimeControl eventId={ev.id} date={churchDateISO(ev.starts_at)} current={callHHMM} />
-            </div>
-          ) : null}
         </CardContent>
       </Card>
 

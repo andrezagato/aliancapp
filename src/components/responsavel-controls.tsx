@@ -74,11 +74,6 @@ export function ResponsavelControls({
               )
             ) : null}
             {isAdmin ? (
-              <Button size="sm" variant="outline" onClick={() => setPicking(true)} disabled={pending}>
-                <UserCog className="size-4" /> Trocar
-              </Button>
-            ) : null}
-            {isAdmin ? (
               <Button size="sm" variant="ghost" onClick={() => run(() => definirResponsavel(eventId, null))} disabled={pending}>
                 Remover
               </Button>
