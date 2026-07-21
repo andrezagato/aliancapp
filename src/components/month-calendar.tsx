@@ -8,10 +8,11 @@ import type { CoverageTone } from "@/lib/coverage";
 const pad = (n: number) => String(n).padStart(2, "0");
 const WEEKDAYS = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
 
-const DOT: Record<CoverageTone, string> = {
-  empty: "bg-destructive",
-  partial: "bg-warning",
-  full: "bg-success",
+// Fundo do dia por cobertura (quadrado colorido ao redor do número).
+const BG: Record<CoverageTone, string> = {
+  empty: "bg-destructive text-white",
+  partial: "bg-warning text-foreground",
+  full: "bg-success text-white",
 };
 
 function worstTone(events: EventListItem[]): CoverageTone {
@@ -83,15 +84,16 @@ export function MonthCalendar({
           const tone = has ? worstTone(dayEvents) : null;
           const isToday = day === todayDay;
           const cellInner = (
-            <div
-              className={cn(
-                "flex h-9 flex-col items-center justify-center rounded-xl text-sm",
-                isToday && "ring-2 ring-primary/40",
-                has ? "font-semibold" : "text-muted-foreground",
-              )}
-            >
-              {day}
-              {tone ? <span className={cn("mt-0.5 size-1.5 rounded-full", DOT[tone])} /> : null}
+            <div className="flex h-8 items-center justify-center">
+              <div
+                className={cn(
+                  "flex size-8 items-center justify-center rounded-[9px] text-[13px]",
+                  tone ? `${BG[tone]} font-bold` : "text-muted-foreground",
+                  isToday && "ring-2 ring-primary",
+                )}
+              >
+                {day}
+              </div>
             </div>
           );
           // Com onDayClick, TODO dia é clicável (mesmo vazio) — permite pedir/criar evento ali.
@@ -114,6 +116,14 @@ export function MonthCalendar({
             </a>
           );
         })}
+      </div>
+      <div className="mt-2 flex items-center justify-center gap-4 text-[11px] text-muted-foreground">
+        <span className="inline-flex items-center gap-1.5">
+          <span className="size-2.5 rounded bg-warning" /> parcial
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="size-2.5 rounded bg-destructive" /> vazio
+        </span>
       </div>
     </Card>
   );

@@ -18,7 +18,8 @@ import { buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { STATUS_META } from "@/lib/status";
-import { CoverageBadge, TeamDot } from "@/components/coverage-badge";
+import { TeamDot } from "@/components/coverage-badge";
+import { EventPiesCard } from "@/components/event-pies-card";
 import { AssignmentResponse } from "@/components/assignment-response";
 import { getSession } from "@/lib/auth";
 import {
@@ -518,31 +519,7 @@ function AdminUpcomingList({ events }: { events: EventListItem[] }) {
       <h3 className="mb-2 px-1 text-base font-semibold">Próximos eventos</h3>
       <div className="space-y-3">
         {events.map((ev) => (
-          <Card key={ev.id}>
-            <Link href={`/escalas/${ev.id}`} className="block p-4 hover:bg-muted/40">
-              <div className="flex items-center justify-between gap-2">
-                <p className="font-medium">{ev.title}</p>
-                <ChevronRight className="size-5 shrink-0 text-muted-foreground" />
-              </div>
-              <p className="text-sm text-muted-foreground">{fmtEventWhen(ev.starts_at)}</p>
-              <p className="mt-0.5 text-sm">
-                {ev.responsibleName ? (
-                  <span className="text-muted-foreground">
-                    Responsável: <span className="font-medium text-foreground">{ev.responsibleName}</span>
-                  </span>
-                ) : (
-                  <span className="font-medium text-warning">Sem responsável ainda</span>
-                )}
-              </p>
-              {ev.teams.length > 0 ? (
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {ev.teams.map((t) => (
-                    <CoverageBadge key={t.teamId} tone={t.tone} label={`${t.name} ${t.assigned}/${t.needed}`} />
-                  ))}
-                </div>
-              ) : null}
-            </Link>
-          </Card>
+          <EventPiesCard key={ev.id} ev={ev} />
         ))}
       </div>
     </section>

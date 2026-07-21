@@ -7,6 +7,7 @@ import { Modal } from "@/components/modal";
 import { useToast } from "@/components/ui/toast";
 import { AddressSearch } from "@/components/address-search";
 import { getCoords } from "@/lib/geo-client";
+import { warm } from "@/lib/toasts";
 import { atualizarEvento } from "@/lib/actions";
 import { fmtTime, churchDateISO } from "@/lib/format";
 
@@ -85,7 +86,7 @@ export function EventHeroInfo({
         lng: loN,
       });
       if (r.ok) {
-        showToast("Evento atualizado.");
+        showToast(warm("salvo"));
         setOpen(false);
         router.refresh();
       } else {
