@@ -38,7 +38,7 @@ export default async function EscalasPage() {
             }
           />
         ) : (
-          <EscalasList events={events} asModal={session.role === "leader"} />
+          <EscalasList events={events} canManage={session.role !== "volunteer"} />
         )}
       </div>
     </>

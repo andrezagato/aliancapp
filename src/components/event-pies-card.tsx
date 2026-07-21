@@ -38,8 +38,8 @@ function Pie({ label, confirmed, needed, href }: { label: string; confirmed: num
   );
 }
 
-/** Card do evento em "grade de pies" (visão do admin): status por equipe num relance. */
-export function EventPiesCard({ ev }: { ev: EventListItem }) {
+/** Card do evento em "grade de pies": status por equipe num relance. */
+export function EventPiesCard({ ev, manage = true }: { ev: EventListItem; manage?: boolean }) {
   const href = `/escalas/${ev.id}`;
   const done = ev.neededTotal > 0 && ev.confirmedTotal >= ev.neededTotal;
 
@@ -83,7 +83,7 @@ export function EventPiesCard({ ev }: { ev: EventListItem }) {
         href={href}
         className="press mt-4 block rounded-2xl bg-primary py-3 text-center text-sm font-extrabold text-primary-foreground"
       >
-        {done ? "Ver escala" : "Escalar equipes faltantes"}
+        {manage ? (done ? "Ver escala" : "Escalar equipes faltantes") : "Ver o culto"}
       </Link>
     </div>
   );
