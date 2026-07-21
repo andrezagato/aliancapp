@@ -815,8 +815,27 @@ export async function excluirEvento(eventId: string): Promise<ActionResult> {
   if (!session) return fail("Sessão expirada.");
   if (session.role !== "admin") return fail("Só o administrador exclui eventos.");
   const supabase = await createClient();
+
+  // Pedidos que geraram este evento (pra limpar o card fantasma de quem pediu e
+  // avisar) — captura ANTES de apagar, porque o FK zera resolved_event_id no delete.
+  const { data: reqs } = await supabase
+    .from("event_requests")
+    .select("id, requested_by")
+    .eq("resolved_event_id", eventId);
+
   const { error } = await supabase.from("events").delete().eq("id", eventId);
   if (error) return fail(error.message);
+
+  if (reqs && reqs.length > 0) {
+    await supabase.from("event_requests").delete().in("id", reqs.map((r) => r.id));
+    await notifyMany([...new Set(reqs.map((r) => r.requested_by).filter(Boolean))] as string[], {
+      kind: "evento_resolvido",
+      title: "Evento removido",
+      body: "O evento que você sugeriu foi removido pela administração.",
+      link: "/inicio",
+    });
+  }
+
   revalidatePath("/escalas");
   revalidatePath("/calendario");
   revalidatePath("/inicio");

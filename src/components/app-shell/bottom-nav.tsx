@@ -4,21 +4,20 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Home, CalendarDays, ClipboardList, User, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { EffectiveRole } from "@/lib/auth";
 
 const base = [
   { href: "/inicio", label: "Início", icon: Home },
   { href: "/escalas", label: "Escalas", icon: CalendarDays },
 ];
 
-export function BottomNav({ role }: { role: EffectiveRole }) {
+export function BottomNav() {
   const pathname = usePathname();
 
-  // Cronograma (Planning Center) pra todos; Equipes pra quem gerencia (admin/líder).
+  // Equipes pra todos: admin/líder gerenciam; voluntário vê quem serve com ele.
   const items = [
     ...base,
     { href: "/cronograma", label: "Cronograma", icon: ClipboardList },
-    ...(role !== "volunteer" ? [{ href: "/equipes", label: "Equipes", icon: Users }] : []),
+    { href: "/equipes", label: "Equipes", icon: Users },
     { href: "/perfil", label: "Perfil", icon: User },
   ];
 

@@ -1,4 +1,3 @@
-import { redirect } from "next/navigation";
 import { Clock, Mail } from "lucide-react";
 import { TopBar } from "@/components/app-shell/top-bar";
 import { Card, CardContent } from "@/components/ui/card";
@@ -16,6 +15,7 @@ import { TeamManager } from "@/components/team-manager";
 import { getSession } from "@/lib/auth";
 import {
   getManageableTeams,
+  getMyTeamsRoster,
   getResolvedInterests,
   listMembers,
   listChurchProfiles,
@@ -23,12 +23,26 @@ import {
   listInvites,
   listTeams,
 } from "@/lib/data";
+import { VolunteerTeamsView } from "@/components/volunteer-teams-view";
 
 export default async function EquipesPage() {
   const session = await getSession();
   if (!session) return null;
-  // Admin gerencia tudo; líder gerencia as equipes que lidera. Voluntário não entra.
-  if (session.role === "volunteer") redirect("/inicio");
+
+  // Voluntário: visão só-leitura de quem serve com ele (pra comunicação).
+  if (session.role === "volunteer") {
+    const roster = await getMyTeamsRoster(session);
+    return (
+      <>
+        <TopBar title="Equipes" subtitle="Quem serve com você" userName={session.profile.full_name || "?"} />
+        <div className="animate-fade-in space-y-3 py-3">
+          <VolunteerTeamsView teams={roster} meId={session.userId} />
+        </div>
+      </>
+    );
+  }
+
+  // Admin gerencia tudo; líder gerencia as equipes que lidera.
   const isAdmin = session.role === "admin";
 
   const [teams, members, profiles, resolvedInterests] = await Promise.all([

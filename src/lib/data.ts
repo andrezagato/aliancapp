@@ -1603,6 +1603,55 @@ export type MemberTeamRef = {
   role: "leader" | "volunteer";
 };
 
+// Roster read-only das equipes do próprio usuário (voluntário vê quem serve com ele).
+export type RosterMember = {
+  profileId: string;
+  name: string;
+  avatarUrl: string | null;
+  phone: string | null;
+  role: "leader" | "volunteer";
+};
+export type MyTeamRoster = { id: string; name: string; color: string; members: RosterMember[] };
+
+export async function getMyTeamsRoster(session: Session): Promise<MyTeamRoster[]> {
+  const order = session.profile.teams.map((t) => t.id);
+  if (order.length === 0) return [];
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("memberships")
+    .select(
+      "team_id, role, profile:profiles ( id, full_name, avatar_url, phone, status ), team:teams ( id, name, color, archived_at )",
+    )
+    .in("team_id", order);
+  const rows = (data ?? []) as {
+    team_id: string;
+    role: "leader" | "volunteer";
+    profile: { id: string; full_name: string | null; avatar_url: string | null; phone: string | null; status: string } | null;
+    team: { id: string; name: string; color: string; archived_at: string | null } | null;
+  }[];
+
+  const teams = new Map<string, MyTeamRoster>();
+  for (const r of rows) {
+    if (!r.team || r.team.archived_at || !r.profile || r.profile.status !== "ativo") continue;
+    let t = teams.get(r.team.id);
+    if (!t) {
+      t = { id: r.team.id, name: r.team.name, color: r.team.color, members: [] };
+      teams.set(r.team.id, t);
+    }
+    t.members.push({
+      profileId: r.profile.id,
+      name: r.profile.full_name || "Sem nome",
+      avatarUrl: r.profile.avatar_url,
+      phone: r.profile.phone,
+      role: r.role,
+    });
+  }
+  for (const t of teams.values()) {
+    t.members.sort((a, b) => (a.role !== b.role ? (a.role === "leader" ? -1 : 1) : a.name.localeCompare(b.name, "pt-BR")));
+  }
+  return order.map((id) => teams.get(id)).filter((t): t is MyTeamRoster => !!t);
+}
+
 export type MemberRow = {
   id: string;
   fullName: string;

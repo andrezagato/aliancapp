@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { fmtEventWhen } from "@/lib/format";
+import { fmtWeekdayShort, fmtDayMonthShort, fmtTime } from "@/lib/format";
 import type { EventListItem } from "@/lib/data";
 
 /**
@@ -45,11 +45,18 @@ export function EventPiesCard({ ev }: { ev: EventListItem }) {
 
   return (
     <div className="rounded-2xl border border-border bg-card p-4 shadow-soft">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="truncate font-display text-[18px] font-extrabold leading-tight">{ev.title}</p>
-          <p className="truncate text-[12.5px] capitalize text-muted-foreground">
-            {fmtEventWhen(ev.starts_at)} · {ev.responsibleName ?? "Sem responsável"}
+      <div className="flex items-start gap-3">
+        <div className="flex w-12 shrink-0 flex-col items-center rounded-xl bg-muted py-1.5 text-center">
+          <span className="text-[10px] font-bold uppercase text-muted-foreground">{fmtWeekdayShort(ev.starts_at)}</span>
+          <span className="font-display text-lg font-extrabold leading-none text-primary">
+            {fmtDayMonthShort(ev.starts_at).split(" ")[0]}
+          </span>
+          <span className="text-[10px] tabular-nums text-muted-foreground">{fmtTime(ev.starts_at)}</span>
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-display text-[17px] font-extrabold leading-tight">{ev.title}</p>
+          <p className="truncate text-[12.5px] text-muted-foreground">
+            {ev.responsibleName ?? "Sem responsável"}
           </p>
         </div>
         <span
