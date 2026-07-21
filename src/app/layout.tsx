@@ -26,7 +26,14 @@ export const metadata: Metadata = {
     statusBarStyle: "default",
     title: "Sirvo",
   },
-  icons: { icon: "/icon.svg", apple: "/icon.svg" },
+  icons: {
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+    ],
+    // iOS não aceita SVG no apple-touch-icon → PNG (senão a tela inicial fica genérica).
+    apple: [{ url: "/icon-192.png", sizes: "180x180", type: "image/png" }],
+  },
   formatDetection: { telephone: false },
 };
 
