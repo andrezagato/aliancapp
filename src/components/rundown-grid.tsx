@@ -12,6 +12,7 @@ import {
   Flag,
   ExternalLink,
   Settings2,
+  LayoutTemplate,
   X,
 } from "lucide-react";
 import { Modal } from "@/components/modal";
@@ -29,8 +30,11 @@ import {
   marcarBlocoFeito,
   adicionarTipoBloco,
   removerTipoBloco,
+  salvarModeloCronograma,
+  excluirModeloCronograma,
+  aplicarModeloCronograma,
 } from "@/lib/actions";
-import type { RundownItem, RundownKind } from "@/lib/data";
+import type { RundownItem, RundownKind, RundownTemplate } from "@/lib/data";
 
 const PX_PER_MIN = 6; // altura do bloco = duração × isto (arrastar 1min = 6px)
 const MIN_H = 72; // altura mínima pra caber os contadores/toque
@@ -132,6 +136,7 @@ export function RundownGrid({
   endedAt,
   items,
   kinds,
+  templates,
   canEdit,
 }: {
   eventId: string;
@@ -140,6 +145,7 @@ export function RundownGrid({
   endedAt: string | null;
   items: RundownItem[];
   kinds: RundownKind[];
+  templates: RundownTemplate[];
   canEdit: boolean;
 }) {
   const router = useRouter();
@@ -153,6 +159,7 @@ export function RundownGrid({
   const [now, setNow] = useState<number | null>(null);
   const [editing, setEditing] = useState<RundownItem | "new" | null>(null);
   const [manageKinds, setManageKinds] = useState(false);
+  const [manageTpl, setManageTpl] = useState(false);
   const [flashId, setFlashId] = useState<string | null>(null); // bloco recém-movido (destaque pós-drop)
 
   useEffect(() => setList(items), [items]);
@@ -563,6 +570,13 @@ export function RundownGrid({
             <Plus className="size-4" /> Adicionar bloco
           </button>
           <button
+            onClick={() => setManageTpl(true)}
+            aria-label="Modelos de cronograma"
+            className="press grid w-12 place-items-center rounded-2xl border border-dashed border-border text-muted-foreground"
+          >
+            <LayoutTemplate className="size-5" />
+          </button>
+          <button
             onClick={() => setManageKinds(true)}
             aria-label="Gerenciar tipos"
             className="press grid w-12 place-items-center rounded-2xl border border-dashed border-border text-muted-foreground"
@@ -584,6 +598,21 @@ export function RundownGrid({
       ) : null}
 
       {manageKinds ? <KindsManager kinds={kinds} onClose={() => setManageKinds(false)} /> : null}
+
+      {manageTpl ? (
+        <TemplatesManager
+          eventId={eventId}
+          templates={templates}
+          currentItems={list.map((it) => ({
+            kind: it.kind,
+            title: it.title,
+            color: it.color,
+            durationMin: it.durationMin,
+            note: it.note,
+          }))}
+          onClose={() => setManageTpl(false)}
+        />
+      ) : null}
     </section>
   );
 }
@@ -812,6 +841,118 @@ function KindsManager({ kinds, onClose }: { kinds: RundownKind[]; onClose: () =>
           >
             {pending ? "Adicionando…" : "Adicionar tipo"}
           </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// Modelos de cronograma (presets de blocos)
+// -----------------------------------------------------------------------------
+type TplItem = { kind: string; title: string; color: string | null; durationMin: number; note: string | null };
+
+function TemplatesManager({
+  eventId,
+  templates,
+  currentItems,
+  onClose,
+}: {
+  eventId: string;
+  templates: RundownTemplate[];
+  currentItems: TplItem[];
+  onClose: () => void;
+}) {
+  const router = useRouter();
+  const { showToast } = useToast();
+  const [pending, startTx] = useTransition();
+  const [name, setName] = useState("");
+
+  const apply = (id: string) =>
+    startTx(async () => {
+      const r = await aplicarModeloCronograma(eventId, id);
+      if (r.ok) {
+        showToast("Modelo aplicado — é só ajustar 🙌");
+        onClose();
+        router.refresh();
+      } else {
+        showToast(r.error);
+      }
+    });
+  const save = () =>
+    startTx(async () => {
+      const r = await salvarModeloCronograma(name, currentItems);
+      if (r.ok) {
+        showToast("Modelo salvo ✨");
+        setName("");
+        router.refresh();
+      } else {
+        showToast(r.error);
+      }
+    });
+  const del = (id: string) =>
+    startTx(async () => {
+      const r = await excluirModeloCronograma(id);
+      if (r.ok) router.refresh();
+      else showToast(r.error);
+    });
+
+  return (
+    <Modal open onClose={() => !pending && onClose()} sheet title="Modelos de cronograma">
+      <div className="mt-1 space-y-4">
+        <div>
+          <p className="mb-1.5 text-sm font-medium">Usar um modelo</p>
+          {templates.length === 0 ? (
+            <p className="text-[13px] text-muted-foreground">
+              Nenhum modelo ainda. Monte um cronograma e salve como modelo abaixo pra reaproveitar.
+            </p>
+          ) : (
+            <ul className="flex flex-col gap-1.5">
+              {templates.map((t) => (
+                <li key={t.id} className="flex items-center gap-2 rounded-xl border border-border p-2">
+                  <button
+                    onClick={() => apply(t.id)}
+                    disabled={pending}
+                    className="press-sm min-w-0 flex-1 text-left disabled:opacity-60"
+                  >
+                    <p className="truncate text-sm font-semibold">{t.name}</p>
+                    <p className="text-[12px] text-muted-foreground">
+                      {t.items.length} bloco{t.items.length === 1 ? "" : "s"} ·{" "}
+                      {t.items.reduce((s, i) => s + (i.durationMin || 0), 0)} min
+                    </p>
+                  </button>
+                  <button
+                    onClick={() => del(t.id)}
+                    disabled={pending}
+                    aria-label={`Excluir ${t.name}`}
+                    className="press-sm grid size-7 place-items-center rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                  >
+                    <X className="size-4" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="space-y-2 border-t border-border/60 pt-3">
+          <p className="text-sm font-medium">Salvar o cronograma atual como modelo</p>
+          <input
+            className={inputCls}
+            placeholder="Nome (ex.: Culto de Domingo)"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+          <button
+            onClick={save}
+            disabled={pending || name.trim().length < 1 || currentItems.length === 0}
+            className="press h-11 w-full rounded-[13px] bg-primary text-sm font-extrabold text-primary-foreground disabled:opacity-60"
+          >
+            {pending ? "Salvando…" : "Salvar como modelo"}
+          </button>
+          {currentItems.length === 0 ? (
+            <p className="text-[12px] text-muted-foreground">Adicione blocos primeiro pra poder salvar.</p>
+          ) : null}
         </div>
       </div>
     </Modal>

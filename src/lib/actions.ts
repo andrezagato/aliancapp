@@ -1131,6 +1131,71 @@ export async function removerTipoBloco(id: string): Promise<ActionResult> {
   return ok;
 }
 
+// --- Modelos de cronograma (presets de blocos) ----------------------------
+type TemplateBloco = { kind: string; title: string; color: string | null; durationMin: number; note: string | null };
+
+export async function salvarModeloCronograma(name: string, items: TemplateBloco[]): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  const canManage = session.role === "admin" || session.profile.teams.some((t) => t.role === "leader");
+  if (!canManage) return fail("Só admin ou líderes salvam modelos.");
+  if (!session.profile.church_id) return fail("Sua conta não está ligada a uma igreja.");
+  const nome = name.trim();
+  if (!nome) return fail("Dê um nome ao modelo.");
+  if (items.length === 0) return fail("O cronograma está vazio — nada pra salvar.");
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("rundown_templates")
+    .insert({ church_id: session.profile.church_id, name: nome, items });
+  if (error) return fail(error.message);
+  revalidatePath("/cronograma");
+  return ok;
+}
+
+export async function excluirModeloCronograma(id: string): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  const canManage = session.role === "admin" || session.profile.teams.some((t) => t.role === "leader");
+  if (!canManage) return fail("Sem permissão.");
+  const supabase = await createClient();
+  const { error } = await supabase.from("rundown_templates").delete().eq("id", id);
+  if (error) return fail(error.message);
+  revalidatePath("/cronograma");
+  return ok;
+}
+
+/** Cola os blocos do modelo no cronograma do evento (acrescenta no fim). */
+export async function aplicarModeloCronograma(eventId: string, templateId: string): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  if (!(await podeEditarCronograma(session, eventId))) return fail("Sem permissão.");
+  const supabase = await createClient();
+  const { data: tpl } = await supabase.from("rundown_templates").select("items").eq("id", templateId).maybeSingle();
+  const items = Array.isArray(tpl?.items) ? (tpl!.items as TemplateBloco[]) : [];
+  if (items.length === 0) return fail("Modelo vazio.");
+  const { data: last } = await supabase
+    .from("event_rundown")
+    .select("sort_order")
+    .eq("event_id", eventId)
+    .order("sort_order", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  let so = (last?.sort_order ?? -1) + 1;
+  const rows = items.map((it) => ({
+    event_id: eventId,
+    sort_order: so++,
+    title: it.title || it.kind || "Bloco",
+    kind: it.kind || "Outro",
+    color: it.color ?? null,
+    duration_min: Math.max(0, Math.round(it.durationMin || 0)),
+    note: it.note ?? null,
+  }));
+  const { error } = await supabase.from("event_rundown").insert(rows);
+  if (error) return fail(error.message);
+  revalidatePath("/cronograma");
+  return ok;
+}
+
 /** Admin adiciona outra equipe a um evento já criado (copia as posições da equipe). */
 export async function adicionarEquipeAoEvento(eventId: string, teamId: string): Promise<ActionResult> {
   const session = await getSession();

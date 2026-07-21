@@ -4,7 +4,7 @@ import { TopBar } from "@/components/app-shell/top-bar";
 import { Card } from "@/components/ui/card";
 import { RundownGrid } from "@/components/rundown-grid";
 import { getSession } from "@/lib/auth";
-import { listUpcomingEvents, getEventRundown, listRundownKinds, getRundownState } from "@/lib/data";
+import { listUpcomingEvents, getEventRundown, listRundownKinds, listRundownTemplates, getRundownState } from "@/lib/data";
 import { fmtEventWhen } from "@/lib/format";
 
 export default async function CronogramaPage({ searchParams }: { searchParams: Promise<{ ev?: string }> }) {
@@ -20,9 +20,9 @@ export default async function CronogramaPage({ searchParams }: { searchParams: P
   const idx = chosen >= 0 ? chosen : firstOpen;
   const ev = idx >= 0 ? upcoming[idx] : null;
   const state = idx >= 0 ? states[idx] : null;
-  const [rundown, kinds] = ev
-    ? await Promise.all([getEventRundown(ev.id), listRundownKinds()])
-    : [[], await listRundownKinds()];
+  const [rundown, kinds, templates] = ev
+    ? await Promise.all([getEventRundown(ev.id), listRundownKinds(), listRundownTemplates()])
+    : [[], await listRundownKinds(), []];
   const proximos = upcoming.filter((e, i) => i !== idx && !states[i].endedAt);
   // Cronograma aberto por enquanto: qualquer pessoa ativa edita.
   const canEdit = !!ev;
@@ -58,6 +58,7 @@ export default async function CronogramaPage({ searchParams }: { searchParams: P
                   endedAt={state?.endedAt ?? null}
                   items={rundown}
                   kinds={kinds}
+                  templates={templates}
                   canEdit={canEdit}
                 />
               </div>

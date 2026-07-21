@@ -901,6 +901,26 @@ export async function listRundownKinds(): Promise<RundownKind[]> {
   }));
 }
 
+export type RundownTemplateItem = {
+  kind: string;
+  title: string;
+  color: string | null;
+  durationMin: number;
+  note: string | null;
+};
+export type RundownTemplate = { id: string; name: string; items: RundownTemplateItem[] };
+
+/** Modelos de cronograma (presets de blocos) da igreja. */
+export async function listRundownTemplates(): Promise<RundownTemplate[]> {
+  const supabase = await createClient();
+  const { data } = await supabase.from("rundown_templates").select("id, name, items").order("name");
+  return ((data ?? []) as { id: string; name: string; items: unknown }[]).map((t) => ({
+    id: t.id,
+    name: t.name,
+    items: Array.isArray(t.items) ? (t.items as RundownTemplateItem[]) : [],
+  }));
+}
+
 // =============================================================================
 // DETALHE DO EVENTO (agrupado por equipe -> posição -> vagas)
 // =============================================================================

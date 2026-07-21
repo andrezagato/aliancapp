@@ -1140,6 +1140,38 @@ export type Database = {
           },
         ]
       }
+      rundown_templates: {
+        Row: {
+          church_id: string
+          created_at: string
+          id: string
+          items: Json
+          name: string
+        }
+        Insert: {
+          church_id: string
+          created_at?: string
+          id?: string
+          items?: Json
+          name: string
+        }
+        Update: {
+          church_id?: string
+          created_at?: string
+          id?: string
+          items?: Json
+          name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rundown_templates_church_id_fkey"
+            columns: ["church_id"]
+            isOneToOne: false
+            referencedRelation: "churches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       series_requirements: {
         Row: {
           id: string
