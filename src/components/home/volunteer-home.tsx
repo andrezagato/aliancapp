@@ -20,6 +20,7 @@ import {
 } from "@/lib/actions";
 import { AchievementCelebration } from "@/components/achievement-celebration";
 import { getCoords } from "@/lib/geo-client";
+import { warm } from "@/lib/toasts";
 import { markSeen } from "@/lib/achievements-seen";
 import type { UnlockedBadge } from "@/lib/achievements";
 import { TodayCard } from "./today-card";
@@ -72,7 +73,7 @@ export function VolunteerHome({
 
   const confirm = (a: MyAssignment) => {
     patch(a.assignmentId, { status: "confirmado" });
-    showToast("Presença confirmada — obrigado!");
+    showToast(warm("presencaConfirmada"));
     startTransition(async () => {
       const r = await confirmarEscalacao(a.assignmentId);
       if (!r.ok) {
@@ -90,7 +91,7 @@ export function VolunteerHome({
       const r = await fazerCheckin(a.assignmentId, a.teamId, a.eventId, coords?.lat ?? null, coords?.lng ?? null, force);
       if (r.ok) {
         patch(a.assignmentId, { checkedIn: true });
-        showToast("Check-in feito. Bom culto!");
+        showToast(warm("checkin"));
         if (r.unlocked && r.unlocked.length > 0) celebrateNew(r.unlocked);
       } else if (r.code === "outside") {
         if (typeof window !== "undefined" && window.confirm("Você não está no local do evento. Fazer check-in mesmo assim?")) {
@@ -144,7 +145,7 @@ export function VolunteerHome({
       });
     } else {
       removeItem(id);
-      showToast("Avisamos o líder. Obrigado por avisar.");
+      showToast(warm("presencaRecusada"));
       startTransition(async () => {
         const r = await recusarEscalacao(id, motivo);
         if (!r.ok) {

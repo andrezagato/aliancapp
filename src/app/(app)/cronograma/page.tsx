@@ -24,10 +24,8 @@ export default async function CronogramaPage({ searchParams }: { searchParams: P
     ? await Promise.all([getEventRundown(ev.id), listRundownKinds()])
     : [[], await listRundownKinds()];
   const proximos = upcoming.filter((e, i) => i !== idx && !states[i].endedAt);
-  const leadIds = session.profile.teams.filter((t) => t.role === "leader").map((t) => t.id);
-  const canEdit = ev
-    ? session.role === "admin" || ev.responsibleId === session.userId || ev.teams.some((t) => leadIds.includes(t.teamId))
-    : false;
+  // Cronograma aberto por enquanto: qualquer pessoa ativa edita.
+  const canEdit = !!ev;
 
   return (
     <>
@@ -35,32 +33,35 @@ export default async function CronogramaPage({ searchParams }: { searchParams: P
       <div className="animate-fade-in space-y-3 py-3">
         {ev ? (
           <>
-            {/* Barra compacta do culto (a régua abaixo é o foco) */}
-            <div className="flex items-center gap-3 rounded-2xl border border-border bg-card p-3">
-              <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
-                <CalendarDays className="size-5" />
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="truncate font-semibold leading-tight">{ev.title}</p>
-                <p className="truncate text-[13px] capitalize text-muted-foreground">{fmtEventWhen(ev.starts_at)}</p>
+            {/* Culto + ordem do culto na MESMA caixa, pra deixar claro o vínculo */}
+            <div className="overflow-hidden rounded-2xl border border-border bg-card">
+              <div className="flex items-center gap-3 border-b border-border bg-primary/[0.06] p-3">
+                <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+                  <CalendarDays className="size-5" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-display text-[17px] font-extrabold leading-tight">{ev.title}</p>
+                  <p className="truncate text-[12.5px] capitalize text-muted-foreground">{fmtEventWhen(ev.starts_at)}</p>
+                </div>
+                <Link
+                  href={`/escalas/${ev.id}`}
+                  className="press-sm shrink-0 rounded-full border border-border px-3 py-1.5 text-[13px] font-bold text-primary"
+                >
+                  Escala
+                </Link>
               </div>
-              <Link
-                href={`/escalas/${ev.id}`}
-                className="press-sm shrink-0 rounded-full border border-border px-3 py-1.5 text-[13px] font-bold text-primary"
-              >
-                Escala
-              </Link>
+              <div className="p-3">
+                <RundownGrid
+                  eventId={ev.id}
+                  startsAt={ev.starts_at}
+                  startedAt={state?.startedAt ?? null}
+                  endedAt={state?.endedAt ?? null}
+                  items={rundown}
+                  kinds={kinds}
+                  canEdit={canEdit}
+                />
+              </div>
             </div>
-
-            <RundownGrid
-              eventId={ev.id}
-              startsAt={ev.starts_at}
-              startedAt={state?.startedAt ?? null}
-              endedAt={state?.endedAt ?? null}
-              items={rundown}
-              kinds={kinds}
-              canEdit={canEdit}
-            />
 
             {proximos.length > 0 ? (
               <section>

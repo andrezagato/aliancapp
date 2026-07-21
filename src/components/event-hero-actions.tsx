@@ -4,6 +4,7 @@ import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Archive, ArchiveRestore, Trash2 } from "lucide-react";
 import { useToast } from "@/components/ui/toast";
+import { warm } from "@/lib/toasts";
 import { arquivarEvento, excluirEvento } from "@/lib/actions";
 
 const heroBtn =
@@ -19,7 +20,7 @@ export function EventHeroActions({ eventId, archived }: { eventId: string; archi
     start(async () => {
       const r = await arquivarEvento(eventId, !archived);
       if (r.ok) {
-        showToast(archived ? "Evento reativado." : "Evento arquivado.");
+        showToast(warm(archived ? "eventoReativado" : "eventoArquivado"));
         router.refresh();
       } else {
         showToast(r.error);
@@ -30,7 +31,7 @@ export function EventHeroActions({ eventId, archived }: { eventId: string; archi
     start(async () => {
       const r = await excluirEvento(eventId);
       if (r.ok) {
-        showToast("Evento excluído.");
+        showToast(warm("eventoExcluido"));
         router.push("/escalas");
         router.refresh();
       } else {

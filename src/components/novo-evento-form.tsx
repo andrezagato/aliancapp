@@ -6,7 +6,9 @@ import { Check, LayoutTemplate } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { TeamDot } from "@/components/coverage-badge";
+import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
+import { warm } from "@/lib/toasts";
 import { criarEventoAvulso } from "@/lib/actions";
 import type { TeamWithPositions, EventTemplate } from "@/lib/data";
 
@@ -37,6 +39,7 @@ export function NovoEventoForm({
   templates: EventTemplate[];
 }) {
   const router = useRouter();
+  const { showToast } = useToast();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -79,6 +82,7 @@ export function NovoEventoForm({
         setError(r.error);
         return;
       }
+      showToast(warm("eventoCriado"));
       router.push(r.eventId ? `/escalas/${r.eventId}` : "/escalas");
       router.refresh();
     });

@@ -153,6 +153,7 @@ export function RundownGrid({
   const [now, setNow] = useState<number | null>(null);
   const [editing, setEditing] = useState<RundownItem | "new" | null>(null);
   const [manageKinds, setManageKinds] = useState(false);
+  const [flashId, setFlashId] = useState<string | null>(null); // bloco recém-movido (destaque pós-drop)
 
   useEffect(() => setList(items), [items]);
   useEffect(() => setStarted(startedAt), [startedAt]);
@@ -263,6 +264,8 @@ export function RundownGrid({
       if (it) persistDuration(it.id, it.durationMin);
     } else {
       persistOrder(listRef.current);
+      setFlashId(d.id);
+      window.setTimeout(() => setFlashId(null), 900);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onPointerMove]);
@@ -370,7 +373,7 @@ export function RundownGrid({
             </div>
           ) : canEdit ? (
             <button
-              onClick={start}
+              onClick={() => window.confirm("Iniciar o culto agora? O relógio começa a rodar.") && start()}
               className="press inline-flex items-center gap-1.5 rounded-full bg-primary px-3.5 py-1.5 text-sm font-extrabold text-primary-foreground"
             >
               <Play className="size-4 fill-current" /> Iniciar culto
@@ -448,9 +451,15 @@ export function RundownGrid({
                     live && !liveRed && "border-primary shadow-[0_0_0_2px_hsl(var(--primary))]",
                     liveRed && "border-red-500 bg-red-600/5 shadow-[0_0_0_2px_#ef4444]",
                     !live && "border-border",
-                    reorderingThis && "z-10 scale-[1.02] opacity-90 shadow-lift",
+                    reorderingThis && "z-30 scale-[1.04] rotate-1 opacity-95 shadow-2xl ring-2 ring-primary",
+                    flashId === it.id && "animate-pop ring-2 ring-primary",
                   )}
                 >
+                  {resizingThis ? (
+                    <span className="absolute right-2 top-2 z-20 rounded-full bg-foreground px-2.5 py-1 text-sm font-extrabold tabular-nums text-background shadow-lift">
+                      {it.durationMin} min
+                    </span>
+                  ) : null}
                   {/* Tick de "feito" */}
                   {canEdit ? (
                     <button
@@ -535,12 +544,7 @@ export function RundownGrid({
                       className="absolute inset-x-0 bottom-0 flex h-4 cursor-ns-resize items-center justify-center"
                       aria-label="Arrastar pra mudar a duração"
                     >
-                      <span className="h-1 w-10 rounded-full bg-border" />
-                      {resizingThis ? (
-                        <span className="absolute bottom-1 right-2 rounded-full bg-foreground px-2 py-0.5 text-[11px] font-bold text-background tabular-nums">
-                          {it.durationMin} min
-                        </span>
-                      ) : null}
+                      <span className={cn("h-1 w-10 rounded-full", resizingThis ? "bg-primary" : "bg-border")} />
                     </div>
                   ) : null}
                 </div>

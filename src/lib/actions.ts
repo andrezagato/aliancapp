@@ -916,20 +916,10 @@ export async function definirLocalEvento(
 // =============================================================================
 // CRONOGRAMA (ordem do culto) — admin, responsável do culto ou líder de equipe do evento
 // =============================================================================
-async function podeEditarCronograma(session: Session, eventId: string): Promise<boolean> {
-  if (session.role === "admin") return true;
-  const supabase = await createClient();
-  const { data: ev } = await supabase.from("events").select("responsible_id").eq("id", eventId).maybeSingle();
-  if (ev?.responsible_id === session.userId) return true;
-  const leadIds = session.profile.teams.filter((t) => t.role === "leader").map((t) => t.id);
-  if (leadIds.length === 0) return false;
-  const { data: reqs } = await supabase
-    .from("event_requirements")
-    .select("team_id")
-    .eq("event_id", eventId)
-    .in("team_id", leadIds)
-    .limit(1);
-  return (reqs ?? []).length > 0;
+// Aberto por enquanto: qualquer pessoa ativa pode montar/editar o cronograma
+// (líder do louvor adiciona músicas, preletor põe versículos, etc.).
+async function podeEditarCronograma(session: Session, _eventId: string): Promise<boolean> {
+  return !!session;
 }
 
 type BlocoInput = {

@@ -85,7 +85,7 @@ export function MonthCalendar({
           const cellInner = (
             <div
               className={cn(
-                "flex aspect-square flex-col items-center justify-center rounded-xl text-sm",
+                "flex h-9 flex-col items-center justify-center rounded-xl text-sm",
                 isToday && "ring-2 ring-primary/40",
                 has ? "font-semibold" : "text-muted-foreground",
               )}
