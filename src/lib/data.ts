@@ -57,6 +57,26 @@ export async function listTeams(): Promise<TeamMeta[]> {
   return data ?? [];
 }
 
+/** O usuário logado está escalado (tem assignment) neste evento? */
+export async function estouEscaladoNoEvento(session: Session, eventId: string): Promise<boolean> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("assignments")
+    .select("id")
+    .eq("event_id", eventId)
+    .eq("profile_id", session.userId)
+    .limit(1)
+    .maybeSingle();
+  return !!data;
+}
+
+/** Link da pasta de arquivos (OneDrive) do evento — mostrado no cronograma. */
+export async function getPastaEvento(eventId: string): Promise<string | null> {
+  const supabase = await createClient();
+  const { data } = await supabase.from("events").select("files_url").eq("id", eventId).maybeSingle();
+  return data?.files_url ?? null;
+}
+
 export type TeamWithPositions = TeamMeta & { positions: PositionMeta[]; leaders: string[] };
 
 export async function listTeamsWithPositions(): Promise<TeamWithPositions[]> {
@@ -513,6 +533,14 @@ async function computeJourneyMetrics(
     }).length;
   }
 
+  // "Primeiro no local": nº de eventos em que fui o 1º a fazer check-in no local.
+  // Via RPC SECURITY DEFINER — a RLS de checkins não deixa enxergar outras equipes.
+  let primeiroLocal = 0;
+  {
+    const { data: pnl } = await supabase.rpc("primeiro_no_local_count");
+    if (typeof pnl === "number") primeiroLocal = pnl;
+  }
+
   // Feedbacks dados (cada culto avaliado).
   const { data: fb } = await supabase.from("event_feedback").select("id").eq("profile_id", userId);
   const feedbacks = (fb ?? []).length;
@@ -553,6 +581,7 @@ async function computeJourneyMetrics(
     pontual,
     feedbacks,
     no_local: noLocal,
+    primeiro_local: primeiroLocal,
   };
 }
 

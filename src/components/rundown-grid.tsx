@@ -33,6 +33,7 @@ import {
   salvarModeloCronograma,
   excluirModeloCronograma,
   aplicarModeloCronograma,
+  contribuirNoBloco,
 } from "@/lib/actions";
 import { warm } from "@/lib/toasts";
 import type { RundownItem, RundownKind, RundownTemplate } from "@/lib/data";
@@ -139,6 +140,7 @@ export function RundownGrid({
   kinds,
   templates,
   canEdit,
+  canContribute,
 }: {
   eventId: string;
   startsAt: string;
@@ -148,6 +150,7 @@ export function RundownGrid({
   kinds: RundownKind[];
   templates: RundownTemplate[];
   canEdit: boolean;
+  canContribute: boolean;
 }) {
   const router = useRouter();
   const { showToast } = useToast();
@@ -159,6 +162,7 @@ export function RundownGrid({
   const [drag, setDrag] = useState<Drag>(null);
   const [now, setNow] = useState<number | null>(null);
   const [editing, setEditing] = useState<RundownItem | "new" | null>(null);
+  const [contributing, setContributing] = useState<RundownItem | null>(null);
   const [manageKinds, setManageKinds] = useState(false);
   const [manageTpl, setManageTpl] = useState(false);
   const [flashId, setFlashId] = useState<string | null>(null); // bloco recém-movido (destaque pós-drop)
@@ -455,10 +459,10 @@ export function RundownGrid({
                 {/* Card */}
                 <div
                   style={{ minHeight: heightOf(it.durationMin) }}
-                  onClick={() => canEdit && !drag && setEditing(it)}
+                  onClick={() => (canEdit ? !drag && setEditing(it) : canContribute && setContributing(it))}
                   className={cn(
                     "relative flex min-w-0 flex-1 items-stretch overflow-hidden rounded-2xl border bg-card transition-[box-shadow,transform,opacity,background-color]",
-                    canEdit && "cursor-pointer",
+                    (canEdit || canContribute) && "cursor-pointer",
                     done && "opacity-55",
                     live && !liveRed && "border-primary shadow-[0_0_0_2px_hsl(var(--primary))]",
                     liveRed && "border-red-500 bg-red-600/5 shadow-[0_0_0_2px_#ef4444]",
@@ -532,6 +536,17 @@ export function RundownGrid({
                         <ExternalLink className="size-3.5" /> Abrir link
                       </a>
                     ) : null}
+                    {canContribute && !canEdit ? (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setContributing(it);
+                        }}
+                        className="mt-1 inline-flex items-center gap-1 text-[13px] font-semibold text-primary"
+                      >
+                        <Plus className="size-3.5" /> {it.link || it.note ? "Editar link/info" : "Adicionar link/info"}
+                      </button>
+                    ) : null}
                   </div>
 
                   {/* Alça de reordenar */}
@@ -602,6 +617,8 @@ export function RundownGrid({
         />
       ) : null}
 
+      {contributing ? <ContribuirModal item={contributing} onClose={() => setContributing(null)} /> : null}
+
       {manageKinds ? <KindsManager kinds={kinds} onClose={() => setManageKinds(false)} /> : null}
 
       {manageTpl ? (
@@ -626,6 +643,55 @@ export function RundownGrid({
 // Modal do bloco — tipo primeiro, nome já preenchido
 // -----------------------------------------------------------------------------
 const inputCls = "w-full rounded-[12px] border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary";
+
+// -----------------------------------------------------------------------------
+// Modal de CONTRIBUIÇÃO — voluntário escalado só adiciona link/observação
+// -----------------------------------------------------------------------------
+function ContribuirModal({ item, onClose }: { item: RundownItem; onClose: () => void }) {
+  const router = useRouter();
+  const { showToast } = useToast();
+  const [pending, startTx] = useTransition();
+  const [link, setLink] = useState(item.link ?? "");
+  const [note, setNote] = useState(item.note ?? "");
+  const [error, setError] = useState<string | null>(null);
+
+  const save = () => {
+    setError(null);
+    startTx(async () => {
+      const r = await contribuirNoBloco(item.id, link, note);
+      if (r.ok) {
+        onClose();
+        router.refresh();
+        showToast(warm("blocoSalvo"));
+      } else {
+        setError(r.error);
+      }
+    });
+  };
+
+  return (
+    <Modal open onClose={() => !pending && onClose()} sheet title={item.title}>
+      <div className="mt-1 space-y-4">
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium">Link (opcional)</span>
+          <input className={inputCls} placeholder="YouTube, Drive, letra…" value={link} onChange={(e) => setLink(e.target.value)} />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium">Observação (opcional)</span>
+          <textarea rows={2} className={cn(inputCls, "resize-none")} value={note} onChange={(e) => setNote(e.target.value)} />
+        </label>
+        {error ? <p className="text-sm text-destructive">{error}</p> : null}
+        <button
+          onClick={save}
+          disabled={pending}
+          className="press h-[52px] w-full rounded-[15px] bg-primary text-[15.5px] font-extrabold text-primary-foreground disabled:opacity-60"
+        >
+          {pending ? "Salvando…" : "Salvar"}
+        </button>
+      </div>
+    </Modal>
+  );
+}
 
 function BlocoModal({
   eventId,

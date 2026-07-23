@@ -9,6 +9,7 @@ export type SessionTeam = {
   color: string;
   icon: string;
   sort_order: number;
+  manages_rundown: boolean;
   role: MembershipRole;
 };
 
@@ -51,7 +52,7 @@ export const getSession = cache(async (): Promise<Session | null> => {
       `*,
        memberships (
          role,
-         team:teams ( id, name, color, icon, sort_order, archived_at )
+         team:teams ( id, name, color, icon, sort_order, archived_at, manages_rundown )
        )`,
     )
     .eq("id", user.id)
@@ -89,6 +90,7 @@ export const getSession = cache(async (): Promise<Session | null> => {
         icon: string;
         sort_order: number;
         archived_at: string | null;
+        manages_rundown: boolean;
       } | null;
     }[];
   };
@@ -101,6 +103,7 @@ export const getSession = cache(async (): Promise<Session | null> => {
       color: m.team!.color,
       icon: m.team!.icon,
       sort_order: m.team!.sort_order,
+      manages_rundown: m.team!.manages_rundown,
       role: m.role,
     }))
     .sort((a, b) => a.sort_order - b.sort_order);

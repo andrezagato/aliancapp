@@ -3,8 +3,9 @@ import { CalendarDays, ChevronRight } from "lucide-react";
 import { TopBar } from "@/components/app-shell/top-bar";
 import { Card } from "@/components/ui/card";
 import { RundownGrid } from "@/components/rundown-grid";
+import { EventFilesCard } from "@/components/event-files-card";
 import { getSession } from "@/lib/auth";
-import { listUpcomingEvents, getEventRundown, listRundownKinds, listRundownTemplates, getRundownState } from "@/lib/data";
+import { listUpcomingEvents, getEventRundown, listRundownKinds, listRundownTemplates, getRundownState, estouEscaladoNoEvento, getPastaEvento } from "@/lib/data";
 import { fmtEventWhen } from "@/lib/format";
 
 export default async function CronogramaPage({ searchParams }: { searchParams: Promise<{ ev?: string }> }) {
@@ -24,8 +25,11 @@ export default async function CronogramaPage({ searchParams }: { searchParams: P
     ? await Promise.all([getEventRundown(ev.id), listRundownKinds(), listRundownTemplates()])
     : [[], await listRundownKinds(), []];
   const proximos = upcoming.filter((e, i) => i !== idx && !states[i].endedAt);
-  // Cronograma aberto por enquanto: qualquer pessoa ativa edita.
-  const canEdit = !!ev;
+  // Estrutura: só admin + Produção (equipe manages_rundown). Conteúdo (link/info
+  // por bloco): quem está escalado no evento.
+  const canEdit = session.role === "admin" || session.profile.teams.some((t) => t.manages_rundown);
+  const canContribute = ev ? await estouEscaladoNoEvento(session, ev.id) : false;
+  const filesUrl = ev ? await getPastaEvento(ev.id) : null;
 
   return (
     <>
@@ -51,6 +55,7 @@ export default async function CronogramaPage({ searchParams }: { searchParams: P
                 </Link>
               </div>
               <div className="p-3">
+                <EventFilesCard eventId={ev.id} url={filesUrl} canEdit={canEdit} />
                 <RundownGrid
                   eventId={ev.id}
                   startsAt={ev.starts_at}
@@ -60,6 +65,7 @@ export default async function CronogramaPage({ searchParams }: { searchParams: P
                   kinds={kinds}
                   templates={templates}
                   canEdit={canEdit}
+                  canContribute={canContribute}
                 />
               </div>
             </div>

@@ -580,6 +580,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           ends_at: string | null
+          files_url: string | null
           id: string
           latitude: number | null
           location: string | null
@@ -601,6 +602,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           ends_at?: string | null
+          files_url?: string | null
           id?: string
           latitude?: number | null
           location?: string | null
@@ -622,6 +624,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           ends_at?: string | null
+          files_url?: string | null
           id?: string
           latitude?: number | null
           location?: string | null
@@ -1397,6 +1400,7 @@ export type Database = {
           icon: string
           id: string
           name: string
+          manages_rundown: boolean
           sort_order: number
           whatsapp_group: string | null
         }
@@ -1408,6 +1412,7 @@ export type Database = {
           icon?: string
           id?: string
           name: string
+          manages_rundown?: boolean
           sort_order?: number
           whatsapp_group?: string | null
         }
@@ -1419,6 +1424,7 @@ export type Database = {
           icon?: string
           id?: string
           name?: string
+          manages_rundown?: boolean
           sort_order?: number
           whatsapp_group?: string | null
         }
@@ -1521,6 +1527,16 @@ export type Database = {
           p_phone: string
           p_message: string
         }
+        Returns: undefined
+      }
+      manages_rundown: { Args: never; Returns: boolean }
+      primeiro_no_local_count: { Args: never; Returns: number }
+      contribuir_no_bloco: {
+        Args: { p_bloco: string; p_link: string; p_note: string }
+        Returns: undefined
+      }
+      definir_pasta_evento: {
+        Args: { p_event: string; p_url: string }
         Returns: undefined
       }
     }

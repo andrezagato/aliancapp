@@ -946,7 +946,52 @@ export async function definirLocalEvento(
 // Aberto por enquanto: qualquer pessoa ativa pode montar/editar o cronograma
 // (líder do louvor adiciona músicas, preletor põe versículos, etc.).
 async function podeEditarCronograma(session: Session, _eventId: string): Promise<boolean> {
-  return !!session;
+  // Estrutura do cronograma: só admin ou membro de equipe gestora (manages_rundown).
+  // Bate com a RLS rundown_write (0029). Conteúdo (link/nota) tem caminho próprio.
+  return session.role === "admin" || session.profile.teams.some((t) => t.manages_rundown);
+}
+
+/** Voluntário escalado no evento adiciona link/observação a um bloco (não mexe na estrutura). */
+export async function contribuirNoBloco(blocoId: string, link: string, note: string): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("contribuir_no_bloco", {
+    p_bloco: blocoId,
+    p_link: link.trim(),
+    p_note: note.trim(),
+  });
+  if (error) return fail(error.message);
+  revalidatePath("/cronograma");
+  return ok;
+}
+
+/** Admin marca/desmarca uma equipe como gestora do cronograma (manages_rundown). */
+export async function definirGestaoCronograma(teamId: string, on: boolean): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  if (session.role !== "admin") return fail("Só o administrador define isso.");
+  const supabase = await createClient();
+  const { error } = await supabase.from("teams").update({ manages_rundown: on }).eq("id", teamId);
+  if (error) return fail(error.message);
+  revalidatePath("/equipes");
+  revalidatePath("/cronograma");
+  return ok;
+}
+
+/** Admin/Produção define (ou limpa) o link da pasta de arquivos do evento. */
+export async function definirPastaArquivos(eventId: string, url: string): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  const pode = session.role === "admin" || session.profile.teams.some((t) => t.manages_rundown);
+  if (!pode) return fail("Só admin ou a equipe de Produção define a pasta.");
+  const link = url.trim();
+  if (link && !/^https?:\/\//i.test(link)) return fail("Cole um link válido (começa com http).");
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("definir_pasta_evento", { p_event: eventId, p_url: link });
+  if (error) return fail(error.message);
+  revalidatePath("/cronograma");
+  return ok;
 }
 
 type BlocoInput = {
