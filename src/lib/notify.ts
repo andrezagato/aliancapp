@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
+import { sendPushToUser } from "@/lib/push";
 import type { Database } from "@/lib/supabase/database.types";
 
 type Kind = Database["public"]["Enums"]["notification_kind"];
@@ -20,12 +21,16 @@ type NotifyInput = {
  * (SECURITY DEFINER — a criação pra terceiros não passa pela RLS de recipient).
  * Best-effort: um aviso que falha NÃO derruba a ação principal.
  */
+/** Avisos que também disparam push no aparelho (o resto fica só no sino). */
+const PUSH_KINDS = new Set<Kind>(["escalado", "lembrete", "evento_equipe"]);
+
 export async function notify(input: NotifyInput): Promise<void> {
-  if (!input.recipientId) return;
+  const recipientId = input.recipientId;
+  if (!recipientId) return;
   try {
     const supabase = await createClient();
     await supabase.rpc("notificar", {
-      p_recipient: input.recipientId,
+      p_recipient: recipientId,
       p_kind: input.kind,
       p_title: input.title,
       p_body: input.body,
@@ -35,6 +40,15 @@ export async function notify(input: NotifyInput): Promise<void> {
     });
   } catch {
     /* silencioso de propósito */
+  }
+  // Push (best-effort, separado do sino) — só pros kinds priorizados.
+  if (PUSH_KINDS.has(input.kind)) {
+    await sendPushToUser(recipientId, {
+      title: input.title,
+      body: input.body,
+      url: input.link,
+      tag: input.eventId ?? undefined,
+    });
   }
 }
 

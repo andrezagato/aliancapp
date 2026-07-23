@@ -5,6 +5,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { SignOutButton } from "@/components/sign-out-button";
 import { ProfileEditableField } from "@/components/profile-field";
 import { ChurchLocationCard } from "@/components/church-location-card";
+import { PushSetup } from "@/components/push-setup";
 import { atualizarNome, atualizarApelido, atualizarTelefone, atualizarAniversario } from "@/lib/actions";
 import { cn, displayName } from "@/lib/utils";
 import { getSession } from "@/lib/auth";
@@ -73,6 +74,15 @@ export default async function PerfilPage() {
           </CardContent>
         </Card>
       ) : null}
+
+      <Card>
+        <CardContent className="flex flex-col items-start gap-2.5 p-4">
+          <p className="inline-flex items-center gap-2 text-sm font-semibold">
+            <Bell className="size-4 text-muted-foreground/70" /> Notificações neste aparelho
+          </p>
+          <PushSetup />
+        </CardContent>
+      </Card>
 
       <Card className="overflow-hidden">
         <ul className="divide-y divide-border/70">

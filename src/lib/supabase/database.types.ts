@@ -1571,6 +1571,7 @@ export type Database = {
         | "interesse_resolvido"
         | "evento_resolvido"
         | "conquista"
+        | "evento_equipe"
       profile_status: "pendente" | "ativo"
       requirement_status: "needed" | "not_applicable"
       swap_status: "pendente" | "aprovada" | "recusada"
@@ -1733,6 +1734,7 @@ export const Constants = {
         "interesse_resolvido",
         "evento_resolvido",
         "conquista",
+        "evento_equipe",
       ],
       profile_status: ["pendente", "ativo"],
       requirement_status: ["needed", "not_applicable"],

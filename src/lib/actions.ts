@@ -616,6 +616,20 @@ export async function criarEventoAvulso(input: CriarEventoInput): Promise<Action
     if (reqErr) return { ...fail(reqErr.message), eventId: ev.id };
   }
 
+  // Avisa os líderes das equipes convocadas: novo evento pra montar a escala.
+  const { data: teamRows } = await supabase.from("teams").select("id, name").in("id", teamIds);
+  const whenLabel = fmtEventWhen(startsAt);
+  for (const t of teamRows ?? []) {
+    await notifyMany(await teamLeaderIds(t.id), {
+      kind: "evento_equipe",
+      title: "Novo evento pra sua equipe",
+      body: `${input.title.trim()} — ${whenLabel}. Monte a escala da ${t.name}.`,
+      link: `/escalas/${ev.id}`,
+      teamId: t.id,
+      eventId: ev.id,
+    });
+  }
+
   revalidatePath("/escalas");
   revalidatePath("/inicio");
   return { ok: true, eventId: ev.id };
@@ -991,6 +1005,35 @@ export async function definirPastaArquivos(eventId: string, url: string): Promis
   const { error } = await supabase.rpc("definir_pasta_evento", { p_event: eventId, p_url: link });
   if (error) return fail(error.message);
   revalidatePath("/cronograma");
+  return ok;
+}
+
+// =============================================================================
+// PUSH (Web Push) — subscription do aparelho
+// =============================================================================
+export async function salvarPushSubscription(sub: {
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+}): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("push_subscriptions")
+    .upsert(
+      { profile_id: session.userId, endpoint: sub.endpoint, p256dh: sub.p256dh, auth: sub.auth },
+      { onConflict: "endpoint" },
+    );
+  if (error) return fail(error.message);
+  return ok;
+}
+
+export async function removerPushSubscription(endpoint: string): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  const supabase = await createClient();
+  await supabase.from("push_subscriptions").delete().eq("endpoint", endpoint);
   return ok;
 }
 
