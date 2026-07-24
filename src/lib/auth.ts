@@ -46,21 +46,33 @@ export const getSession = cache(async (): Promise<Session | null> => {
   } = await supabase.auth.getUser();
   if (!user) return null;
 
-  const { data, error } = await supabase
-    .from("profiles")
-    .select(
-      `*,
-       memberships (
-         role,
-         team:teams ( id, name, color, icon, sort_order, archived_at, manages_rundown )
-       )`,
-    )
-    .eq("id", user.id)
-    .maybeSingle();
+  const selectProfile = () =>
+    supabase
+      .from("profiles")
+      .select(
+        `*,
+         memberships (
+           role,
+           team:teams ( id, name, color, icon, sort_order, archived_at, manages_rundown )
+         )`,
+      )
+      .eq("id", user.id)
+      .maybeSingle();
+
+  let { data, error } = await selectProfile();
+
+  // Reconciliação de onboarding (migration 0036): o trigger handle_new_user só
+  // provisiona no 1º signup. Quem logou sem o convite casar (espontâneo ou após
+  // cancelamento) ou ficou órfão (auth sem profile) fica preso pra sempre. Roda
+  // só pra quem ainda não está ativo — usuário ativo nunca paga esse custo.
+  if (!data || data.status !== "ativo") {
+    await supabase.rpc("reconciliar_onboarding");
+    ({ data, error } = await selectProfile());
+  }
 
   // Usuário logado mas profile ainda não existe (corrida com o trigger de
-  // onboarding) — devolve um profile PENDENTE sintético pra cair na fila de
-  // aprovação sem loop de redirect.
+  // onboarding, ou sem convite pra casar) — devolve um profile PENDENTE sintético
+  // pra cair na fila de aprovação sem loop de redirect.
   if (error || !data) {
     const pending: SessionProfile = {
       id: user.id,

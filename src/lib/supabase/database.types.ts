@@ -1479,6 +1479,7 @@ export type Database = {
       }
     }
     Functions: {
+      reconciliar_onboarding: { Args: never; Returns: undefined }
       confirmar_escalacao: {
         Args: { p_assignment: string }
         Returns: undefined
