@@ -16,6 +16,7 @@ import {
 import { BADGE_BY_CODE, type UnlockedBadge } from "@/lib/achievements";
 import { logActivity } from "@/lib/activity";
 import { notify, notifyMany, teamLeaderIds } from "@/lib/notify";
+import { sendPushToSubs } from "@/lib/push";
 import { sendEmail, conviteEmail, escaladoEmail, lembreteEmail, siteUrl } from "@/lib/email";
 import { churchDateISO, fmtEventWhen } from "@/lib/format";
 import type {
@@ -2435,5 +2436,127 @@ export async function recusarSubstituicao(swapId: string): Promise<ActionResult>
   const eventId = (swap.assignment as { event_id: string } | null)?.event_id;
   revalidatePath("/inicio");
   if (eventId) revalidatePath(`/escalas/${eventId}`);
+  return ok;
+}
+
+// =============================================================================
+// CHAT INTERNO (avisos / equipe / evento) — texto puro
+// =============================================================================
+
+/** Título + url do push do canal (best-effort — busca o nome pelo channelRef). */
+async function chatPushTitulo(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  channelType: string,
+  channelRef: string,
+): Promise<{ title: string; url: string }> {
+  if (channelType === "equipe") {
+    const { data } = await supabase.from("teams").select("name").eq("id", channelRef).maybeSingle();
+    return { title: `💬 ${data?.name ?? "Equipe"}`, url: "/inicio" };
+  }
+  if (channelType === "evento") {
+    const { data } = await supabase.from("events").select("title").eq("id", channelRef).maybeSingle();
+    return { title: `💬 ${data?.title ?? "Evento"}`, url: `/escalas/${channelRef}` };
+  }
+  // avisos (ou qualquer outro) → mural geral
+  return { title: "📢 Avisos gerais", url: "/inicio" };
+}
+
+/** Envia uma mensagem no canal. A RLS bloqueia quem não pode postar (→ erro). */
+export async function enviarMensagemChat(
+  channelType: string,
+  channelRef: string,
+  body: string,
+): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  const churchId = session.profile.church_id;
+  if (!churchId) return fail("Sessão sem igreja.");
+  const texto = body.trim();
+  if (!texto) return fail("Escreva uma mensagem.");
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("chat_messages").insert({
+    church_id: churchId,
+    channel_type: channelType,
+    channel_ref: channelRef,
+    sender_id: session.userId,
+    body: texto,
+  });
+  if (error) return fail(error.message);
+
+  // Push pros membros do canal (menos autor / silenciados) — best-effort.
+  try {
+    const { data: subs } = await supabase.rpc("chat_push_recipients", {
+      p_type: channelType,
+      p_ref: channelRef,
+    });
+    if (subs && subs.length > 0) {
+      const { title, url } = await chatPushTitulo(supabase, channelType, channelRef);
+      await sendPushToSubs(subs, {
+        title,
+        body: texto.slice(0, 120),
+        url,
+        tag: `chat:${channelType}:${channelRef}`,
+      });
+    }
+  } catch {
+    /* push é bônus — nunca derruba o envio */
+  }
+  return ok;
+}
+
+/** Liga/desliga o silêncio do canal (update-then-insert p/ não resetar leitura). */
+export async function silenciarCanalChat(
+  channelType: string,
+  channelRef: string,
+  muted: boolean,
+): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  const supabase = await createClient();
+  const { data: updated } = await supabase
+    .from("chat_reads")
+    .update({ muted })
+    .eq("profile_id", session.userId)
+    .eq("channel_type", channelType)
+    .eq("channel_ref", channelRef)
+    .select("profile_id");
+  if (!updated || updated.length === 0) {
+    const { error } = await supabase.from("chat_reads").insert({
+      profile_id: session.userId,
+      channel_type: channelType,
+      channel_ref: channelRef,
+      muted,
+    });
+    if (error) return fail(error.message);
+  }
+  return ok;
+}
+
+/** Marca o canal como lido agora (update-then-insert p/ preservar `muted`). */
+export async function marcarCanalLido(
+  channelType: string,
+  channelRef: string,
+): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  const supabase = await createClient();
+  const now = new Date().toISOString();
+  const { data: updated } = await supabase
+    .from("chat_reads")
+    .update({ last_read_at: now })
+    .eq("profile_id", session.userId)
+    .eq("channel_type", channelType)
+    .eq("channel_ref", channelRef)
+    .select("profile_id");
+  if (!updated || updated.length === 0) {
+    const { error } = await supabase.from("chat_reads").insert({
+      profile_id: session.userId,
+      channel_type: channelType,
+      channel_ref: channelRef,
+      last_read_at: now,
+    });
+    if (error) return fail(error.message);
+  }
   return ok;
 }

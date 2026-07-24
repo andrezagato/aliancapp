@@ -9,7 +9,9 @@ import { createClient } from "@/lib/supabase/server";
  * via RPC SECURITY DEFINER get_push_subs (a RLS não deixaria ver as de outro).
  */
 
-type PushPayload = { title: string; body?: string; url?: string; tag?: string };
+export type PushPayload = { title: string; body?: string; url?: string; tag?: string };
+
+type PushSub = { endpoint: string; p256dh: string; auth: string };
 
 let vapidReady = false;
 function configureVapid(): boolean {
@@ -31,11 +33,14 @@ function configureVapid(): boolean {
   }
 }
 
-export async function sendPushToUser(recipientId: string, payload: PushPayload): Promise<void> {
+/**
+ * Dispara um push para uma lista de subs já resolvidas. Best-effort: configura
+ * o VAPID e faz o loop `sendNotification` com try/catch por sub (uma expirada
+ * não derruba as outras). Reutilizado pelo chat, que resolve as subs via RPC.
+ */
+export async function sendPushToSubs(subs: PushSub[], payload: PushPayload): Promise<void> {
   try {
     if (!configureVapid()) return;
-    const supabase = await createClient();
-    const { data: subs } = await supabase.rpc("get_push_subs", { p_profile: recipientId });
     if (!subs || subs.length === 0) return;
     const body = JSON.stringify(payload);
     await Promise.all(
@@ -50,6 +55,16 @@ export async function sendPushToUser(recipientId: string, payload: PushPayload):
         }
       }),
     );
+  } catch {
+    /* push é best-effort */
+  }
+}
+
+export async function sendPushToUser(recipientId: string, payload: PushPayload): Promise<void> {
+  try {
+    const supabase = await createClient();
+    const { data: subs } = await supabase.rpc("get_push_subs", { p_profile: recipientId });
+    await sendPushToSubs(subs ?? [], payload);
   } catch {
     /* push é best-effort */
   }
