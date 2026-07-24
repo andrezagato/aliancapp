@@ -4,73 +4,53 @@ import webpush from "web-push";
 import { createClient } from "@/lib/supabase/server";
 
 /**
- * Envio de Web Push (WS2.1). Best-effort. Instrumentado temporariamente:
- * grava um diagnóstico em activity_log (kind='push_debug') pra achar a falha.
+ * Envio de Web Push (WS2.1). Best-effort: nunca lança — um push que falha não
+ * derruba a ação principal (é ligado no notify()). Lê as subs do destinatário
+ * via RPC SECURITY DEFINER get_push_subs (a RLS não deixaria ver as de outro).
  */
 
 type PushPayload = { title: string; body?: string; url?: string; tag?: string };
 
-function configureVapid(): { ok: boolean; reason?: string } {
+let vapidReady = false;
+function configureVapid(): boolean {
+  if (vapidReady) return true;
   const pub = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
   const priv = process.env.VAPID_PRIVATE_KEY;
-  if (!pub) return { ok: false, reason: "no-public-key" };
-  if (!priv) return { ok: false, reason: "no-private-key" };
-  try {
-    webpush.setVapidDetails(process.env.VAPID_SUBJECT || "mailto:contato@aliancapp.vercel.app", pub, priv);
-    return { ok: true };
-  } catch (e) {
-    return { ok: false, reason: "setVapid:" + ((e as Error)?.message ?? String(e)) };
+  if (!pub || !priv) return false;
+  // web-push exige subject mailto: ou https:. Normaliza e-mail cru / valor inválido.
+  let subject = (process.env.VAPID_SUBJECT || "").trim();
+  if (!/^(mailto:|https?:)/i.test(subject)) {
+    subject = subject.includes("@") ? `mailto:${subject}` : "mailto:contato@aliancapp.vercel.app";
   }
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function logDiag(supabase: any, recipientId: string, diag: unknown) {
   try {
-    await supabase.rpc("log_activity", {
-      p_profile: recipientId,
-      p_actor: recipientId,
-      p_kind: "push_debug",
-      p_meta: diag,
-    });
+    webpush.setVapidDetails(subject, pub, priv);
+    vapidReady = true;
+    return true;
   } catch {
-    /* ignora */
+    return false;
   }
 }
 
 export async function sendPushToUser(recipientId: string, payload: PushPayload): Promise<void> {
-  const supabase = await createClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const diag: any = {};
   try {
-    const v = configureVapid();
-    diag.vapid = v.ok ? "ok" : v.reason;
-    if (!v.ok) {
-      await logDiag(supabase, recipientId, diag);
-      return;
-    }
-    const { data: subs, error } = await supabase.rpc("get_push_subs", { p_profile: recipientId });
-    diag.rpcError = error?.message ?? null;
-    diag.subs = subs?.length ?? 0;
-    if (!subs || subs.length === 0) {
-      await logDiag(supabase, recipientId, diag);
-      return;
-    }
-    diag.results = [];
-    for (const s of subs) {
-      try {
-        const res = await webpush.sendNotification(
-          { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
-          JSON.stringify(payload),
-        );
-        diag.results.push({ ok: res.statusCode });
-      } catch (e) {
-        const err = e as { statusCode?: number; body?: string; message?: string };
-        diag.results.push({ err: err?.statusCode ?? err?.message ?? String(e), body: err?.body });
-      }
-    }
-    await logDiag(supabase, recipientId, diag);
-  } catch (e) {
-    diag.fatal = (e as Error)?.message ?? String(e);
-    await logDiag(supabase, recipientId, diag);
+    if (!configureVapid()) return;
+    const supabase = await createClient();
+    const { data: subs } = await supabase.rpc("get_push_subs", { p_profile: recipientId });
+    if (!subs || subs.length === 0) return;
+    const body = JSON.stringify(payload);
+    await Promise.all(
+      subs.map(async (s) => {
+        try {
+          await webpush.sendNotification(
+            { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
+            body,
+          );
+        } catch {
+          /* 404/410 (expirada) e afins — best-effort, ignora */
+        }
+      }),
+    );
+  } catch {
+    /* push é best-effort */
   }
 }
