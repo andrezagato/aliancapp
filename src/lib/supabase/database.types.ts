@@ -14,6 +14,60 @@ export type Database = {
   }
   public: {
     Tables: {
+      chat_messages: {
+        Row: {
+          body: string
+          channel_ref: string
+          channel_type: string
+          church_id: string
+          created_at: string
+          id: string
+          sender_id: string
+        }
+        Insert: {
+          body: string
+          channel_ref: string
+          channel_type: string
+          church_id: string
+          created_at?: string
+          id?: string
+          sender_id: string
+        }
+        Update: {
+          body?: string
+          channel_ref?: string
+          channel_type?: string
+          church_id?: string
+          created_at?: string
+          id?: string
+          sender_id?: string
+        }
+        Relationships: []
+      }
+      chat_reads: {
+        Row: {
+          channel_ref: string
+          channel_type: string
+          last_read_at: string
+          muted: boolean
+          profile_id: string
+        }
+        Insert: {
+          channel_ref: string
+          channel_type: string
+          last_read_at?: string
+          muted?: boolean
+          profile_id: string
+        }
+        Update: {
+          channel_ref?: string
+          channel_type?: string
+          last_read_at?: string
+          muted?: boolean
+          profile_id?: string
+        }
+        Relationships: []
+      }
       achievements: {
         Row: {
           code: string
@@ -1544,6 +1598,18 @@ export type Database = {
         Args: { p_profile: string }
         Returns: { endpoint: string; p256dh: string; auth: string }[]
       }
+      can_read_channel: {
+        Args: { p_type: string; p_ref: string }
+        Returns: boolean
+      }
+      can_post_channel: {
+        Args: { p_type: string; p_ref: string }
+        Returns: boolean
+      }
+      chat_push_recipients: {
+        Args: { p_type: string; p_ref: string }
+        Returns: { endpoint: string; p256dh: string; auth: string }[]
+      }
     }
     Enums: {
       assignment_status:
@@ -1778,3 +1844,5 @@ export type Assignment = Tables<"assignments">
 export type JoinRequest = Tables<"join_requests">
 export type ServiceInterest = Tables<"service_interests">
 export type Notification = Tables<"notifications">
+export type ChatMessage = Tables<"chat_messages">
+export type ChatRead = Tables<"chat_reads">

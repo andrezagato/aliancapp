@@ -37,3 +37,6 @@ yarn-error.log*
 
 # ts
 *.tsbuildinfo
+
+# graphify (knowledge graph output — gerado localmente)
+/graphify-out
