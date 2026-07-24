@@ -1539,6 +1539,10 @@ export type Database = {
         Args: { p_event: string; p_url: string }
         Returns: undefined
       }
+      get_push_subs: {
+        Args: { p_profile: string }
+        Returns: { endpoint: string; p256dh: string; auth: string }[]
+      }
     }
     Enums: {
       assignment_status:

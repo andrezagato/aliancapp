@@ -1,8 +1,7 @@
 import "server-only";
 
 import webpush from "web-push";
-import { createClient as createAdminClient } from "@supabase/supabase-js";
-import type { Database } from "@/lib/supabase/database.types";
+import { createClient } from "@/lib/supabase/server";
 
 /**
  * Envio de Web Push (WS2.1). Best-effort: nunca lança — um push que falha não
@@ -29,24 +28,14 @@ function configureVapid(): boolean {
   return true;
 }
 
-function adminClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) return null;
-  return createAdminClient<Database>(url, key, { auth: { persistSession: false } });
-}
-
 export async function sendPushToUser(recipientId: string, payload: PushPayload): Promise<void> {
   try {
     if (!configureVapid()) return;
-    const db = adminClient();
-    if (!db) return;
-    const { data: subs } = await db
-      .from("push_subscriptions")
-      .select("endpoint, p256dh, auth")
-      .eq("profile_id", recipientId);
+    const supabase = await createClient();
+    // RPC SECURITY DEFINER: lê as subs do destinatário (a RLS não deixaria o
+    // remetente ver as de outra pessoa). Só admin/líder pode chamar.
+    const { data: subs } = await supabase.rpc("get_push_subs", { p_profile: recipientId });
     if (!subs || subs.length === 0) return;
-
     const body = JSON.stringify(payload);
     await Promise.all(
       subs.map(async (s) => {
@@ -55,12 +44,8 @@ export async function sendPushToUser(recipientId: string, payload: PushPayload):
             { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
             body,
           );
-        } catch (err) {
-          const code = (err as { statusCode?: number })?.statusCode;
-          // 404/410 = subscription expirada/removida → limpa.
-          if (code === 404 || code === 410) {
-            await db.from("push_subscriptions").delete().eq("endpoint", s.endpoint);
-          }
+        } catch {
+          /* 404/410 (expirada) e afins — best-effort, ignora */
         }
       }),
     );
