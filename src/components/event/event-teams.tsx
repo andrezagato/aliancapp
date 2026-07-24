@@ -9,7 +9,7 @@ import { ConfirmationAlert } from "@/components/event/confirmation-alert";
 import { AssignmentResponse } from "@/components/assignment-response";
 import { CheckinButton, SwapPending } from "@/components/slot-controls";
 import { WhatsAppButton, WhatsAppGroupButton } from "@/components/whatsapp-button";
-import { EscalarDialog, RemoveAssignmentButton, NecessarioStepper } from "@/components/leader-controls";
+import { EscalarDialog, RemoveAssignmentButton, NecessarioStepper, AdicionarEquipe, RemoverEquipeButton } from "@/components/leader-controls";
 import { cn } from "@/lib/utils";
 import { fmtEventWhen } from "@/lib/format";
 import type { DetailTeam, DetailPosition, SlotPerson } from "@/lib/data";
@@ -57,11 +57,15 @@ export function EventTeams({
   startsAt,
   canCheckin,
   teams,
+  isAdmin = false,
+  availableTeams = [],
 }: {
   eventId: string;
   startsAt: string;
   canCheckin: boolean;
   teams: DetailTeam[];
+  isAdmin?: boolean;
+  availableTeams?: { id: string; name: string; color: string }[];
 }) {
   const multi = teams.length > 1;
   const anyManage = teams.some((t) => t.canManage);
@@ -130,6 +134,9 @@ export function EventTeams({
                 <CoverageBadge tone={team.tone} assigned={team.confirmed} needed={team.needed} className="ml-auto" />
               </button>
               <WhatsAppGroupButton href={team.whatsappGroup} label="Grupo" className="h-8 shrink-0 px-2.5 text-[13px]" />
+              {isAdmin ? (
+                <RemoverEquipeButton eventId={eventId} teamId={team.teamId} teamName={team.name} assigned={team.assigned} />
+              ) : null}
               <button
                 onClick={() => toggleTeam(team.teamId)}
                 aria-label={open ? "Recolher" : "Expandir"}
@@ -151,6 +158,12 @@ export function EventTeams({
           </Card>
         );
       })}
+
+      {isAdmin && availableTeams.length > 0 ? (
+        <div className="px-1 pt-1">
+          <AdicionarEquipe eventId={eventId} teams={availableTeams} />
+        </div>
+      ) : null}
     </div>
   );
 }

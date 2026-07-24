@@ -8,6 +8,7 @@ import {
   getEventDetail,
   getChurchLocation,
   listChurchProfiles,
+  listTeams,
   syncAchievements,
   type EligibleMember,
   type DetailTeam,
@@ -1348,6 +1349,30 @@ export async function adicionarEquipeAoEvento(eventId: string, teamId: string): 
   return ok;
 }
 
+/** Remove uma equipe de um evento: apaga as escalações e as posições dela nesse evento. */
+export async function removerEquipeDoEvento(eventId: string, teamId: string): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  if (session.role !== "admin") return fail("Só o administrador remove equipes do evento.");
+  const supabase = await createClient();
+  const { error: aErr } = await supabase
+    .from("assignments")
+    .delete()
+    .eq("event_id", eventId)
+    .eq("team_id", teamId);
+  if (aErr) return fail(aErr.message);
+  const { error: rErr } = await supabase
+    .from("event_requirements")
+    .delete()
+    .eq("event_id", eventId)
+    .eq("team_id", teamId);
+  if (rErr) return fail(rErr.message);
+  revalidatePath(`/escalas/${eventId}`);
+  revalidatePath("/escalas");
+  revalidatePath("/cronograma");
+  return ok;
+}
+
 // =============================================================================
 // RESPONSÁVEL DO EVENTO
 // =============================================================================
@@ -1972,6 +1997,7 @@ export type EventoModalData = {
   churchLng?: number | null;
   profiles?: { id: string; name: string; avatarUrl: string | null }[];
   teams?: DetailTeam[];
+  availableTeams?: { id: string; name: string; color: string }[];
 };
 
 export async function carregarEventoParaModal(eventId: string): Promise<EventoModalData> {
@@ -1981,10 +2007,15 @@ export async function carregarEventoParaModal(eventId: string): Promise<EventoMo
   if (!ev) return { ok: false, error: "Evento não encontrado." };
   const canCheckin = churchDateISO(ev.starts_at) <= churchDateISO(new Date().toISOString());
   const isAdmin = session.role === "admin";
-  const [churchLoc, profiles] = await Promise.all([
+  const [churchLoc, profiles, allTeams] = await Promise.all([
     isAdmin ? getChurchLocation(session) : Promise.resolve(null),
     isAdmin ? listChurchProfiles() : Promise.resolve([]),
+    isAdmin ? listTeams() : Promise.resolve([]),
   ]);
+  const inEvent = new Set((ev.teams ?? []).map((t) => t.teamId));
+  const availableTeams = allTeams
+    .filter((t) => !inEvent.has(t.id))
+    .map((t) => ({ id: t.id, name: t.name, color: t.color }));
   return {
     ok: true,
     role: session.role,
@@ -2006,6 +2037,7 @@ export async function carregarEventoParaModal(eventId: string): Promise<EventoMo
     profiles,
     // Visão única: todas as equipes que o usuário enxerga (gerencia OU está escalado).
     teams: ev.teams,
+    availableTeams,
   };
 }
 

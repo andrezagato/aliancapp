@@ -17,6 +17,7 @@ import {
   marcarNaoSeAplica,
   definirNecessario,
   adicionarEquipeAoEvento,
+  removerEquipeDoEvento,
 } from "@/lib/actions";
 import type { EligibleMember } from "@/lib/data";
 
@@ -221,6 +222,46 @@ export function AdicionarEquipe({
       </div>
       {error ? <p className="mt-2 text-sm text-destructive">{error}</p> : null}
     </div>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// Remover equipe de um evento (admin) — apaga escalações + posições da equipe
+// -----------------------------------------------------------------------------
+export function RemoverEquipeButton({
+  eventId,
+  teamId,
+  teamName,
+  assigned,
+}: {
+  eventId: string;
+  teamId: string;
+  teamName: string;
+  assigned: number;
+}) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const remove = () => {
+    const msg =
+      assigned > 0
+        ? `Remover a equipe ${teamName} deste evento? Isso apaga ${assigned} escalação(ões) dela.`
+        : `Remover a equipe ${teamName} deste evento?`;
+    if (!window.confirm(msg)) return;
+    start(async () => {
+      const r = await removerEquipeDoEvento(eventId, teamId);
+      if (r.ok) router.refresh();
+      else window.alert(r.error);
+    });
+  };
+  return (
+    <button
+      onClick={remove}
+      disabled={pending}
+      aria-label={`Remover ${teamName} do evento`}
+      className="press-sm grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
+    >
+      <Trash2 className="size-4" />
+    </button>
   );
 }
 
