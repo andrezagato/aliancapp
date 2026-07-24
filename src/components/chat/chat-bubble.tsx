@@ -95,9 +95,7 @@ export function ChatBubble({
           canais={canais}
           meId={meId}
           role={role}
-          active={active}
           onOpenChannel={openChannel}
-          onBack={() => setActive(null)}
           onClose={() => {
             setOpen(false);
             setActive(null);

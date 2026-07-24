@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { ChevronLeft, Megaphone, Users, CalendarDays, Bell, BellOff, Send } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Megaphone, Users, CalendarDays, Bell, BellOff, Send } from "lucide-react";
 import { Modal } from "@/components/modal";
 import { Avatar } from "@/components/ui/avatar";
 import { useToast } from "@/components/ui/toast";
@@ -12,118 +12,225 @@ import { cn } from "@/lib/utils";
 import type { CanalChat, ChatMessageView } from "@/lib/chat";
 
 type Role = "admin" | "leader" | "volunteer";
+type Tab = "geral" | "eventos" | "equipes";
 
-/** Ícone/cor de cada canal. */
-function ChannelIcon({ c, className }: { c: CanalChat; className?: string }) {
-  const Icon = c.type === "avisos" ? Megaphone : c.type === "evento" ? CalendarDays : Users;
-  return (
-    <span
-      className={cn("grid size-10 shrink-0 place-items-center rounded-full", className)}
-      style={c.type === "equipe" && c.color ? { backgroundColor: `${c.color}22`, color: c.color } : undefined}
-    >
-      <Icon className="size-[19px]" />
-    </span>
-  );
-}
-
-/** Só admin/líder posta em Avisos; nos demais canais quem é membro posta. */
+/** Só admin/líder posta em Avisos; nos demais canais quem enxerga o canal posta. */
 function canPost(type: string, role: Role): boolean {
   if (type === "avisos") return role === "admin" || role === "leader";
   return true;
 }
 
-/** Horário curto pro preview da lista (HH:mm). */
-function shortWhen(iso: string | null): string {
-  return iso ? fmtTime(iso) : "";
+const WD = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
+/** Data curta pra sub-aba de evento (ex.: "dom 27/07"). */
+function shortDate(iso?: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return `${WD[d.getDay()]} ${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
 export function ChatModal({
   canais,
   meId,
   role,
-  active,
   onOpenChannel,
-  onBack,
   onClose,
   onMuteChange,
 }: {
   canais: CanalChat[];
   meId: string;
   role: Role;
-  active: CanalChat | null;
   onOpenChannel: (c: CanalChat) => void;
-  onBack: () => void;
   onClose: () => void;
   onMuteChange: (type: string, ref: string, muted: boolean) => void;
 }) {
+  const avisos = useMemo(() => canais.find((c) => c.type === "avisos") ?? null, [canais]);
+  const eventos = useMemo(() => canais.filter((c) => c.type === "evento"), [canais]);
+  const equipes = useMemo(() => canais.filter((c) => c.type === "equipe"), [canais]);
+
+  const [tab, setTab] = useState<Tab>("geral");
+  const [eventoRef, setEventoRef] = useState<string | null>(null);
+  const [equipeRef, setEquipeRef] = useState<string | null>(null);
+
+  // Restaura a última posição (aba + sub-canal) do aparelho — comunicação ágil
+  // durante o evento sem ficar reabrindo e reprocurando.
+  const restored = useRef(false);
+  useEffect(() => {
+    if (restored.current) return;
+    restored.current = true;
+    try {
+      const raw = localStorage.getItem(`chat:pos:${meId}`);
+      if (!raw) return;
+      const p = JSON.parse(raw) as { tab?: Tab; eventoRef?: string; equipeRef?: string };
+      if (p.tab === "geral" || p.tab === "eventos" || p.tab === "equipes") setTab(p.tab);
+      if (p.eventoRef) setEventoRef(p.eventoRef);
+      if (p.equipeRef) setEquipeRef(p.equipeRef);
+    } catch {
+      /* localStorage indisponível — segue no padrão */
+    }
+  }, [meId]);
+
+  // Canal ativo derivado da aba + seleção (cai no 1º item se a seleção sumiu).
+  const active: CanalChat | null = useMemo(() => {
+    if (tab === "geral") return avisos;
+    if (tab === "eventos") return eventos.find((c) => c.ref === eventoRef) ?? eventos[0] ?? null;
+    return equipes.find((c) => c.ref === equipeRef) ?? equipes[0] ?? null;
+  }, [tab, eventoRef, equipeRef, avisos, eventos, equipes]);
+
+  // Reporta o canal ativo (marca lido / zera badge / suprime o realtime dele) e
+  // salva a posição.
+  useEffect(() => {
+    if (active) onOpenChannel(active);
+    try {
+      localStorage.setItem(
+        `chat:pos:${meId}`,
+        JSON.stringify({
+          tab,
+          eventoRef: active?.type === "evento" ? active.ref : eventoRef,
+          equipeRef: active?.type === "equipe" ? active.ref : equipeRef,
+        }),
+      );
+    } catch {
+      /* ignore */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active?.type, active?.ref, tab]);
+
+  const geralUnread = avisos?.unread ?? 0;
+  const eventosUnread = eventos.reduce((s, c) => s + c.unread, 0);
+  const equipesUnread = equipes.reduce((s, c) => s + c.unread, 0);
+
   return (
     <Modal open onClose={onClose} sheet>
-      {active ? (
-        <Conversation
-          channel={active}
-          meId={meId}
-          canPost={canPost(active.type, role)}
-          onBack={onBack}
-          onMuteChange={onMuteChange}
-        />
-      ) : (
-        <ChannelList canais={canais} onOpenChannel={onOpenChannel} />
-      )}
+      <div className="-mt-1 flex h-[80dvh] flex-col">
+        <h3 className="mb-2 font-display text-[22px] font-extrabold leading-tight text-foreground">Conversas</h3>
+
+        {/* Abas fixas de topo */}
+        <div className="flex gap-1 rounded-2xl bg-muted/60 p-1">
+          <TabButton active={tab === "geral"} onClick={() => setTab("geral")} Icon={Megaphone} label="Geral" badge={geralUnread} />
+          <TabButton active={tab === "eventos"} onClick={() => setTab("eventos")} Icon={CalendarDays} label="Eventos" badge={eventosUnread} />
+          <TabButton active={tab === "equipes"} onClick={() => setTab("equipes")} Icon={Users} label="Equipes" badge={equipesUnread} />
+        </div>
+
+        {/* Sub-abas roláveis (horizontais) */}
+        {tab === "eventos" && eventos.length > 0 ? (
+          <SubStrip items={eventos} activeRef={active?.ref ?? null} onSelect={setEventoRef} kind="evento" />
+        ) : null}
+        {tab === "equipes" && equipes.length > 0 ? (
+          <SubStrip items={equipes} activeRef={active?.ref ?? null} onSelect={setEquipeRef} kind="equipe" />
+        ) : null}
+
+        {/* Conversa ativa (remonta ao trocar de canal) */}
+        <div className="mt-2 flex min-h-0 flex-1 flex-col">
+          {active ? (
+            <Conversation
+              key={`${active.type}:${active.ref}`}
+              channel={active}
+              meId={meId}
+              canPost={canPost(active.type, role)}
+              onMuteChange={onMuteChange}
+            />
+          ) : (
+            <EmptyTab tab={tab} />
+          )}
+        </div>
+      </div>
     </Modal>
   );
 }
 
-function ChannelList({
-  canais,
-  onOpenChannel,
+function TabButton({
+  active,
+  onClick,
+  Icon,
+  label,
+  badge,
 }: {
-  canais: CanalChat[];
-  onOpenChannel: (c: CanalChat) => void;
+  active: boolean;
+  onClick: () => void;
+  Icon: typeof Megaphone;
+  label: string;
+  badge: number;
 }) {
   return (
-    <div className="-mt-1">
-      <h3 className="mb-2 font-display text-[22px] font-extrabold leading-tight text-foreground">Conversas</h3>
-      <ul className="-mx-1 max-h-[70dvh] space-y-0.5 overflow-y-auto">
-        {canais.map((c) => (
-          <li key={`${c.type}:${c.ref}`}>
-            <button
-              onClick={() => onOpenChannel(c)}
-              className="press-sm flex w-full items-center gap-3 rounded-2xl px-1.5 py-2 text-left"
-            >
-              <ChannelIcon c={c} className="bg-primary/10 text-primary" />
-              <span className="min-w-0 flex-1">
-                <span className="flex items-center gap-1.5">
-                  <span className="truncate text-[15px] font-bold text-foreground">{c.label}</span>
-                  {c.muted ? <BellOff className="size-3.5 shrink-0 text-muted-foreground" /> : null}
-                </span>
-                <span className="block truncate text-[13px] text-muted-foreground">
-                  {c.lastAt ? `Última mensagem · ${shortWhen(c.lastAt)}` : "Nenhuma mensagem ainda"}
-                </span>
+    <button
+      onClick={onClick}
+      className={cn(
+        "press-sm relative flex flex-1 items-center justify-center gap-1.5 rounded-xl px-2 py-2 text-[13px] font-bold",
+        active ? "bg-card text-foreground shadow-sm" : "text-muted-foreground",
+      )}
+    >
+      <Icon className="size-4" />
+      {label}
+      {badge > 0 ? (
+        <span className="grid min-w-[18px] place-items-center rounded-full bg-primary px-1 text-[10px] font-extrabold text-primary-foreground">
+          {badge > 9 ? "9+" : badge}
+        </span>
+      ) : null}
+    </button>
+  );
+}
+
+function SubStrip({
+  items,
+  activeRef,
+  onSelect,
+  kind,
+}: {
+  items: CanalChat[];
+  activeRef: string | null;
+  onSelect: (ref: string) => void;
+  kind: "evento" | "equipe";
+}) {
+  return (
+    <div className="-mx-1 mt-2 flex gap-1.5 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      {items.map((c) => {
+        const on = c.ref === activeRef;
+        return (
+          <button
+            key={c.ref}
+            onClick={() => onSelect(c.ref)}
+            className={cn(
+              "press-sm flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-[13px] font-semibold",
+              on ? "border-primary bg-primary/10 text-primary" : "border-border text-foreground",
+              kind === "evento" && c.past ? "opacity-55" : "",
+            )}
+            style={kind === "equipe" && c.color && !on ? { color: c.color } : undefined}
+          >
+            <span className="max-w-[9rem] truncate">{c.label}</span>
+            {kind === "evento" && c.startsAt ? (
+              <span className="text-[11px] font-medium opacity-70">{shortDate(c.startsAt)}</span>
+            ) : null}
+            {c.unread > 0 ? (
+              <span className="grid min-w-[16px] place-items-center rounded-full bg-primary px-1 text-[10px] font-extrabold text-primary-foreground">
+                {c.unread > 9 ? "9+" : c.unread}
               </span>
-              {c.unread > 0 ? (
-                <span className="grid min-w-[20px] shrink-0 place-items-center rounded-full bg-primary px-1.5 text-[11px] font-extrabold text-primary-foreground">
-                  {c.unread > 9 ? "9+" : c.unread}
-                </span>
-              ) : null}
-            </button>
-          </li>
-        ))}
-      </ul>
+            ) : null}
+          </button>
+        );
+      })}
     </div>
   );
+}
+
+function EmptyTab({ tab }: { tab: Tab }) {
+  const msg =
+    tab === "eventos"
+      ? "Nenhum culto com conversa por aqui ainda."
+      : tab === "equipes"
+        ? "Você ainda não está em nenhuma equipe."
+        : "Sem avisos por enquanto.";
+  return <p className="grid flex-1 place-items-center px-6 text-center text-sm text-muted-foreground">{msg}</p>;
 }
 
 function Conversation({
   channel,
   meId,
   canPost,
-  onBack,
   onMuteChange,
 }: {
   channel: CanalChat;
   meId: string;
   canPost: boolean;
-  onBack: () => void;
   onMuteChange: (type: string, ref: string, muted: boolean) => void;
 }) {
   const { showToast } = useToast();
@@ -141,7 +248,6 @@ function Conversation({
     });
   };
 
-  // Carrega o histórico + assina o Realtime do canal (append das novas).
   useEffect(() => {
     const supabase = createClient();
     let alive = true;
@@ -205,36 +311,35 @@ function Conversation({
             channel_ref: string;
           };
           if (m.channel_type !== channel.type || m.channel_ref !== channel.ref) return;
-          // Resolve nome/avatar do autor (leve — 1 msg por vez).
-          let name = "Alguém";
+          let name = "Você";
           let avatar: string | null = null;
-          if (m.sender_id === meId) {
-            name = "Você";
-          } else {
+          if (m.sender_id !== meId) {
             const { data: p } = await supabase
               .from("profiles")
               .select("full_name, nickname, avatar_url")
               .eq("id", m.sender_id)
               .maybeSingle();
-            if (p) {
-              name = (p as { nickname: string | null; full_name: string }).nickname ||
-                (p as { full_name: string }).full_name || "Alguém";
-              avatar = (p as { avatar_url: string | null }).avatar_url;
-            }
+            const row = p as { nickname: string | null; full_name: string; avatar_url: string | null } | null;
+            name = row?.nickname || row?.full_name || "Alguém";
+            avatar = row?.avatar_url ?? null;
           }
           if (!alive) return;
-          setMsgs((prev) => (prev.some((x) => x.id === m.id) ? prev : [
-            ...prev,
-            {
-              id: m.id,
-              body: m.body,
-              senderId: m.sender_id,
-              senderName: name,
-              senderAvatar: avatar,
-              createdAt: m.created_at,
-              mine: m.sender_id === meId,
-            },
-          ]));
+          setMsgs((prev) =>
+            prev.some((x) => x.id === m.id)
+              ? prev
+              : [
+                  ...prev,
+                  {
+                    id: m.id,
+                    body: m.body,
+                    senderId: m.sender_id,
+                    senderName: name,
+                    senderAvatar: avatar,
+                    createdAt: m.created_at,
+                    mine: m.sender_id === meId,
+                  },
+                ],
+          );
           scrollToEnd();
         },
       )
@@ -274,33 +379,35 @@ function Conversation({
   };
 
   return (
-    <div className="-mt-1 flex max-h-[74dvh] flex-col">
-      {/* Header do canal */}
-      <div className="mb-2 flex items-center gap-2 pr-8">
-        <button onClick={onBack} aria-label="Voltar" className="press-sm -ml-1 grid size-9 place-items-center rounded-full text-foreground">
-          <ChevronLeft className="size-6" />
-        </button>
-        <ChannelIcon c={channel} className="bg-primary/10 text-primary" />
-        <span className="min-w-0 flex-1 truncate font-display text-[19px] font-extrabold leading-tight text-foreground">
-          {channel.label}
-        </span>
+    <div className="flex min-h-0 flex-1 flex-col">
+      {/* Cabeçalho do canal */}
+      <div className="mb-1 flex items-center gap-2 border-b border-border/70 pb-2">
+        <span className="min-w-0 flex-1 truncate text-[15px] font-bold text-foreground">{channel.label}</span>
         <button
           onClick={toggleMute}
           aria-label={muted ? "Reativar avisos" : "Silenciar"}
-          className="press-sm grid size-9 place-items-center rounded-full text-muted-foreground"
+          className="press-sm grid size-8 shrink-0 place-items-center rounded-full text-muted-foreground"
         >
-          {muted ? <BellOff className="size-5" /> : <Bell className="size-5" />}
+          {muted ? <BellOff className="size-[18px]" /> : <Bell className="size-[18px]" />}
         </button>
       </div>
 
       {/* Mensagens */}
-      <div ref={scrollRef} className="flex-1 space-y-2 overflow-y-auto py-2">
+      <div ref={scrollRef} className="min-h-0 flex-1 space-y-1 overflow-y-auto py-2">
         {loading ? (
           <p className="py-8 text-center text-sm text-muted-foreground">Carregando…</p>
         ) : msgs.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted-foreground">Nenhuma mensagem ainda. Comece a conversa 💬</p>
         ) : (
-          msgs.map((m) => <Bubble key={m.id} m={m} />)
+          msgs.map((m, i) => {
+            const prev = msgs[i - 1];
+            // Agrupa: esconde nome/avatar quando é a mesma pessoa em sequência (< 5 min).
+            const grouped =
+              !!prev &&
+              prev.senderId === m.senderId &&
+              new Date(m.createdAt).getTime() - new Date(prev.createdAt).getTime() < 5 * 60 * 1000;
+            return <Bubble key={m.id} m={m} grouped={grouped} />;
+          })
         )}
       </div>
 
@@ -338,24 +445,29 @@ function Conversation({
   );
 }
 
-function Bubble({ m }: { m: ChatMessageView }) {
+function Bubble({ m, grouped }: { m: ChatMessageView; grouped: boolean }) {
+  const time = fmtTime(m.createdAt);
   if (m.mine) {
     return (
-      <div className="flex justify-end">
-        <div className="max-w-[78%] rounded-[16px] rounded-br-[5px] bg-primary px-3.5 py-2 text-[15px] leading-snug text-primary-foreground">
-          <p className="whitespace-pre-wrap break-words">{m.body}</p>
-          <p className="mt-0.5 text-right text-[10px] opacity-70">{fmtTime(m.createdAt)}</p>
+      <div className={cn("flex justify-end", grouped ? "mt-0.5" : "mt-2")}>
+        <div className="flex max-w-[80%] items-end gap-1.5 rounded-[16px] rounded-br-[5px] bg-primary px-3 py-1.5 text-[15px] leading-snug text-primary-foreground">
+          <p className="min-w-0 whitespace-pre-wrap break-words">{m.body}</p>
+          <span className="shrink-0 pb-0.5 text-[10px] leading-none opacity-70">{time}</span>
         </div>
       </div>
     );
   }
   return (
-    <div className="flex items-end gap-2">
-      <Avatar name={m.senderName} src={m.senderAvatar} className="size-8" />
-      <div className="max-w-[78%] rounded-[16px] rounded-bl-[5px] bg-muted px-3.5 py-2 text-[15px] leading-snug text-foreground">
-        <p className="text-[11px] font-bold text-primary">{m.senderName}</p>
-        <p className="whitespace-pre-wrap break-words">{m.body}</p>
-        <p className="mt-0.5 text-[10px] text-muted-foreground">{fmtTime(m.createdAt)}</p>
+    <div className={cn("flex items-end gap-2", grouped ? "mt-0.5" : "mt-2")}>
+      <span className="w-8 shrink-0">
+        {grouped ? null : <Avatar name={m.senderName} src={m.senderAvatar} className="size-8" />}
+      </span>
+      <div className="max-w-[80%] rounded-[16px] rounded-bl-[5px] bg-muted px-3 py-1.5 text-[15px] leading-snug text-foreground">
+        {grouped ? null : <p className="text-[11px] font-bold text-primary">{m.senderName}</p>}
+        <div className="flex items-end gap-1.5">
+          <p className="min-w-0 whitespace-pre-wrap break-words">{m.body}</p>
+          <span className="shrink-0 pb-0.5 text-[10px] leading-none text-muted-foreground">{time}</span>
+        </div>
       </div>
     </div>
   );
