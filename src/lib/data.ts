@@ -1944,29 +1944,52 @@ export async function listRecentHistory(): Promise<HistoryEvent[]> {
   return Array.from(map.values()).slice(0, 15);
 }
 
+export type TeamAssignmentRow = {
+  eventId: string;
+  startsAt: string;
+  eventTitle: string;
+  positionName: string;
+  profileId: string;
+  profileName: string;
+  avatarUrl: string | null;
+};
+
 /**
- * Conta quantas vezes cada pessoa foi escalada numa equipe dentro do mês
- * (assignments não-recusados, com evento começando no intervalo). Base do
- * "Balanço do mês" — quem está sobrecarregado e quem ainda não foi escalado.
- * Devolve { profileId: quantidade }. A RLS garante que só admin/líder da equipe lê.
+ * Escalações de uma equipe no mês (não-recusadas, evento começando no intervalo),
+ * já com evento, posição e pessoa — base do "Balanço do mês". A partir daqui dá
+ * pra montar tanto a contagem por pessoa quanto o detalhe (quando, em que posição
+ * e COM QUEM cada um serviu). A RLS garante que só admin/líder da equipe lê.
  */
-export async function getTeamMonthCounts(
+export async function listTeamMonthAssignments(
   teamId: string,
   fromIso: string,
   toIso: string,
-): Promise<Record<string, number>> {
+): Promise<TeamAssignmentRow[]> {
   const supabase = await createClient();
   const { data } = await supabase
     .from("assignments")
-    .select("profile_id, events!inner ( starts_at )")
+    .select(
+      "profile:profiles!assignments_profile_id_fkey ( id, full_name, avatar_url ), position:positions ( name ), event:events!inner ( id, title, starts_at )",
+    )
     .eq("team_id", teamId)
     .neq("status", "recusado")
     .not("profile_id", "is", null)
-    .gte("events.starts_at", fromIso)
-    .lt("events.starts_at", toIso);
-  const counts: Record<string, number> = {};
-  for (const r of (data ?? []) as { profile_id: string | null }[]) {
-    if (r.profile_id) counts[r.profile_id] = (counts[r.profile_id] ?? 0) + 1;
-  }
-  return counts;
+    .gte("event.starts_at", fromIso)
+    .lt("event.starts_at", toIso);
+  const rows = (data ?? []) as {
+    profile: { id: string; full_name: string | null; avatar_url: string | null } | null;
+    position: { name: string } | null;
+    event: { id: string; title: string; starts_at: string } | null;
+  }[];
+  return rows
+    .filter((r) => r.profile && r.event)
+    .map((r) => ({
+      eventId: r.event!.id,
+      startsAt: r.event!.starts_at,
+      eventTitle: r.event!.title,
+      positionName: r.position?.name ?? "—",
+      profileId: r.profile!.id,
+      profileName: r.profile!.full_name || "Sem nome",
+      avatarUrl: r.profile!.avatar_url,
+    }));
 }
