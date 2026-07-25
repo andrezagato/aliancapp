@@ -42,7 +42,7 @@ export default async function CronogramaPage({ searchParams }: { searchParams: P
         {ev ? (
           <>
             {/* Faixa de eventos — desliza na horizontal + setas; troca o cronograma abaixo */}
-            {allOpen.length > 1 ? (
+            {allOpen.length > 0 ? (
               <div className="flex items-center gap-1">
                 {prevEv ? (
                   <Link
