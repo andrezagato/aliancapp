@@ -1943,3 +1943,30 @@ export async function listRecentHistory(): Promise<HistoryEvent[]> {
   }
   return Array.from(map.values()).slice(0, 15);
 }
+
+/**
+ * Conta quantas vezes cada pessoa foi escalada numa equipe dentro do mês
+ * (assignments não-recusados, com evento começando no intervalo). Base do
+ * "Balanço do mês" — quem está sobrecarregado e quem ainda não foi escalado.
+ * Devolve { profileId: quantidade }. A RLS garante que só admin/líder da equipe lê.
+ */
+export async function getTeamMonthCounts(
+  teamId: string,
+  fromIso: string,
+  toIso: string,
+): Promise<Record<string, number>> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("assignments")
+    .select("profile_id, events!inner ( starts_at )")
+    .eq("team_id", teamId)
+    .neq("status", "recusado")
+    .not("profile_id", "is", null)
+    .gte("events.starts_at", fromIso)
+    .lt("events.starts_at", toIso);
+  const counts: Record<string, number> = {};
+  for (const r of (data ?? []) as { profile_id: string | null }[]) {
+    if (r.profile_id) counts[r.profile_id] = (counts[r.profile_id] ?? 0) + 1;
+  }
+  return counts;
+}
