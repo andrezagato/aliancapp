@@ -1943,3 +1943,53 @@ export async function listRecentHistory(): Promise<HistoryEvent[]> {
   }
   return Array.from(map.values()).slice(0, 15);
 }
+
+export type TeamAssignmentRow = {
+  eventId: string;
+  startsAt: string;
+  eventTitle: string;
+  positionName: string;
+  profileId: string;
+  profileName: string;
+  avatarUrl: string | null;
+};
+
+/**
+ * Escalações de uma equipe no mês (não-recusadas, evento começando no intervalo),
+ * já com evento, posição e pessoa — base do "Balanço do mês". A partir daqui dá
+ * pra montar tanto a contagem por pessoa quanto o detalhe (quando, em que posição
+ * e COM QUEM cada um serviu). A RLS garante que só admin/líder da equipe lê.
+ */
+export async function listTeamMonthAssignments(
+  teamId: string,
+  fromIso: string,
+  toIso: string,
+): Promise<TeamAssignmentRow[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("assignments")
+    .select(
+      "profile:profiles!assignments_profile_id_fkey ( id, full_name, avatar_url ), position:positions ( name ), event:events!inner ( id, title, starts_at )",
+    )
+    .eq("team_id", teamId)
+    .neq("status", "recusado")
+    .not("profile_id", "is", null)
+    .gte("event.starts_at", fromIso)
+    .lt("event.starts_at", toIso);
+  const rows = (data ?? []) as {
+    profile: { id: string; full_name: string | null; avatar_url: string | null } | null;
+    position: { name: string } | null;
+    event: { id: string; title: string; starts_at: string } | null;
+  }[];
+  return rows
+    .filter((r) => r.profile && r.event)
+    .map((r) => ({
+      eventId: r.event!.id,
+      startsAt: r.event!.starts_at,
+      eventTitle: r.event!.title,
+      positionName: r.position?.name ?? "—",
+      profileId: r.profile!.id,
+      profileName: r.profile!.full_name || "Sem nome",
+      avatarUrl: r.profile!.avatar_url,
+    }));
+}

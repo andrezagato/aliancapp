@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CalendarDays, Plus } from "lucide-react";
+import { CalendarDays, Plus, BarChart3 } from "lucide-react";
 import { TopBar } from "@/components/app-shell/top-bar";
 import { buttonVariants } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
@@ -18,9 +18,16 @@ export default async function EscalasPage() {
     <>
       <TopBar title="Escalas" subtitle="Veja o que vem por aí" userName={session.profile.full_name || "?"} />
       <div className="animate-fade-in space-y-3 py-3">
-        <Link href="/calendario" className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline">
-          <CalendarDays className="size-4" /> Ver o mês inteiro
-        </Link>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+          <Link href="/calendario" className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline">
+            <CalendarDays className="size-4" /> Ver o mês inteiro
+          </Link>
+          {session.role !== "volunteer" ? (
+            <Link href="/balanco" className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline">
+              <BarChart3 className="size-4" /> Balanço do mês
+            </Link>
+          ) : null}
+        </div>
         {isAdmin ? (
           <Link href="/escalas/novo" className={cn(buttonVariants(), "w-full")}>
             <Plus className="size-4" /> Criar evento
