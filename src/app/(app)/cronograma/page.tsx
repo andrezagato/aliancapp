@@ -26,6 +26,7 @@ export default async function CronogramaPage({ searchParams }: { searchParams: P
     ? await Promise.all([getEventRundown(ev.id), listRundownKinds(), listRundownTemplates()])
     : [[], await listRundownKinds(), []];
   const allOpen = upcoming.filter((_, i) => !states[i].endedAt);
+  const allEnded = upcoming.filter((_, i) => !!states[i].endedAt);
   const activePos = ev ? allOpen.findIndex((e) => e.id === ev.id) : -1;
   const prevEv = activePos > 0 ? allOpen[activePos - 1] : null;
   const nextEv = activePos >= 0 && activePos < allOpen.length - 1 ? allOpen[activePos + 1] : null;
@@ -37,7 +38,7 @@ export default async function CronogramaPage({ searchParams }: { searchParams: P
 
   return (
     <>
-      <TopBar title="Cronograma" subtitle="A ordem do próximo culto" userName={session.profile.full_name || "?"} />
+      <TopBar title="Roteiro" subtitle="A ordem do próximo culto" userName={session.profile.full_name || "?"} />
       <div className="animate-fade-in space-y-3 py-3">
         {ev ? (
           <div className="overflow-hidden rounded-2xl border border-border bg-card">
@@ -112,13 +113,40 @@ export default async function CronogramaPage({ searchParams }: { searchParams: P
               <span className="grid size-14 place-items-center rounded-full bg-primary/10 text-primary">
                 <CalendarDays className="size-7" />
               </span>
-              <h2 className="font-display text-lg font-bold">Nenhum culto à frente</h2>
+              <h2 className="font-display text-lg font-bold">
+                {allEnded.length > 0 ? "Tudo em dia por aqui" : "Nenhum culto à frente"}
+              </h2>
               <p className="max-w-xs text-balance text-sm text-muted-foreground">
-                Quando houver um próximo culto, a ordem dele aparece aqui — pra você montar o passo a passo.
+                {allEnded.length > 0
+                  ? "Os próximos cultos já foram encerrados. Eles ficam guardados em Finalizados, logo abaixo."
+                  : "Quando houver um próximo culto, a ordem dele aparece aqui — pra você montar o passo a passo."}
               </p>
             </div>
           </Card>
         )}
+
+        {allEnded.length > 0 ? (
+          <details className="group overflow-hidden rounded-2xl border border-border bg-card">
+            <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-semibold text-muted-foreground [&::-webkit-details-marker]:hidden">
+              <span>Finalizados · {allEnded.length}</span>
+              <ChevronRight className="size-4 transition-transform group-open:rotate-90" />
+            </summary>
+            <div className="flex flex-col gap-1 border-t border-border p-2">
+              {allEnded.map((e) => (
+                <Link
+                  key={e.id}
+                  href={`/cronograma?ev=${e.id}`}
+                  className="flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 hover:bg-muted"
+                >
+                  <span className="min-w-0 truncate text-sm font-medium text-foreground">{e.title}</span>
+                  <span className="shrink-0 text-[11px] capitalize text-muted-foreground">
+                    {fmtWeekdayShort(e.starts_at)} · {fmtDayMonthShort(e.starts_at)}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </details>
+        ) : null}
       </div>
     </>
   );

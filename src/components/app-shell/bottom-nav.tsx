@@ -16,7 +16,7 @@ export function BottomNav() {
   // Equipes pra todos: admin/líder gerenciam; voluntário vê quem serve com ele.
   const items = [
     ...base,
-    { href: "/cronograma", label: "Cronograma", icon: ClipboardList },
+    { href: "/cronograma", label: "Roteiro", icon: ClipboardList },
     { href: "/equipes", label: "Equipes", icon: Users },
     { href: "/perfil", label: "Perfil", icon: User },
   ];
