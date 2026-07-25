@@ -24,22 +24,26 @@ function dm(iso: string): string {
 }
 
 type Entry = { startsAt: string; positionName: string; teammates: string[] };
+type RosterRow = { positionName: string; profileName: string; avatarUrl: string | null };
+type View = "pessoa" | "data";
 
 /**
- * Balanço do mês (por equipe): não só QUANTAS vezes cada um serviu, mas QUANDO,
- * em que POSIÇÃO e COM QUEM — pra enxergar composição (ex.: alguém sempre
- * escalado com gente nova) e reequilibrar. Cada pessoa expande pro detalhe.
- * Mobile-first, tudo por URL. Uma equipe por vez.
+ * Balanço do mês (por equipe). Duas lentes da MESMA informação (aba):
+ *  - Por pessoa: quantas vezes cada um serviu (+ quem ainda não foi escalado) e,
+ *    expandindo, quando/posição/com quem.
+ *  - Por data: cada evento do mês e, expandindo, a composição (posição · pessoa).
+ * Mobile-first, tudo por URL (server). Uma equipe por vez.
  */
 export default async function BalancoPage({
   searchParams,
 }: {
-  searchParams: Promise<{ team?: string; m?: string }>;
+  searchParams: Promise<{ team?: string; m?: string; ver?: string }>;
 }) {
   const session = await getSession();
   if (!session) return null;
   if (session.role === "volunteer") redirect("/inicio");
   const sp = await searchParams;
+  const ver: View = sp.ver === "data" ? "data" : "pessoa";
 
   const teams = await getManageableTeams(session);
   if (teams.length === 0) {
@@ -72,7 +76,7 @@ export default async function BalancoPage({
 
   const assigns = await listTeamMonthAssignments(selected.id, fromIso, toIso);
 
-  // Roster por evento (pra saber "com quem" cada um serviu).
+  // Roster por evento (base das duas lentes).
   const rosterByEvent = new Map<string, typeof assigns>();
   for (const a of assigns) {
     const arr = rosterByEvent.get(a.eventId) ?? [];
@@ -80,7 +84,7 @@ export default async function BalancoPage({
     rosterByEvent.set(a.eventId, arr);
   }
 
-  // Agrupa por pessoa, com o detalhe (dia · posição · colegas daquele evento).
+  // --- POR PESSOA ---
   const person = new Map<string, { name: string; avatarUrl: string | null; entries: Entry[] }>();
   for (const a of assigns) {
     const mates = Array.from(
@@ -94,7 +98,6 @@ export default async function BalancoPage({
     p.entries.push({ startsAt: a.startsAt, positionName: a.positionName, teammates: mates });
     person.set(a.profileId, p);
   }
-
   const scheduled = Array.from(person.entries())
     .map(([profileId, p]) => ({
       profileId,
@@ -104,13 +107,29 @@ export default async function BalancoPage({
       entries: p.entries.slice().sort((e1, e2) => e1.startsAt.localeCompare(e2.startsAt)),
     }))
     .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "pt-BR"));
-
   const scheduledIds = new Set(scheduled.map((s) => s.profileId));
   const zeroed = selected.members.filter((mem) => !scheduledIds.has(mem.profileId));
   const max = Math.max(1, ...scheduled.map((s) => s.count));
 
-  const link = (params: { team?: string; m?: string }) =>
-    `/balanco?team=${params.team ?? selected.id}&m=${params.m ?? monthStr}`;
+  // --- POR DATA ---
+  const byDate = Array.from(
+    assigns
+      .reduce((mapAcc, a) => {
+        const ev =
+          mapAcc.get(a.eventId) ??
+          { eventId: a.eventId, startsAt: a.startsAt, title: a.eventTitle, rows: [] as RosterRow[] };
+        ev.rows.push({ positionName: a.positionName, profileName: a.profileName, avatarUrl: a.avatarUrl });
+        mapAcc.set(a.eventId, ev);
+        return mapAcc;
+      }, new Map<string, { eventId: string; startsAt: string; title: string; rows: RosterRow[] }>())
+      .values(),
+  ).sort((e1, e2) => e1.startsAt.localeCompare(e2.startsAt));
+  for (const ev of byDate) {
+    ev.rows.sort((a, b) => a.positionName.localeCompare(b.positionName, "pt-BR") || a.profileName.localeCompare(b.profileName, "pt-BR"));
+  }
+
+  const link = (params: { team?: string; m?: string; ver?: View }) =>
+    `/balanco?team=${params.team ?? selected.id}&m=${params.m ?? monthStr}&ver=${params.ver ?? ver}`;
 
   return (
     <>
@@ -149,62 +168,118 @@ export default async function BalancoPage({
           </Link>
         </div>
 
+        {/* Aba: por pessoa / por data */}
+        <div className="flex gap-1 rounded-2xl bg-muted/60 p-1">
+          <Link
+            href={link({ ver: "pessoa" })}
+            className={cn(
+              "flex-1 rounded-xl py-2 text-center text-[13px] font-bold",
+              ver === "pessoa" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground",
+            )}
+          >
+            Por pessoa
+          </Link>
+          <Link
+            href={link({ ver: "data" })}
+            className={cn(
+              "flex-1 rounded-xl py-2 text-center text-[13px] font-bold",
+              ver === "data" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground",
+            )}
+          >
+            Por data
+          </Link>
+        </div>
+
         <p className="px-1 text-sm text-muted-foreground">
-          {selected.name} · {assigns.length} escalaç{assigns.length === 1 ? "ão" : "ões"} no mês · toque numa pessoa pra ver os dias
+          {selected.name} · {assigns.length} escalaç{assigns.length === 1 ? "ão" : "ões"} · {byDate.length} evento{byDate.length === 1 ? "" : "s"} no mês · toque pra abrir
         </p>
 
-        {/* Ainda não escalados no mês */}
-        {zeroed.length > 0 ? (
-          <Card className="border-warning/30 bg-warning/5 p-4">
-            <p className="mb-2 text-sm font-bold text-warning">Ainda não escalados · {zeroed.length}</p>
-            <div className="flex flex-wrap gap-2">
-              {zeroed.map((r) => (
-                <span key={r.profileId} className="inline-flex items-center gap-1.5 rounded-full bg-card px-2.5 py-1 text-sm">
-                  <Avatar name={r.name} src={r.avatarUrl} className="size-6" />
-                  {r.name}
-                </span>
-              ))}
-            </div>
-          </Card>
-        ) : null}
-
-        {/* Escalados — barra + detalhe expansível (dia · posição · com quem) */}
-        <Card className="divide-y divide-border">
-          {scheduled.length === 0 ? (
-            <p className="p-4 text-center text-sm text-muted-foreground">Ninguém escalado nesse mês ainda.</p>
-          ) : (
-            scheduled.map((r) => (
-              <details key={r.profileId} className="group">
-                <summary className="flex cursor-pointer list-none items-center gap-3 p-3 [&::-webkit-details-marker]:hidden">
-                  <Avatar name={r.name} src={r.avatarUrl} className="size-9" />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="truncate text-sm font-medium">{r.name}</span>
-                      <span className="shrink-0 text-sm font-bold text-primary">{r.count}×</span>
-                    </div>
-                    <div className="mt-1 h-2 overflow-hidden rounded-full bg-muted">
-                      <div className="h-full rounded-full bg-primary" style={{ width: `${(r.count / max) * 100}%` }} />
-                    </div>
-                  </div>
-                  <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
-                </summary>
-                <ul className="space-y-1.5 px-3 pb-3 pl-[60px]">
-                  {r.entries.map((e, i) => (
-                    <li key={i} className="text-sm">
-                      <span className="font-medium">{dm(e.startsAt)}</span>
-                      <span className="text-muted-foreground"> · {e.positionName}</span>
-                      {e.teammates.length > 0 ? (
-                        <span className="text-muted-foreground"> · com {e.teammates.join(", ")}</span>
-                      ) : (
-                        <span className="text-muted-foreground"> · sozinho(a) na equipe</span>
-                      )}
-                    </li>
+        {ver === "pessoa" ? (
+          <>
+            {/* Ainda não escalados no mês */}
+            {zeroed.length > 0 ? (
+              <Card className="border-warning/30 bg-warning/5 p-4">
+                <p className="mb-2 text-sm font-bold text-warning">Ainda não escalados · {zeroed.length}</p>
+                <div className="flex flex-wrap gap-2">
+                  {zeroed.map((r) => (
+                    <span key={r.profileId} className="inline-flex items-center gap-1.5 rounded-full bg-card px-2.5 py-1 text-sm">
+                      <Avatar name={r.name} src={r.avatarUrl} className="size-6" />
+                      {r.name}
+                    </span>
                   ))}
-                </ul>
-              </details>
-            ))
-          )}
-        </Card>
+                </div>
+              </Card>
+            ) : null}
+
+            {/* Escalados — barra + detalhe (dia · posição · com quem) */}
+            <Card className="divide-y divide-border">
+              {scheduled.length === 0 ? (
+                <p className="p-4 text-center text-sm text-muted-foreground">Ninguém escalado nesse mês ainda.</p>
+              ) : (
+                scheduled.map((r) => (
+                  <details key={r.profileId} className="group">
+                    <summary className="flex cursor-pointer list-none items-center gap-3 p-3 [&::-webkit-details-marker]:hidden">
+                      <Avatar name={r.name} src={r.avatarUrl} className="size-9" />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="truncate text-sm font-medium">{r.name}</span>
+                          <span className="shrink-0 text-sm font-bold text-primary">{r.count}×</span>
+                        </div>
+                        <div className="mt-1 h-2 overflow-hidden rounded-full bg-muted">
+                          <div className="h-full rounded-full bg-primary" style={{ width: `${(r.count / max) * 100}%` }} />
+                        </div>
+                      </div>
+                      <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+                    </summary>
+                    <ul className="space-y-1.5 px-3 pb-3 pl-[60px]">
+                      {r.entries.map((e, i) => (
+                        <li key={i} className="text-sm">
+                          <span className="font-medium">{dm(e.startsAt)}</span>
+                          <span className="text-muted-foreground"> · {e.positionName}</span>
+                          {e.teammates.length > 0 ? (
+                            <span className="text-muted-foreground"> · com {e.teammates.join(", ")}</span>
+                          ) : (
+                            <span className="text-muted-foreground"> · sozinho(a) na equipe</span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                ))
+              )}
+            </Card>
+          </>
+        ) : (
+          /* POR DATA — cada evento, expandindo a composição (posição · pessoa) */
+          <Card className="divide-y divide-border">
+            {byDate.length === 0 ? (
+              <p className="p-4 text-center text-sm text-muted-foreground">Nenhum evento com escala nesse mês.</p>
+            ) : (
+              byDate.map((ev) => (
+                <details key={ev.eventId} className="group">
+                  <summary className="flex cursor-pointer list-none items-center gap-3 p-3 [&::-webkit-details-marker]:hidden">
+                    <span className="grid size-9 shrink-0 place-items-center rounded-full bg-primary/10 text-[13px] font-bold text-primary">
+                      {dm(ev.startsAt)}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium">{ev.title}</span>
+                      <span className="text-[13px] text-muted-foreground">{ev.rows.length} escalado{ev.rows.length === 1 ? "" : "s"}</span>
+                    </div>
+                    <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+                  </summary>
+                  <ul className="space-y-1.5 px-3 pb-3 pl-[60px]">
+                    {ev.rows.map((r, i) => (
+                      <li key={i} className="text-sm">
+                        <span className="text-muted-foreground">{r.positionName}</span>
+                        <span className="font-medium"> · {r.profileName}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              ))
+            )}
+          </Card>
+        )}
       </div>
     </>
   );
