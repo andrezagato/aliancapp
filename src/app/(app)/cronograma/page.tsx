@@ -1,12 +1,13 @@
 import Link from "next/link";
-import { CalendarDays, ChevronRight } from "lucide-react";
+import { CalendarDays, ChevronRight, ChevronLeft } from "lucide-react";
 import { TopBar } from "@/components/app-shell/top-bar";
 import { Card } from "@/components/ui/card";
 import { RundownGrid } from "@/components/rundown-grid";
 import { EventFilesCard } from "@/components/event-files-card";
 import { getSession } from "@/lib/auth";
 import { listUpcomingEvents, getEventRundown, listRundownKinds, listRundownTemplates, getRundownState, estouEscaladoNoEvento, getPastaEvento } from "@/lib/data";
-import { fmtEventWhen } from "@/lib/format";
+import { fmtEventWhen, fmtWeekdayShort, fmtDayMonthShort } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 export default async function CronogramaPage({ searchParams }: { searchParams: Promise<{ ev?: string }> }) {
   const session = await getSession();
@@ -24,7 +25,10 @@ export default async function CronogramaPage({ searchParams }: { searchParams: P
   const [rundown, kinds, templates] = ev
     ? await Promise.all([getEventRundown(ev.id), listRundownKinds(), listRundownTemplates()])
     : [[], await listRundownKinds(), []];
-  const proximos = upcoming.filter((e, i) => i !== idx && !states[i].endedAt);
+  const allOpen = upcoming.filter((_, i) => !states[i].endedAt);
+  const activePos = ev ? allOpen.findIndex((e) => e.id === ev.id) : -1;
+  const prevEv = activePos > 0 ? allOpen[activePos - 1] : null;
+  const nextEv = activePos >= 0 && activePos < allOpen.length - 1 ? allOpen[activePos + 1] : null;
   // Estrutura: só admin + Produção (equipe manages_rundown). Conteúdo (link/info
   // por bloco): quem está escalado no evento.
   const canEdit = session.role === "admin" || session.profile.teams.some((t) => t.manages_rundown);
@@ -37,6 +41,57 @@ export default async function CronogramaPage({ searchParams }: { searchParams: P
       <div className="animate-fade-in space-y-3 py-3">
         {ev ? (
           <>
+            {/* Faixa de eventos — desliza na horizontal + setas; troca o cronograma abaixo */}
+            {allOpen.length > 1 ? (
+              <div className="flex items-center gap-1">
+                {prevEv ? (
+                  <Link
+                    href={`/cronograma?ev=${prevEv.id}`}
+                    aria-label="Culto anterior"
+                    className="inline-flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted"
+                  >
+                    <ChevronLeft className="size-5" />
+                  </Link>
+                ) : (
+                  <span className="size-9 shrink-0" />
+                )}
+                <div className="flex flex-1 snap-x gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                  {allOpen.map((e) => {
+                    const on = e.id === ev.id;
+                    return (
+                      <Link
+                        key={e.id}
+                        href={`/cronograma?ev=${e.id}`}
+                        aria-current={on ? "true" : undefined}
+                        className={cn(
+                          "flex shrink-0 snap-start flex-col rounded-2xl border px-3.5 py-2",
+                          on ? "border-primary bg-primary/10" : "border-border bg-card",
+                        )}
+                      >
+                        <span className={cn("max-w-[10rem] truncate text-[13px] font-bold", on ? "text-primary" : "text-foreground")}>
+                          {e.title}
+                        </span>
+                        <span className="text-[11px] capitalize text-muted-foreground">
+                          {fmtWeekdayShort(e.starts_at)} · {fmtDayMonthShort(e.starts_at)}
+                        </span>
+                      </Link>
+                    );
+                  })}
+                </div>
+                {nextEv ? (
+                  <Link
+                    href={`/cronograma?ev=${nextEv.id}`}
+                    aria-label="Próximo culto"
+                    className="inline-flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted"
+                  >
+                    <ChevronRight className="size-5" />
+                  </Link>
+                ) : (
+                  <span className="size-9 shrink-0" />
+                )}
+              </div>
+            ) : null}
+
             {/* Culto + ordem do culto na MESMA caixa, pra deixar claro o vínculo */}
             <div className="overflow-hidden rounded-2xl border border-border bg-card">
               <div className="flex items-center gap-3 border-b border-border bg-primary/[0.06] p-3">
@@ -70,31 +125,6 @@ export default async function CronogramaPage({ searchParams }: { searchParams: P
               </div>
             </div>
 
-            {proximos.length > 0 ? (
-              <section>
-                <h3 className="mb-2 px-1 text-base font-semibold">Próximos cultos</h3>
-                <Card>
-                  <ul className="divide-y divide-border">
-                    {proximos.map((e) => (
-                      <li key={e.id}>
-                        <Link href={`/cronograma?ev=${e.id}`} className="press-sm flex items-center gap-3 p-4">
-                          <span className="grid size-9 shrink-0 place-items-center rounded-[11px] bg-primary/10 text-primary">
-                            <CalendarDays className="size-[18px]" />
-                          </span>
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate font-medium">{e.title}</span>
-                            <span className="block truncate text-sm capitalize text-muted-foreground">
-                              {fmtEventWhen(e.starts_at)}
-                            </span>
-                          </span>
-                          <ChevronRight className="size-5 shrink-0 text-muted-foreground/50" />
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                </Card>
-              </section>
-            ) : null}
           </>
         ) : (
           <Card className="border-dashed">
