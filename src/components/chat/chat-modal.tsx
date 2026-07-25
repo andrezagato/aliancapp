@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Megaphone, Users, CalendarDays, Bell, BellOff, Send } from "lucide-react";
+import { Megaphone, Users, CalendarDays, Bell, BellOff, Send, Trash2 } from "lucide-react";
 import { Modal } from "@/components/modal";
 import { Avatar } from "@/components/ui/avatar";
 import { useToast } from "@/components/ui/toast";
 import { createClient } from "@/lib/supabase/client";
-import { enviarMensagemChat, silenciarCanalChat } from "@/lib/actions";
+import { enviarMensagemChat, silenciarCanalChat, apagarMensagemChat } from "@/lib/actions";
 import { fmtTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { CanalChat, ChatMessageView } from "@/lib/chat";
@@ -14,9 +14,9 @@ import type { CanalChat, ChatMessageView } from "@/lib/chat";
 type Role = "admin" | "leader" | "volunteer";
 type Tab = "geral" | "eventos" | "equipes";
 
-/** Só admin/líder posta em Avisos; nos demais canais quem enxerga o canal posta. */
+/** Só admin posta em Avisos; nos demais canais quem enxerga o canal posta. */
 function canPost(type: string, role: Role): boolean {
-  if (type === "avisos") return role === "admin" || role === "leader";
+  if (type === "avisos") return role === "admin";
   return true;
 }
 
@@ -127,6 +127,7 @@ export function ChatModal({
               channel={active}
               meId={meId}
               canPost={canPost(active.type, role)}
+              canDelete={role === "admin"}
               onMuteChange={onMuteChange}
             />
           ) : (
@@ -226,11 +227,13 @@ function Conversation({
   channel,
   meId,
   canPost,
+  canDelete,
   onMuteChange,
 }: {
   channel: CanalChat;
   meId: string;
   canPost: boolean;
+  canDelete: boolean;
   onMuteChange: (type: string, ref: string, muted: boolean) => void;
 }) {
   const { showToast } = useToast();
@@ -343,6 +346,16 @@ function Conversation({
           scrollToEnd();
         },
       )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "chat_messages" },
+        (payload) => {
+          // O payload de DELETE só traz a PK (id). Remove por id se estiver na lista.
+          const id = (payload.old as { id?: string })?.id;
+          if (!id || !alive) return;
+          setMsgs((prev) => prev.filter((x) => x.id !== id));
+        },
+      )
       .subscribe();
 
     return () => {
@@ -362,6 +375,17 @@ function Conversation({
       setText("");
       scrollToEnd(); // a mensagem volta pelo Realtime
     } else {
+      showToast(r.error);
+    }
+  };
+
+  const apagar = async (id: string) => {
+    if (!window.confirm("Apagar esta mensagem para todos?")) return;
+    const prev = msgs;
+    setMsgs((cur) => cur.filter((x) => x.id !== id)); // otimista
+    const r = await apagarMensagemChat(id);
+    if (!r.ok) {
+      setMsgs(prev); // desfaz
       showToast(r.error);
     }
   };
@@ -406,7 +430,7 @@ function Conversation({
               !!prev &&
               prev.senderId === m.senderId &&
               new Date(m.createdAt).getTime() - new Date(prev.createdAt).getTime() < 5 * 60 * 1000;
-            return <Bubble key={m.id} m={m} grouped={grouped} />;
+            return <Bubble key={m.id} m={m} grouped={grouped} canDelete={canDelete} onDelete={apagar} />;
           })
         )}
       </div>
@@ -438,18 +462,41 @@ function Conversation({
         </div>
       ) : (
         <p className="mt-1 border-t border-border/70 pt-3 text-center text-[13px] text-muted-foreground">
-          Só a liderança publica avisos aqui.
+          Só a administração publica avisos aqui.
         </p>
       )}
     </div>
   );
 }
 
-function Bubble({ m, grouped }: { m: ChatMessageView; grouped: boolean }) {
+function DeleteBtn({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      aria-label="Apagar mensagem"
+      className="press-sm grid size-7 shrink-0 place-items-center rounded-full text-muted-foreground/60 hover:text-destructive"
+    >
+      <Trash2 className="size-[15px]" />
+    </button>
+  );
+}
+
+function Bubble({
+  m,
+  grouped,
+  canDelete,
+  onDelete,
+}: {
+  m: ChatMessageView;
+  grouped: boolean;
+  canDelete: boolean;
+  onDelete: (id: string) => void;
+}) {
   const time = fmtTime(m.createdAt);
   if (m.mine) {
     return (
-      <div className={cn("flex justify-end", grouped ? "mt-0.5" : "mt-2")}>
+      <div className={cn("flex items-center justify-end gap-1", grouped ? "mt-0.5" : "mt-2")}>
+        {canDelete ? <DeleteBtn onClick={() => onDelete(m.id)} /> : null}
         <div className="flex max-w-[80%] items-end gap-1.5 rounded-[16px] rounded-br-[5px] bg-primary px-3 py-1.5 text-[15px] leading-snug text-primary-foreground">
           <p className="min-w-0 whitespace-pre-wrap break-words">{m.body}</p>
           <span className="shrink-0 pb-0.5 text-[10px] leading-none opacity-70">{time}</span>
@@ -458,8 +505,8 @@ function Bubble({ m, grouped }: { m: ChatMessageView; grouped: boolean }) {
     );
   }
   return (
-    <div className={cn("flex items-end gap-2", grouped ? "mt-0.5" : "mt-2")}>
-      <span className="w-8 shrink-0">
+    <div className={cn("flex items-center gap-2", grouped ? "mt-0.5" : "mt-2")}>
+      <span className="w-8 shrink-0 self-end">
         {grouped ? null : <Avatar name={m.senderName} src={m.senderAvatar} className="size-8" />}
       </span>
       <div className="max-w-[80%] rounded-[16px] rounded-bl-[5px] bg-muted px-3 py-1.5 text-[15px] leading-snug text-foreground">
@@ -469,6 +516,7 @@ function Bubble({ m, grouped }: { m: ChatMessageView; grouped: boolean }) {
           <span className="shrink-0 pb-0.5 text-[10px] leading-none text-muted-foreground">{time}</span>
         </div>
       </div>
+      {canDelete ? <DeleteBtn onClick={() => onDelete(m.id)} /> : null}
     </div>
   );
 }

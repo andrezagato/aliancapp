@@ -2505,6 +2505,17 @@ export async function enviarMensagemChat(
   return ok;
 }
 
+/** Apaga uma mensagem do chat. A RLS (chat_messages_delete) só deixa o autor ou
+ * um admin remover — aqui só chamamos; o banco é a fonte da verdade. */
+export async function apagarMensagemChat(id: string): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  const supabase = await createClient();
+  const { error } = await supabase.from("chat_messages").delete().eq("id", id);
+  if (error) return fail(error.message);
+  return ok;
+}
+
 /** Liga/desliga o silêncio do canal (update-then-insert p/ não resetar leitura). */
 export async function silenciarCanalChat(
   channelType: string,
