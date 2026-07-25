@@ -141,6 +141,7 @@ export function RundownGrid({
   templates,
   canEdit,
   canContribute,
+  actions,
 }: {
   eventId: string;
   startsAt: string;
@@ -151,6 +152,7 @@ export function RundownGrid({
   templates: RundownTemplate[];
   canEdit: boolean;
   canContribute: boolean;
+  actions?: React.ReactNode;
 }) {
   const router = useRouter();
   const { showToast } = useToast();
@@ -358,55 +360,58 @@ export function RundownGrid({
   return (
     <section>
       {/* Cabeçalho: início → fim + total + relógio ao vivo */}
-      <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2 px-0.5">
-        <div>
-          <h3 className="font-display text-lg font-bold leading-tight">Ordem do culto</h3>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-0.5">
+        <div className="min-w-0">
+          <h3 className="font-display text-xl font-extrabold leading-tight">Ordem do culto</h3>
           {list.length > 0 ? (
-            <p className="text-[13px] font-semibold tabular-nums text-muted-foreground">
+            <p className="text-sm font-semibold tabular-nums text-muted-foreground">
               {fmt(startedMs ?? plannedStartMs)} → <span className={cn(overFinish && "text-warning")}>{fmt(finishMs)}</span>
               <span className="font-normal"> · {totalMin} min</span>
             </p>
           ) : null}
         </div>
-        {list.length > 0 ? (
-          started ? (
-            <div className="flex items-center gap-1.5">
-              <div className={cn("flex items-center gap-2 rounded-full px-3 py-1.5", ended ? "bg-success/12" : "bg-destructive/10")}>
-                {ended ? null : <span className="size-2 animate-pulse rounded-full bg-destructive" />}
-                <span className={cn("text-[11px] font-extrabold uppercase tracking-wide", ended ? "text-success" : "text-destructive")}>
-                  {ended ? "Encerrado" : "Ao vivo"}
-                </span>
-                <span className={cn("text-xl font-extrabold tabular-nums leading-none", ended ? "text-success" : "text-destructive")}>
-                  {clock((liveNow ?? startedMs ?? 0) - (startedMs ?? 0))}
-                </span>
+        <div className="flex flex-wrap items-center gap-2">
+          {actions}
+          {list.length > 0 ? (
+            started ? (
+              <div className="flex items-center gap-1.5">
+                <div className={cn("flex items-center gap-2 rounded-full px-3.5 py-2", ended ? "bg-success/12" : "bg-destructive/10")}>
+                  {ended ? null : <span className="size-2.5 animate-pulse rounded-full bg-destructive" />}
+                  <span className={cn("text-[11px] font-extrabold uppercase tracking-wide", ended ? "text-success" : "text-destructive")}>
+                    {ended ? "Encerrado" : "Ao vivo"}
+                  </span>
+                  <span className={cn("text-3xl font-extrabold tabular-nums leading-none", ended ? "text-success" : "text-destructive")}>
+                    {clock((liveNow ?? startedMs ?? 0) - (startedMs ?? 0))}
+                  </span>
+                </div>
+                {canEdit && !ended ? (
+                  <button
+                    onClick={() => window.confirm("Encerrar o culto agora? O relógio para.") && encerrar()}
+                    className="press-sm inline-flex items-center gap-1 rounded-full border border-destructive/40 bg-destructive/10 px-2.5 py-1.5 text-[12px] font-bold text-destructive"
+                  >
+                    <Flag className="size-3.5" /> Encerrar
+                  </button>
+                ) : null}
+                {canEdit ? (
+                  <button
+                    onClick={() => window.confirm("Reiniciar o cronograma? Isso apaga o início, o encerramento e os checks.") && reset()}
+                    aria-label="Reiniciar"
+                    className="press-sm grid size-9 place-items-center rounded-full border border-border text-muted-foreground"
+                  >
+                    <RotateCcw className="size-4" />
+                  </button>
+                ) : null}
               </div>
-              {canEdit && !ended ? (
-                <button
-                  onClick={() => window.confirm("Encerrar o culto agora? O relógio para.") && encerrar()}
-                  className="press-sm inline-flex items-center gap-1 rounded-full border border-destructive/40 bg-destructive/10 px-2.5 py-1.5 text-[12px] font-bold text-destructive"
-                >
-                  <Flag className="size-3.5" /> Encerrar
-                </button>
-              ) : null}
-              {canEdit ? (
-                <button
-                  onClick={() => window.confirm("Reiniciar o cronograma? Isso apaga o início, o encerramento e os checks.") && reset()}
-                  aria-label="Reiniciar"
-                  className="press-sm grid size-9 place-items-center rounded-full border border-border text-muted-foreground"
-                >
-                  <RotateCcw className="size-4" />
-                </button>
-              ) : null}
-            </div>
-          ) : canEdit ? (
-            <button
-              onClick={() => window.confirm("Iniciar o culto agora? O relógio começa a rodar.") && start()}
-              className="press inline-flex items-center gap-1.5 rounded-full bg-primary px-3.5 py-1.5 text-sm font-extrabold text-primary-foreground"
-            >
-              <Play className="size-4 fill-current" /> Iniciar culto
-            </button>
-          ) : null
-        ) : null}
+            ) : canEdit ? (
+              <button
+                onClick={() => window.confirm("Iniciar o culto agora? O relógio começa a rodar.") && start()}
+                className="press inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-base font-extrabold text-primary-foreground"
+              >
+                <Play className="size-5 fill-current" /> Iniciar culto
+              </button>
+            ) : null
+          ) : null}
+        </div>
       </div>
 
       {canEdit && started && !ended && allDone ? (

@@ -2,48 +2,58 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { FolderOpen, Pencil, Plus, ExternalLink } from "lucide-react";
+import Link from "next/link";
+import { FolderOpen, ClipboardList, Settings } from "lucide-react";
 import { Modal } from "@/components/modal";
 import { useToast } from "@/components/ui/toast";
 import { definirPastaArquivos } from "@/lib/actions";
+import { cn } from "@/lib/utils";
 
 const inputCls = "w-full rounded-[12px] border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary";
+const btnCls = "press-sm grid size-9 shrink-0 place-items-center rounded-full border border-border";
 
 /**
- * "Arquivos do culto" — mostra o link de uma pasta compartilhada (OneDrive/Drive)
- * do evento pra todos os escalados. Admin/Produção (canEdit) vinculam/editam.
+ * Ações compactas do cronograma (mesma linha do cabeçalho "Ordem do culto"):
+ *  - pasta: abre a pasta de arquivos do culto (OneDrive/Drive), se vinculada;
+ *  - escala: vai pra escala do evento;
+ *  - engrenagem: config (hoje só vincula/edita a pasta; no futuro, mais).
  */
-export function EventFilesCard({ eventId, url, canEdit }: { eventId: string; url: string | null; canEdit: boolean }) {
+export function EventFilesCard({
+  eventId,
+  url,
+  canEdit,
+  escalaHref,
+}: {
+  eventId: string;
+  url: string | null;
+  canEdit: boolean;
+  escalaHref: string;
+}) {
   const [editing, setEditing] = useState(false);
-  if (!url && !canEdit) return null;
 
   return (
-    <div className="mb-3 flex items-center gap-2.5 rounded-2xl border border-border bg-muted/30 p-3">
-      <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
-        <FolderOpen className="size-5" />
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-semibold leading-tight">Arquivos do culto</p>
-        {url ? (
-          <a
-            href={url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-[13px] font-semibold text-primary"
-          >
-            <ExternalLink className="size-3.5" /> Abrir pasta
-          </a>
-        ) : (
-          <p className="text-[13px] text-muted-foreground">Nenhuma pasta vinculada ainda.</p>
-        )}
-      </div>
+    <div className="flex items-center gap-1.5">
+      {url ? (
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Abrir pasta de arquivos do culto"
+          className={cn(btnCls, "text-primary")}
+        >
+          <FolderOpen className="size-[18px]" />
+        </a>
+      ) : null}
+      <Link href={escalaHref} aria-label="Ver a escala do evento" className={cn(btnCls, "text-primary")}>
+        <ClipboardList className="size-[18px]" />
+      </Link>
       {canEdit ? (
         <button
           onClick={() => setEditing(true)}
-          className="press-sm inline-flex shrink-0 items-center gap-1 rounded-full border border-border px-3 py-1.5 text-[13px] font-bold text-primary"
+          aria-label={url ? "Configurar cronograma / pasta" : "Vincular pasta de arquivos"}
+          className={cn(btnCls, "text-muted-foreground")}
         >
-          {url ? <Pencil className="size-3.5" /> : <Plus className="size-3.5" />}
-          {url ? "Editar" : "Vincular"}
+          <Settings className="size-[18px]" />
         </button>
       ) : null}
       {editing ? <EditModal eventId={eventId} url={url} onClose={() => setEditing(false)} /> : null}
