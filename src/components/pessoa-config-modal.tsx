@@ -2,14 +2,14 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Crown, X, Plus, ShieldCheck, Trash2, Cake } from "lucide-react";
+import { Crown, X, Plus, ShieldCheck, Trash2, Cake, MessageSquareText } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Modal } from "@/components/modal";
 import { TeamDot } from "@/components/coverage-badge";
 import { WhatsAppButton } from "@/components/whatsapp-button";
 import { cn, displayName } from "@/lib/utils";
-import { fmtBirthday } from "@/lib/format";
+import { fmtBirthday, fmtDayMonthShort } from "@/lib/format";
 import {
   adicionarMembro,
   removerMembro,
@@ -17,8 +17,9 @@ import {
   definirAdmin,
   excluirPessoa,
   atualizarPessoaAdmin,
+  carregarObservacoesPessoa,
 } from "@/lib/actions";
-import type { MemberRow } from "@/lib/data";
+import type { MemberRow, PersonObservation } from "@/lib/data";
 
 export type TeamOpt = { id: string; name: string; color: string };
 
@@ -48,6 +49,16 @@ export function PessoaConfigModal({
   const [pending, start] = useTransition();
   const [err, setErr] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+
+  // Observações da liderança sobre a pessoa (só admin lê aqui; carrega ao abrir).
+  const [obs, setObs] = useState<PersonObservation[] | null>(null);
+  useEffect(() => {
+    if (!open || !isAdmin) return;
+    setObs(null);
+    carregarObservacoesPessoa(person.id)
+      .then(setObs)
+      .catch(() => setObs([]));
+  }, [open, isAdmin, person.id]);
 
   // Edição de dados (admin): nome/telefone/e-mail, pré-preenchidos com a pessoa.
   const [nome, setNome] = useState(person.fullName);
@@ -234,6 +245,25 @@ export function PessoaConfigModal({
         ) : null}
 
         {err ? <p className="text-sm font-medium text-destructive">{err}</p> : null}
+
+        {isAdmin && obs && obs.length > 0 ? (
+          <div className="space-y-1.5 border-t border-border/60 pt-3">
+            <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              <MessageSquareText className="size-3.5" /> Observações da liderança
+            </p>
+            <div className="space-y-2">
+              {obs.map((o) => (
+                <div key={o.id} className="rounded-xl border border-border bg-muted/40 px-3 py-2">
+                  <p className="text-sm leading-snug text-foreground">{o.note}</p>
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    {o.authorName} · {o.eventTitle}
+                    {o.startsAt ? ` · ${fmtDayMonthShort(o.startsAt)}` : ""}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         {isAdmin && !isSelf ? (
           <div className="border-t border-border/60 pt-3">

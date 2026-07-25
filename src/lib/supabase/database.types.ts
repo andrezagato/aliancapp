@@ -387,6 +387,120 @@ export type Database = {
           },
         ]
       }
+      culto_avaliacoes: {
+        Row: {
+          author_id: string
+          church_id: string
+          created_at: string
+          event_id: string
+          id: string
+          rating: number
+          updated_at: string
+        }
+        Insert: {
+          author_id: string
+          church_id: string
+          created_at?: string
+          event_id: string
+          id?: string
+          rating: number
+          updated_at?: string
+        }
+        Update: {
+          author_id?: string
+          church_id?: string
+          created_at?: string
+          event_id?: string
+          id?: string
+          rating?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "culto_avaliacoes_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "culto_avaliacoes_church_id_fkey"
+            columns: ["church_id"]
+            isOneToOne: false
+            referencedRelation: "churches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "culto_avaliacoes_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pessoa_observacoes: {
+        Row: {
+          author_id: string
+          church_id: string
+          created_at: string
+          event_id: string
+          id: string
+          note: string
+          subject_id: string
+          updated_at: string
+        }
+        Insert: {
+          author_id: string
+          church_id: string
+          created_at?: string
+          event_id: string
+          id?: string
+          note: string
+          subject_id: string
+          updated_at?: string
+        }
+        Update: {
+          author_id?: string
+          church_id?: string
+          created_at?: string
+          event_id?: string
+          id?: string
+          note?: string
+          subject_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pessoa_observacoes_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pessoa_observacoes_church_id_fkey"
+            columns: ["church_id"]
+            isOneToOne: false
+            referencedRelation: "churches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pessoa_observacoes_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pessoa_observacoes_subject_id_fkey"
+            columns: ["subject_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       event_requests: {
         Row: {
           church_id: string

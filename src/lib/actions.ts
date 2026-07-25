@@ -10,8 +10,12 @@ import {
   listChurchProfiles,
   listTeams,
   syncAchievements,
+  getEventReviewData,
+  getPersonObservations,
   type EligibleMember,
   type DetailTeam,
+  type EventReviewData,
+  type PersonObservation,
 } from "@/lib/data";
 import { BADGE_BY_CODE, type UnlockedBadge } from "@/lib/achievements";
 import { logActivity } from "@/lib/activity";
@@ -311,6 +315,84 @@ export async function enviarFeedback(
   const unlocked = await notificarConquistas(session);
   revalidatePath("/inicio");
   return { ok: true, unlocked };
+}
+
+// =============================================================================
+// AVALIAÇÃO DA EQUIPE (o líder avalia o culto + observa cada pessoa)
+// =============================================================================
+function podeAvaliarEquipe(session: Session): boolean {
+  return session.role === "admin" || session.profile.teams.some((t) => t.role === "leader");
+}
+
+/** Nota 1-5 do culto (uma por líder/culto). */
+export async function salvarAvaliacaoCulto(eventId: string, rating: number): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  const churchId = session.profile.church_id;
+  if (!churchId) return fail("Sessão sem igreja.");
+  if (!podeAvaliarEquipe(session)) return fail("Só a liderança avalia a equipe.");
+  if (rating < 1 || rating > 5) return fail("Escolha de 1 a 5 estrelas.");
+  const supabase = await createClient();
+  const { error } = await supabase.from("culto_avaliacoes").upsert(
+    { church_id: churchId, event_id: eventId, author_id: session.userId, rating, updated_at: new Date().toISOString() },
+    { onConflict: "event_id,author_id" },
+  );
+  if (error) return fail(error.message);
+  revalidatePath("/inicio");
+  revalidatePath("/cronograma");
+  return ok;
+}
+
+/** Observação sobre uma pessoa que serviu (texto vazio apaga). */
+export async function salvarObservacaoPessoa(
+  eventId: string,
+  subjectId: string,
+  note: string,
+): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  const churchId = session.profile.church_id;
+  if (!churchId) return fail("Sessão sem igreja.");
+  if (!podeAvaliarEquipe(session)) return fail("Só a liderança avalia a equipe.");
+  const supabase = await createClient();
+  const texto = note.trim();
+  if (!texto) {
+    const { error } = await supabase
+      .from("pessoa_observacoes")
+      .delete()
+      .eq("event_id", eventId)
+      .eq("author_id", session.userId)
+      .eq("subject_id", subjectId);
+    if (error) return fail(error.message);
+    return ok;
+  }
+  const { error } = await supabase.from("pessoa_observacoes").upsert(
+    {
+      church_id: churchId,
+      event_id: eventId,
+      author_id: session.userId,
+      subject_id: subjectId,
+      note: texto,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "event_id,author_id,subject_id" },
+  );
+  if (error) return fail(error.message);
+  return ok;
+}
+
+/** Wrapper de leitura pro modal de revisão (client → server). */
+export async function carregarRevisaoEvento(eventId: string): Promise<EventReviewData | null> {
+  const session = await getSession();
+  if (!session) return null;
+  return getEventReviewData(session, eventId);
+}
+
+/** Observações da liderança sobre uma pessoa (a RLS filtra: autor ou admin). */
+export async function carregarObservacoesPessoa(subjectId: string): Promise<PersonObservation[]> {
+  const session = await getSession();
+  if (!session) return [];
+  return getPersonObservations(subjectId);
 }
 
 // =============================================================================

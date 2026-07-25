@@ -30,6 +30,7 @@ import {
   getMyOpenInterests,
   getMyNextResponsibleEvent,
   getPendingFeedback,
+  getPendingTeamReviews,
   getMyEventRequests,
   getTeamCare,
   getTeamAchievements,
@@ -52,6 +53,7 @@ import { InteresseButton, InteresseResolveButton } from "@/components/interesse-
 import { VolunteerHome } from "@/components/home/volunteer-home";
 import { FeedbackPrompt } from "@/components/feedback-prompt";
 import { ProfilePrompt } from "@/components/home/profile-prompt";
+import { TeamReviewPrompt } from "@/components/team-review";
 import { NextEventHero } from "@/components/home/next-event-hero";
 import { AdminMonthOverview } from "@/components/home/admin-month-overview";
 import { TeamCalendar } from "@/components/home/team-calendar";
@@ -135,9 +137,11 @@ export default async function InicioPage({
   }
 
   // Líder: foco no próximo culto da equipe e nas próximas escalas.
+  const pendingReviews = await getPendingTeamReviews(session);
   return (
     <HomeShell title={`${greeting()}, ${first}`} subtitle={roleLabel} userName={userName}>
       {respHero}
+      <TeamReviewPrompt pending={pendingReviews} />
       <SwapInbox items={swaps} />
       <ResponsibleConfirm events={respEvents} />
       <LeaderSection hideHeroForEventId={myResponsibleEvent?.id ?? null} />

@@ -696,6 +696,146 @@ export async function getPendingFeedback(session: Session): Promise<PendingFeedb
 }
 
 // =============================================================================
+// AVALIAÇÃO DA EQUIPE (o LÍDER avalia o culto + observa cada pessoa) — privado
+// =============================================================================
+export type PendingTeamReview = { eventId: string; title: string; startsAt: string };
+
+/** Cultos encerrados (14d) com gente da equipe do líder que ele ainda não avaliou.
+ * Admin: todos os cultos encerrados recentes ainda sem a nota dele. */
+export async function getPendingTeamReviews(session: Session): Promise<PendingTeamReview[]> {
+  const isAdmin = session.role === "admin";
+  const leadIds = session.profile.teams.filter((t) => t.role === "leader").map((t) => t.id);
+  if (!isAdmin && leadIds.length === 0) return [];
+  const supabase = await createClient();
+  const since = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
+
+  let q = supabase
+    .from("assignments")
+    .select("event_id, team_id, status, events!inner ( title, starts_at, rundown_ended_at, archived_at )")
+    .in("status", ["confirmado", "presente"])
+    .gte("events.starts_at", since)
+    .not("events.rundown_ended_at", "is", null);
+  if (!isAdmin) q = q.in("team_id", leadIds);
+  const { data } = await q;
+  const rows = (data ?? []) as {
+    event_id: string;
+    events: { title: string; starts_at: string; archived_at: string | null } | null;
+  }[];
+  const byEvent = new Map<string, { title: string; startsAt: string }>();
+  for (const r of rows) {
+    if (r.events && !r.events.archived_at && !byEvent.has(r.event_id))
+      byEvent.set(r.event_id, { title: r.events.title, startsAt: r.events.starts_at });
+  }
+  if (byEvent.size === 0) return [];
+  const { data: done } = await supabase
+    .from("culto_avaliacoes")
+    .select("event_id")
+    .eq("author_id", session.userId)
+    .in("event_id", [...byEvent.keys()]);
+  const doneSet = new Set((done ?? []).map((d) => d.event_id));
+  return [...byEvent.entries()]
+    .filter(([id]) => !doneSet.has(id))
+    .map(([eventId, v]) => ({ eventId, title: v.title, startsAt: v.startsAt }))
+    .sort((a, b) => (a.startsAt < b.startsAt ? 1 : -1));
+}
+
+export type ReviewPerson = { profileId: string; name: string; teamName: string; note: string };
+export type EventReviewData = {
+  eventId: string;
+  title: string;
+  startsAt: string;
+  myRating: number | null;
+  people: ReviewPerson[];
+};
+
+/** Dados pro modal de revisão: pessoas que serviram (equipes do líder, ou todas
+ * se admin) + a nota e as observações que ESTE autor já gravou. */
+export async function getEventReviewData(session: Session, eventId: string): Promise<EventReviewData | null> {
+  const isAdmin = session.role === "admin";
+  const leadIds = session.profile.teams.filter((t) => t.role === "leader").map((t) => t.id);
+  if (!isAdmin && leadIds.length === 0) return null;
+  const supabase = await createClient();
+
+  const { data: ev } = await supabase.from("events").select("title, starts_at").eq("id", eventId).maybeSingle();
+  if (!ev) return null;
+
+  let aq = supabase
+    .from("assignments")
+    .select("profile_id, team_id, status, profile:profiles ( id, full_name, nickname ), team:teams ( name )")
+    .eq("event_id", eventId)
+    .in("status", ["confirmado", "presente"]);
+  if (!isAdmin) aq = aq.in("team_id", leadIds);
+
+  const [{ data: asg }, { data: rating }, { data: obs }] = await Promise.all([
+    aq,
+    supabase
+      .from("culto_avaliacoes")
+      .select("rating")
+      .eq("event_id", eventId)
+      .eq("author_id", session.userId)
+      .maybeSingle(),
+    supabase.from("pessoa_observacoes").select("subject_id, note").eq("event_id", eventId).eq("author_id", session.userId),
+  ]);
+
+  const noteMap = new Map((obs ?? []).map((o) => [o.subject_id, o.note]));
+  const seen = new Set<string>();
+  const people: ReviewPerson[] = [];
+  for (const a of (asg ?? []) as {
+    profile_id: string | null;
+    profile: { id: string; full_name: string | null; nickname: string | null } | null;
+    team: { name: string } | null;
+  }[]) {
+    const pid = a.profile?.id ?? a.profile_id;
+    if (!pid || seen.has(pid)) continue;
+    seen.add(pid);
+    people.push({
+      profileId: pid,
+      name: a.profile?.nickname || a.profile?.full_name || "Alguém",
+      teamName: a.team?.name ?? "",
+      note: noteMap.get(pid) ?? "",
+    });
+  }
+  people.sort((a, b) => a.name.localeCompare(b.name));
+  return { eventId, title: ev.title, startsAt: ev.starts_at, myRating: rating?.rating ?? null, people };
+}
+
+export type PersonObservation = {
+  id: string;
+  note: string;
+  authorName: string;
+  eventTitle: string;
+  startsAt: string;
+  createdAt: string;
+};
+
+/** Observações da liderança SOBRE uma pessoa (lido no modal da pessoa). A RLS só
+ * devolve as do próprio autor ou tudo se admin. */
+export async function getPersonObservations(subjectId: string): Promise<PersonObservation[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("pessoa_observacoes")
+    .select(
+      "id, note, created_at, author:profiles!pessoa_observacoes_author_id_fkey ( full_name, nickname ), event:events ( title, starts_at )",
+    )
+    .eq("subject_id", subjectId)
+    .order("created_at", { ascending: false });
+  return ((data ?? []) as {
+    id: string;
+    note: string;
+    created_at: string;
+    author: { full_name: string | null; nickname: string | null } | null;
+    event: { title: string; starts_at: string } | null;
+  }[]).map((r) => ({
+    id: r.id,
+    note: r.note,
+    authorName: r.author?.nickname || r.author?.full_name || "Liderança",
+    eventTitle: r.event?.title ?? "Culto",
+    startsAt: r.event?.starts_at ?? "",
+    createdAt: r.created_at,
+  }));
+}
+
+// =============================================================================
 // CUIDADO COM A EQUIPE (visão do líder — quem carrega muito / sumiu / celebra)
 // =============================================================================
 export type TeamCareMember = { personName: string; served90: number; lastServedAt: string | null };
