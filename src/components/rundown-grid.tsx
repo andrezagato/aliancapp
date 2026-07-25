@@ -183,6 +183,10 @@ export function RundownGrid({
   const dragRef = useRef<Drag>(null);
   dragRef.current = drag;
   const itemRefs = useRef(new Map<string, HTMLElement>());
+  // Trava síncrona: engole o "click fantasma" que o navegador dispara logo após
+  // arrastar/redimensionar (o pointerup zera o drag antes do click chegar, então
+  // só o guard `!drag` não segura — daí o modal abrir sem querer).
+  const suppressClickRef = useRef(false);
 
   const colorOf = useCallback(
     (it: RundownItem) => it.color ?? kinds.find((k) => k.label === it.kind)?.color ?? DEFAULT_COLOR,
@@ -270,6 +274,11 @@ export function RundownGrid({
     const d = dragRef.current;
     window.removeEventListener("pointermove", onPointerMove);
     setDrag(null);
+    // Mantém a trava por um instante: o click sintético do fim do gesto chega
+    // logo depois deste pointerup; limpamos em seguida pra taps normais valerem.
+    window.setTimeout(() => {
+      suppressClickRef.current = false;
+    }, 60);
     if (!d) return;
     if (d.mode === "resize") {
       const it = listRef.current.find((x) => x.id === d.id);
@@ -285,6 +294,7 @@ export function RundownGrid({
   const beginResize = (e: React.PointerEvent, it: RundownItem) => {
     e.preventDefault();
     e.stopPropagation();
+    suppressClickRef.current = true;
     setDrag({ mode: "resize", id: it.id, startY: e.clientY, startDur: it.durationMin, newDur: it.durationMin });
     window.addEventListener("pointermove", onPointerMove);
     window.addEventListener("pointerup", onPointerUp, { once: true });
@@ -292,6 +302,7 @@ export function RundownGrid({
   const beginReorder = (e: React.PointerEvent, it: RundownItem) => {
     e.preventDefault();
     e.stopPropagation();
+    suppressClickRef.current = true;
     setDrag({ mode: "reorder", id: it.id });
     window.addEventListener("pointermove", onPointerMove);
     window.addEventListener("pointerup", onPointerUp, { once: true });
@@ -459,7 +470,11 @@ export function RundownGrid({
                 {/* Card */}
                 <div
                   style={{ minHeight: heightOf(it.durationMin) }}
-                  onClick={() => (canEdit ? !drag && setEditing(it) : canContribute && setContributing(it))}
+                  onClick={() => {
+                    if (drag || suppressClickRef.current) return;
+                    if (canEdit) setEditing(it);
+                    else if (canContribute) setContributing(it);
+                  }}
                   className={cn(
                     "relative flex min-w-0 flex-1 items-stretch overflow-hidden rounded-2xl border bg-card transition-[box-shadow,transform,opacity,background-color]",
                     (canEdit || canContribute) && "cursor-pointer",
