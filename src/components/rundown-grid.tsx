@@ -350,6 +350,20 @@ export function RundownGrid({
       }
     });
   };
+
+  // Ao ticar o ÚLTIMO bloco (allDone vira true), oferece encerrar na hora — mesma
+  // pergunta do botão Encerrar — pra não precisar rolar de volta ao topo.
+  const wasAllDone = useRef(allDone);
+  useEffect(() => {
+    if (!wasAllDone.current && allDone && canEdit && started && !ended) {
+      if (window.confirm("Todos os blocos foram concluídos. Encerrar o culto agora?")) {
+        encerrar();
+      }
+    }
+    wasAllDone.current = allDone;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allDone, canEdit, started, ended]);
+
   const remove = (id: string) =>
     startTx(async () => {
       const r = await removerBlocoCronograma(id, eventId);
