@@ -141,6 +141,7 @@ export function RundownGrid({
   templates,
   canEdit,
   canContribute,
+  actions,
 }: {
   eventId: string;
   startsAt: string;
@@ -151,6 +152,7 @@ export function RundownGrid({
   templates: RundownTemplate[];
   canEdit: boolean;
   canContribute: boolean;
+  actions?: React.ReactNode;
 }) {
   const router = useRouter();
   const { showToast } = useToast();
@@ -183,6 +185,10 @@ export function RundownGrid({
   const dragRef = useRef<Drag>(null);
   dragRef.current = drag;
   const itemRefs = useRef(new Map<string, HTMLElement>());
+  // Trava síncrona: engole o "click fantasma" que o navegador dispara logo após
+  // arrastar/redimensionar (o pointerup zera o drag antes do click chegar, então
+  // só o guard `!drag` não segura — daí o modal abrir sem querer).
+  const suppressClickRef = useRef(false);
 
   const colorOf = useCallback(
     (it: RundownItem) => it.color ?? kinds.find((k) => k.label === it.kind)?.color ?? DEFAULT_COLOR,
@@ -270,6 +276,11 @@ export function RundownGrid({
     const d = dragRef.current;
     window.removeEventListener("pointermove", onPointerMove);
     setDrag(null);
+    // Mantém a trava por um instante: o click sintético do fim do gesto chega
+    // logo depois deste pointerup; limpamos em seguida pra taps normais valerem.
+    window.setTimeout(() => {
+      suppressClickRef.current = false;
+    }, 60);
     if (!d) return;
     if (d.mode === "resize") {
       const it = listRef.current.find((x) => x.id === d.id);
@@ -285,6 +296,7 @@ export function RundownGrid({
   const beginResize = (e: React.PointerEvent, it: RundownItem) => {
     e.preventDefault();
     e.stopPropagation();
+    suppressClickRef.current = true;
     setDrag({ mode: "resize", id: it.id, startY: e.clientY, startDur: it.durationMin, newDur: it.durationMin });
     window.addEventListener("pointermove", onPointerMove);
     window.addEventListener("pointerup", onPointerUp, { once: true });
@@ -292,6 +304,7 @@ export function RundownGrid({
   const beginReorder = (e: React.PointerEvent, it: RundownItem) => {
     e.preventDefault();
     e.stopPropagation();
+    suppressClickRef.current = true;
     setDrag({ mode: "reorder", id: it.id });
     window.addEventListener("pointermove", onPointerMove);
     window.addEventListener("pointerup", onPointerUp, { once: true });
@@ -337,6 +350,20 @@ export function RundownGrid({
       }
     });
   };
+
+  // Ao ticar o ÚLTIMO bloco (allDone vira true), oferece encerrar na hora — mesma
+  // pergunta do botão Encerrar — pra não precisar rolar de volta ao topo.
+  const wasAllDone = useRef(allDone);
+  useEffect(() => {
+    if (!wasAllDone.current && allDone && canEdit && started && !ended) {
+      if (window.confirm("Todos os blocos foram concluídos. Encerrar o culto agora?")) {
+        encerrar();
+      }
+    }
+    wasAllDone.current = allDone;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allDone, canEdit, started, ended]);
+
   const remove = (id: string) =>
     startTx(async () => {
       const r = await removerBlocoCronograma(id, eventId);
@@ -347,55 +374,58 @@ export function RundownGrid({
   return (
     <section>
       {/* Cabeçalho: início → fim + total + relógio ao vivo */}
-      <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2 px-0.5">
-        <div>
-          <h3 className="font-display text-lg font-bold leading-tight">Ordem do culto</h3>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-0.5">
+        <div className="min-w-0">
+          <h3 className="font-display text-xl font-extrabold leading-tight">Ordem do culto</h3>
           {list.length > 0 ? (
-            <p className="text-[13px] font-semibold tabular-nums text-muted-foreground">
+            <p className="text-sm font-semibold tabular-nums text-muted-foreground">
               {fmt(startedMs ?? plannedStartMs)} → <span className={cn(overFinish && "text-warning")}>{fmt(finishMs)}</span>
               <span className="font-normal"> · {totalMin} min</span>
             </p>
           ) : null}
         </div>
-        {list.length > 0 ? (
-          started ? (
-            <div className="flex items-center gap-1.5">
-              <div className={cn("flex items-center gap-2 rounded-full px-3 py-1.5", ended ? "bg-success/12" : "bg-destructive/10")}>
-                {ended ? null : <span className="size-2 animate-pulse rounded-full bg-destructive" />}
-                <span className={cn("text-[11px] font-extrabold uppercase tracking-wide", ended ? "text-success" : "text-destructive")}>
-                  {ended ? "Encerrado" : "Ao vivo"}
-                </span>
-                <span className={cn("text-xl font-extrabold tabular-nums leading-none", ended ? "text-success" : "text-destructive")}>
-                  {clock((liveNow ?? startedMs ?? 0) - (startedMs ?? 0))}
-                </span>
+        <div className="flex flex-wrap items-center gap-2">
+          {actions}
+          {list.length > 0 ? (
+            started ? (
+              <div className="flex items-center gap-1.5">
+                <div className={cn("flex items-center gap-2 rounded-full px-3.5 py-2", ended ? "bg-success/12" : "bg-destructive/10")}>
+                  {ended ? null : <span className="size-2.5 animate-pulse rounded-full bg-destructive" />}
+                  <span className={cn("text-[11px] font-extrabold uppercase tracking-wide", ended ? "text-success" : "text-destructive")}>
+                    {ended ? "Encerrado" : "Ao vivo"}
+                  </span>
+                  <span className={cn("text-3xl font-extrabold tabular-nums leading-none", ended ? "text-success" : "text-destructive")}>
+                    {clock((liveNow ?? startedMs ?? 0) - (startedMs ?? 0))}
+                  </span>
+                </div>
+                {canEdit && !ended ? (
+                  <button
+                    onClick={() => window.confirm("Encerrar o culto agora? O relógio para.") && encerrar()}
+                    className="press-sm inline-flex items-center gap-1 rounded-full border border-destructive/40 bg-destructive/10 px-2.5 py-1.5 text-[12px] font-bold text-destructive"
+                  >
+                    <Flag className="size-3.5" /> Encerrar
+                  </button>
+                ) : null}
+                {canEdit ? (
+                  <button
+                    onClick={() => window.confirm("Reiniciar o cronograma? Isso apaga o início, o encerramento e os checks.") && reset()}
+                    aria-label="Reiniciar"
+                    className="press-sm grid size-9 place-items-center rounded-full border border-border text-muted-foreground"
+                  >
+                    <RotateCcw className="size-4" />
+                  </button>
+                ) : null}
               </div>
-              {canEdit && !ended ? (
-                <button
-                  onClick={() => window.confirm("Encerrar o culto agora? O relógio para.") && encerrar()}
-                  className="press-sm inline-flex items-center gap-1 rounded-full border border-destructive/40 bg-destructive/10 px-2.5 py-1.5 text-[12px] font-bold text-destructive"
-                >
-                  <Flag className="size-3.5" /> Encerrar
-                </button>
-              ) : null}
-              {canEdit ? (
-                <button
-                  onClick={() => window.confirm("Reiniciar o cronograma? Isso apaga o início, o encerramento e os checks.") && reset()}
-                  aria-label="Reiniciar"
-                  className="press-sm grid size-9 place-items-center rounded-full border border-border text-muted-foreground"
-                >
-                  <RotateCcw className="size-4" />
-                </button>
-              ) : null}
-            </div>
-          ) : canEdit ? (
-            <button
-              onClick={() => window.confirm("Iniciar o culto agora? O relógio começa a rodar.") && start()}
-              className="press inline-flex items-center gap-1.5 rounded-full bg-primary px-3.5 py-1.5 text-sm font-extrabold text-primary-foreground"
-            >
-              <Play className="size-4 fill-current" /> Iniciar culto
-            </button>
-          ) : null
-        ) : null}
+            ) : canEdit ? (
+              <button
+                onClick={() => window.confirm("Iniciar o culto agora? O relógio começa a rodar.") && start()}
+                className="press inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-base font-extrabold text-primary-foreground"
+              >
+                <Play className="size-5 fill-current" /> Iniciar culto
+              </button>
+            ) : null
+          ) : null}
+        </div>
       </div>
 
       {canEdit && started && !ended && allDone ? (
@@ -459,7 +489,11 @@ export function RundownGrid({
                 {/* Card */}
                 <div
                   style={{ minHeight: heightOf(it.durationMin) }}
-                  onClick={() => (canEdit ? !drag && setEditing(it) : canContribute && setContributing(it))}
+                  onClick={() => {
+                    if (drag || suppressClickRef.current) return;
+                    if (canEdit) setEditing(it);
+                    else if (canContribute) setContributing(it);
+                  }}
                   className={cn(
                     "relative flex min-w-0 flex-1 items-stretch overflow-hidden rounded-2xl border bg-card transition-[box-shadow,transform,opacity,background-color]",
                     (canEdit || canContribute) && "cursor-pointer",
