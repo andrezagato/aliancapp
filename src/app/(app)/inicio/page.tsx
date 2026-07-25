@@ -51,6 +51,7 @@ import { SwapInbox } from "@/components/swap-inbox";
 import { InteresseButton, InteresseResolveButton } from "@/components/interesse-controls";
 import { VolunteerHome } from "@/components/home/volunteer-home";
 import { FeedbackPrompt } from "@/components/feedback-prompt";
+import { ProfilePrompt } from "@/components/home/profile-prompt";
 import { NextEventHero } from "@/components/home/next-event-hero";
 import { AdminMonthOverview } from "@/components/home/admin-month-overview";
 import { TeamCalendar } from "@/components/home/team-calendar";
@@ -101,8 +102,15 @@ export default async function InicioPage({
       getMyUpcomingAssignments(session),
       getPendingFeedback(session),
     ]);
+    const p = session.profile;
+    const missingProfile = [
+      !p.avatar_url ? "sua foto" : null,
+      !p.phone ? "o telefone" : null,
+      !p.birth_date ? "a data de nascimento" : null,
+    ].filter((x): x is string => x !== null);
     return (
       <VolunteerHome title={`${greeting()}, ${first}`} subtitle={roleLabel} userName={userName} assignments={mine}>
+        <ProfilePrompt meId={session.userId} missing={missingProfile} />
         {respHero}
         <SwapInbox items={swaps} />
         <ResponsibleConfirm events={respEvents} />
