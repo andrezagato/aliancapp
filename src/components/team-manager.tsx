@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Check, X, Pencil, Archive, UserPlus, Crown, ChevronRight } from "lucide-react";
+import { Plus, Check, X, Pencil, Archive, UserPlus, Crown, ChevronRight, ChevronDown, ChevronsDownUp, ChevronsUpDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar } from "@/components/ui/avatar";
@@ -54,6 +54,40 @@ export function TeamManager({
   canCreateTeam: boolean;
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+
+  // Recolher/expandir equipes pra o admin escrolar menos. Estado por aparelho.
+  const storageKey = `equipes:collapsed:${meId}`;
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(storageKey);
+      if (raw) setCollapsed(new Set(JSON.parse(raw) as string[]));
+    } catch {
+      /* ignore */
+    }
+  }, [storageKey]);
+  const persistCollapsed = (s: Set<string>) => {
+    try {
+      localStorage.setItem(storageKey, JSON.stringify([...s]));
+    } catch {
+      /* ignore */
+    }
+  };
+  const toggleCollapse = (id: string) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      persistCollapsed(next);
+      return next;
+    });
+  const allCollapsed = teams.length > 0 && teams.every((t) => collapsed.has(t.id));
+  const toggleAll = () => {
+    const next = allCollapsed ? new Set<string>() : new Set(teams.map((t) => t.id));
+    setCollapsed(next);
+    persistCollapsed(next);
+  };
+
   const manageTeamOpts: TeamOpt[] = useMemo(
     () => teams.map((t) => ({ id: t.id, name: t.name, color: t.color })),
     [teams],
@@ -78,11 +112,32 @@ export function TeamManager({
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 lg:grid-cols-2">
-          {teams.map((team) => (
-            <TeamCard key={team.id} team={team} allProfiles={allProfiles} isAdmin={isAdmin} onOpenPerson={setOpenId} />
-          ))}
-        </div>
+        <>
+          {teams.length > 1 ? (
+            <div className="flex justify-end">
+              <button
+                onClick={toggleAll}
+                className="press-sm inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-[13px] font-semibold text-muted-foreground"
+              >
+                {allCollapsed ? <ChevronsUpDown className="size-4" /> : <ChevronsDownUp className="size-4" />}
+                {allCollapsed ? "Expandir todas" : "Recolher todas"}
+              </button>
+            </div>
+          ) : null}
+          <div className="grid gap-4 lg:grid-cols-2">
+            {teams.map((team) => (
+              <TeamCard
+                key={team.id}
+                team={team}
+                allProfiles={allProfiles}
+                isAdmin={isAdmin}
+                onOpenPerson={setOpenId}
+                collapsed={collapsed.has(team.id)}
+                onToggleCollapse={() => toggleCollapse(team.id)}
+              />
+            ))}
+          </div>
+        </>
       )}
 
       {isAdmin && noTeam.length > 0 ? (
@@ -181,7 +236,17 @@ function NovaEquipe() {
   );
 }
 
-function TeamHeader({ team, isAdmin }: { team: ManageableTeam; isAdmin: boolean }) {
+function TeamHeader({
+  team,
+  isAdmin,
+  collapsed,
+  onToggleCollapse,
+}: {
+  team: ManageableTeam;
+  isAdmin: boolean;
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
+}) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [editing, setEditing] = useState(false);
@@ -232,8 +297,20 @@ function TeamHeader({ team, isAdmin }: { team: ManageableTeam; isAdmin: boolean 
 
   return (
     <div className="flex items-center gap-2 border-b border-border p-4">
-      <TeamDot color={team.color} className="size-3" />
-      <h2 className="text-lg font-semibold">{team.name}</h2>
+      <button
+        type="button"
+        onClick={onToggleCollapse}
+        aria-label={collapsed ? "Expandir equipe" : "Recolher equipe"}
+        className="press-sm -ml-1 flex min-w-0 flex-1 items-center gap-2 text-left"
+      >
+        {collapsed ? (
+          <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+        ) : (
+          <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
+        )}
+        <TeamDot color={team.color} className="size-3" />
+        <h2 className="truncate text-lg font-semibold">{team.name}</h2>
+      </button>
       {isAdmin && confirming ? (
         <div className="ml-auto flex items-center gap-1">
           <Button size="sm" variant="destructive" onClick={archive} disabled={pending}>
@@ -356,15 +433,21 @@ function TeamCard({
   allProfiles,
   isAdmin,
   onOpenPerson,
+  collapsed,
+  onToggleCollapse,
 }: {
   team: ManageableTeam;
   allProfiles: Profile[];
   isAdmin: boolean;
   onOpenPerson: (profileId: string) => void;
+  collapsed: boolean;
+  onToggleCollapse: () => void;
 }) {
   return (
     <Card className="self-start">
-      <TeamHeader team={team} isAdmin={isAdmin} />
+      <TeamHeader team={team} isAdmin={isAdmin} collapsed={collapsed} onToggleCollapse={onToggleCollapse} />
+      {collapsed ? null : (
+        <>
       <TeamGroupControl team={team} isAdmin={isAdmin} />
 
       {/* Membros — tocar abre o modal de configuração */}
@@ -403,6 +486,8 @@ function TeamCard({
       <div className="p-3">
         <AddPosition teamId={team.id} existing={team.positions.map((p) => p.name.toLowerCase())} />
       </div>
+        </>
+      )}
     </Card>
   );
 }

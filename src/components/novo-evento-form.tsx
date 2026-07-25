@@ -34,9 +34,11 @@ function nextSundayISO(): string {
 export function NovoEventoForm({
   teams,
   templates,
+  initialDate,
 }: {
   teams: TeamWithPositions[];
   templates: EventTemplate[];
+  initialDate?: string;
 }) {
   const router = useRouter();
   const { showToast } = useToast();
@@ -44,7 +46,9 @@ export function NovoEventoForm({
   const [error, setError] = useState<string | null>(null);
 
   const [title, setTitle] = useState("");
-  const [date, setDate] = useState(nextSundayISO());
+  const [date, setDate] = useState(
+    /^\d{4}-\d{2}-\d{2}$/.test(initialDate ?? "") ? initialDate! : nextSundayISO(),
+  );
   const [time, setTime] = useState("18:00");
   const [callTime, setCallTime] = useState("");
   const [location, setLocation] = useState("");
