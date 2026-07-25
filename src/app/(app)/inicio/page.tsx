@@ -6,7 +6,6 @@ import {
   Sparkles,
   Cake,
   UserPlus,
-  Plus,
   Clock,
   CheckCircle2,
   AlertTriangle,
@@ -14,7 +13,6 @@ import {
 } from "lucide-react";
 import { HomeShell } from "@/components/app-shell/home-shell";
 import { Card, CardContent } from "@/components/ui/card";
-import { buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { STATUS_META } from "@/lib/status";
@@ -66,9 +64,14 @@ function greeting() {
   return "Boa noite";
 }
 
-export default async function InicioPage() {
+export default async function InicioPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ m?: string }>;
+}) {
   const session = await getSession();
   if (!session) return null;
+  const sp = await searchParams;
 
   const [swaps, respEvents, myInterests, teamsWithPos, myResponsibleEvent] = await Promise.all([
     getSwapsAwaitingMe(session),
@@ -117,7 +120,7 @@ export default async function InicioPage() {
     return (
       <HomeShell title={`${greeting()}, ${first}`} subtitle={roleLabel} userName={userName}>
         {respHero}
-        <AdminSection swaps={swaps} respEvents={respEvents} />
+        <AdminSection swaps={swaps} respEvents={respEvents} mes={sp.m} />
         <Birthdays />
       </HomeShell>
     );
@@ -417,19 +420,27 @@ async function LeaderSection({ hideHeroForEventId }: { hideHeroForEventId: strin
 async function AdminSection({
   swaps,
   respEvents,
+  mes,
 }: {
   swaps: SwapInboxItem[];
   respEvents: MyResponsibleEvent[];
+  mes?: string;
 }) {
   const session = (await getSession())!;
 
   const todayISO = churchDateISO(new Date().toISOString());
-  const y = Number(todayISO.slice(0, 4));
-  const m = Number(todayISO.slice(5, 7));
+  const monthStr = /^\d{4}-\d{2}$/.test(mes ?? "") ? mes! : todayISO.slice(0, 7);
+  const y = Number(monthStr.slice(0, 4));
+  const m = Number(monthStr.slice(5, 7));
   const fromIso = new Date(`${y}-${pad(m)}-01T00:00:00-03:00`).toISOString();
   const ny = m === 12 ? y + 1 : y;
   const nm = m === 12 ? 1 : m + 1;
   const toIso = new Date(`${ny}-${pad(nm)}-01T00:00:00-03:00`).toISOString();
+  const prevM = m === 1 ? `${y - 1}-12` : `${y}-${pad(m - 1)}`;
+  const nextM = m === 12 ? `${y + 1}-01` : `${y}-${pad(m + 1)}`;
+  const monthLabel = new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric", timeZone: "UTC" }).format(
+    new Date(Date.UTC(y, m - 1, 1)),
+  );
 
   const [home, monthEvents, upcoming, eventRequests] = await Promise.all([
     getAdminHome(session),
@@ -443,21 +454,19 @@ async function AdminSection({
 
   return (
     <>
-      {/* Calendário do mês — visão geral (toque num dia p/ ver os eventos) */}
+      {/* Calendário do mês — navegável, com "+" pra novo evento */}
       <section>
-        <h3 className="mb-2 px-1 text-base font-semibold">Veja o calendário do mês</h3>
-        <AdminMonthOverview year={y} month={m} events={monthEvents} eventDayISO={eventDayISO} todayISO={todayISO} />
+        <AdminMonthOverview
+          year={y}
+          month={m}
+          events={monthEvents}
+          eventDayISO={eventDayISO}
+          todayISO={todayISO}
+          monthLabel={monthLabel}
+          prevM={prevM}
+          nextM={nextM}
+        />
       </section>
-
-      {/* Ações principais do admin */}
-      <div className="grid grid-cols-2 gap-3">
-        <Link href="/escalas/novo" className={cn(buttonVariants(), "w-full")}>
-          <Plus className="size-4" /> Criar evento
-        </Link>
-        <Link href="/pessoas" className={cn(buttonVariants({ variant: "outline" }), "w-full")}>
-          <UserPlus className="size-4" /> Convidar alguém
-        </Link>
-      </div>
 
       {/* Aprovações pendentes — acionável */}
       {home.pendingJoinRequests > 0 ? (

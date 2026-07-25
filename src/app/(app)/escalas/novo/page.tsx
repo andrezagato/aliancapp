@@ -5,10 +5,15 @@ import { getSession } from "@/lib/auth";
 import { listTeamsWithPositions, listTemplates } from "@/lib/data";
 import { NovoEventoForm } from "@/components/novo-evento-form";
 
-export default async function NovoEventoPage() {
+export default async function NovoEventoPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ data?: string }>;
+}) {
   const session = await getSession();
   if (!session) return null;
   if (session.role !== "admin") redirect("/escalas");
+  const sp = await searchParams;
 
   const [teams, templates] = await Promise.all([listTeamsWithPositions(), listTemplates()]);
 
@@ -29,7 +34,7 @@ export default async function NovoEventoPage() {
           <LayoutTemplate className="size-4" /> Modelos
         </Link>
       </div>
-      <NovoEventoForm teams={teams} templates={templates} />
+      <NovoEventoForm teams={teams} templates={templates} initialDate={sp.data} />
     </div>
   );
 }
