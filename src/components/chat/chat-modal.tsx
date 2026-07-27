@@ -9,6 +9,7 @@ import { createClient } from "@/lib/supabase/client";
 import { enviarMensagemChat, silenciarCanalChat, apagarMensagemChat } from "@/lib/actions";
 import { fmtTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { useVisualViewport } from "@/lib/use-visual-viewport";
 import type { CanalChat, ChatMessageView } from "@/lib/chat";
 
 type Role = "admin" | "leader" | "volunteer";
@@ -99,9 +100,16 @@ export function ChatModal({
   const eventosUnread = eventos.reduce((s, c) => s + c.unread, 0);
   const equipesUnread = equipes.reduce((s, c) => s + c.unread, 0);
 
+  // Teclado virtual (iOS): sobe o sheet e encaixa a altura na área visível.
+  const { keyboard, viewportHeight } = useVisualViewport();
+  const kbOpen = keyboard > 0 && viewportHeight != null;
+
   return (
-    <Modal open onClose={onClose} sheet>
-      <div className="-mt-1 flex h-[80dvh] flex-col">
+    <Modal open onClose={onClose} sheet liftY={keyboard}>
+      <div
+        className="-mt-1 flex h-[80dvh] flex-col"
+        style={kbOpen ? { height: `calc(${viewportHeight}px - 56px)` } : undefined}
+      >
         <h3 className="mb-2 font-display text-[22px] font-extrabold leading-tight text-foreground">Conversas</h3>
 
         {/* Abas fixas de topo */}
@@ -446,6 +454,10 @@ function Conversation({
                 e.preventDefault();
                 send();
               }
+            }}
+            onFocus={() => {
+              // Deixa o teclado/viewport assentarem antes de rolar pro fim.
+              setTimeout(scrollToEnd, 300);
             }}
             rows={1}
             placeholder="Escreva uma mensagem…"

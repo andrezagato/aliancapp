@@ -86,14 +86,12 @@ export function EscalarDialog({
       <button
         type="button"
         onClick={openDialog}
-        className="press flex w-full items-center gap-2.5 rounded-[13px] border-[1.5px] border-dashed border-primary/35 bg-primary/[0.03] px-3 py-2.5 text-left text-primary"
+        className="press inline-flex items-center gap-1.5 rounded-full border-[1.5px] border-dashed border-primary/40 bg-primary/[0.03] px-3 py-1.5 text-primary"
       >
-        <span className="grid size-8 shrink-0 place-items-center rounded-full border-2 border-dashed border-primary/40">
-          <Plus className="size-4" />
-        </span>
-        <span className="text-sm font-bold">Escalar {positionName}</span>
-        <span className="ml-auto text-xs font-bold text-destructive">
-          {openCount} vaga{openCount > 1 ? "s" : ""}
+        <Plus className="size-4" />
+        <span className="text-[13px] font-bold">Escalar</span>
+        <span className="text-[12px] font-bold text-destructive">
+          · {openCount} vaga{openCount > 1 ? "s" : ""}
         </span>
       </button>
 

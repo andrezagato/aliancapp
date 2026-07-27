@@ -29,7 +29,8 @@ export function WhatsAppButton({
       onClick={(e) => e.stopPropagation()}
       className={cn(base, className)}
     >
-      <MessageCircle className="size-4" /> {label}
+      <MessageCircle className="size-4" />
+      {label ? <span>{label}</span> : null}
     </a>
   );
 }
@@ -53,7 +54,8 @@ export function WhatsAppGroupButton({
       onClick={(e) => e.stopPropagation()}
       className={cn(base, className)}
     >
-      <Users className="size-4" /> {label}
+      <Users className="size-4" />
+      {label ? <span>{label}</span> : null}
     </a>
   );
 }

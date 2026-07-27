@@ -2277,6 +2277,9 @@ export async function fazerCheckin(
     .from("checkins")
     .insert({ assignment_id: assignmentId, checked_by: session.userId, at_location: atLocation });
   if (error && !error.message.includes("duplicate")) return fail(error.message);
+  // Presença passa a valer como status 'presente' (entra no anel de cobertura da home/escala).
+  // Não sobrescreve quem recusou.
+  await supabase.from("assignments").update({ status: "presente" }).eq("id", assignmentId).neq("status", "recusado");
   await logActivity({ profileId: a?.profile_id ?? session.userId, actorId: session.userId, kind: "checkin", eventId, teamId });
   // Conquistas do próprio (quando o líder marca por outro, a pessoa desbloqueia ao abrir o app).
   const unlocked = isSelf ? await notificarConquistas(session) : [];
@@ -2293,6 +2296,52 @@ export async function desfazerCheckin(assignmentId: string, teamId: string, even
   if (!isSelf && !canManageTeam(session, teamId)) return fail("Sem permissão.");
   const { error } = await supabase.from("checkins").delete().eq("assignment_id", assignmentId);
   if (error) return fail(error.message);
+  // Desfazer presença volta o status pra 'confirmado' (a pessoa segue escalada).
+  await supabase.from("assignments").update({ status: "confirmado" }).eq("id", assignmentId).eq("status", "presente");
+  revalidatePath(`/escalas/${eventId}`);
+  return ok;
+}
+
+// -----------------------------------------------------------------------------
+// Mudar status de uma escalação pelo gestor (líder/admin) — sem GPS.
+// Fluxo: convidado → confirmado → presente (e voltas). "presente" nunca pula
+// a confirmação. Ao marcar presente grava a linha de checkins (sem localização).
+// -----------------------------------------------------------------------------
+export async function definirStatusEscala(
+  assignmentId: string,
+  teamId: string,
+  eventId: string,
+  novoStatus: "convidado" | "confirmado" | "presente",
+): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  if (!canManageTeam(session, teamId)) return fail("Sem permissão.");
+  const supabase = await createClient();
+  const { data: a } = await supabase
+    .from("assignments")
+    .select("profile_id, status")
+    .eq("id", assignmentId)
+    .maybeSingle();
+  if (!a) return fail("Escalação não encontrada.");
+
+  // Ninguém fica "presente" sem ter confirmado antes.
+  if (novoStatus === "presente" && a.status !== "confirmado" && a.status !== "presente") {
+    return fail("Confirme a pessoa antes de marcar presença.");
+  }
+
+  const { error } = await supabase.from("assignments").update({ status: novoStatus }).eq("id", assignmentId);
+  if (error) return fail(error.message);
+
+  // Presença ⇄ linha de checkins (o gestor marca sem localização).
+  if (novoStatus === "presente") {
+    await supabase
+      .from("checkins")
+      .upsert({ assignment_id: assignmentId, checked_by: session.userId, at_location: null }, { onConflict: "assignment_id" });
+    await logActivity({ profileId: a.profile_id ?? session.userId, actorId: session.userId, kind: "checkin", eventId, teamId });
+  } else {
+    await supabase.from("checkins").delete().eq("assignment_id", assignmentId);
+  }
+
   revalidatePath(`/escalas/${eventId}`);
   return ok;
 }

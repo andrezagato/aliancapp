@@ -67,6 +67,20 @@
   html {
     -webkit-tap-highlight-color: transparent;
     scroll-behavior: smooth;
+    /* mata o atraso de ~300ms e o zoom por duplo-toque no iOS: toque responde na hora */
+    touch-action: manipulation;
+  }
+  /* feedback de toque padrão em qualquer alvo interativo (o highlight nativo está desligado):
+     em telas de toque, o alvo "apaga" de leve no active — some a sensação de "não aconteceu nada". */
+  @media (hover: none) {
+    button:not(:disabled):active,
+    a:active,
+    [role="button"]:active,
+    label:active,
+    summary:active {
+      opacity: 0.72;
+      transition: opacity 0.04s ease;
+    }
   }
   body {
     @apply bg-background text-foreground antialiased;
