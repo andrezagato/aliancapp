@@ -66,6 +66,8 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|icon.svg|manifest.webmanifest|.*\\.(?:png|svg|jpg|jpeg|gif|webp)$).*)",
+    // `.html` de fora: a demo `/primeiros-passos.html` é aberta por quem ainda
+    // não tem login (convidado no e-mail) — não pode cair no gate de sessão.
+    "/((?!_next/static|_next/image|favicon.ico|icon.svg|manifest.webmanifest|.*\\.(?:png|svg|jpg|jpeg|gif|webp|html)$).*)",
   ],
 };
