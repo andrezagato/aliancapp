@@ -125,11 +125,14 @@ export default async function InicioPage({
   }
 
   // Admin: abre com o calendário do mês, ações principais e a lista de eventos
-  // com o responsável de cada um.
+  // com o responsável de cada um. Admin também lidera equipes → recebe o aviso
+  // de avaliação do culto (senão só apareceria no ramo "líder").
   if (session.role === "admin") {
+    const pendingReviews = await getPendingTeamReviews(session);
     return (
       <HomeShell title={`${greeting()}, ${first}`} subtitle={roleLabel} userName={userName}>
         {respHero}
+        <TeamReviewPrompt pending={pendingReviews} />
         <AdminSection swaps={swaps} respEvents={respEvents} mes={sp.m} />
         <Birthdays />
       </HomeShell>
