@@ -780,7 +780,7 @@ export async function getEventReviewData(session: Session, eventId: string): Pro
 
   let aq = supabase
     .from("assignments")
-    .select("profile_id, team_id, status, profile:profiles ( id, full_name, nickname ), team:teams ( name )")
+    .select("profile_id, team_id, status, profile:profiles!assignments_profile_id_fkey ( id, full_name, nickname ), team:teams ( name )")
     .eq("event_id", eventId)
     .in("status", ["confirmado", "presente"]);
   if (!isAdmin) aq = aq.in("team_id", leadIds);
