@@ -357,6 +357,22 @@ export async function listLiveRundownEvents(session: Session): Promise<EventList
   return assembleEventList(session, (events ?? []) as EventRowLite[]);
 }
 
+/** Cultos JÁ ENCERRADos (roteiro encerrado) dos últimos 60 dias — pra seção
+ * "Finalizados" da aba Escalas (histórico recente + avaliação da equipe). */
+export async function listEndedEvents(session: Session, limit = 20): Promise<EventListItem[]> {
+  const supabase = await createClient();
+  const since = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
+  const { data: events } = await supabase
+    .from("events")
+    .select("id, title, starts_at, location, series_id, responsible_id, responsible:profiles!events_responsible_id_fkey ( full_name )")
+    .is("archived_at", null)
+    .not("rundown_ended_at", "is", null)
+    .gte("starts_at", since)
+    .order("starts_at", { ascending: false })
+    .limit(limit);
+  return assembleEventList(session, (events ?? []) as EventRowLite[]);
+}
+
 export async function listEventsInRange(
   session: Session,
   fromIso: string,

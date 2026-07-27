@@ -4,15 +4,17 @@ import { TopBar } from "@/components/app-shell/top-bar";
 import { buttonVariants } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
 import { EscalasView } from "@/components/escalas-view";
+import { FinalizadosSection } from "@/components/finalizados-section";
 import { cn } from "@/lib/utils";
 import { getSession } from "@/lib/auth";
-import { listUpcomingEvents } from "@/lib/data";
+import { listUpcomingEvents, listEndedEvents } from "@/lib/data";
 
 export default async function EscalasPage() {
   const session = await getSession();
   if (!session) return null;
-  const events = await listUpcomingEvents(session);
+  const [events, ended] = await Promise.all([listUpcomingEvents(session), listEndedEvents(session)]);
   const isAdmin = session.role === "admin";
+  const canReview = isAdmin || session.profile.teams.some((t) => t.role === "leader");
 
   return (
     <>
@@ -47,6 +49,8 @@ export default async function EscalasPage() {
         ) : (
           <EscalasView events={events} canManage={session.role !== "volunteer"} openId={null} />
         )}
+
+        <FinalizadosSection events={ended} canReview={canReview} />
       </div>
     </>
   );

@@ -4,7 +4,6 @@ import { TopBar } from "@/components/app-shell/top-bar";
 import { Card } from "@/components/ui/card";
 import { RundownGrid } from "@/components/rundown-grid";
 import { EventFilesCard } from "@/components/event-files-card";
-import { TeamReview } from "@/components/team-review";
 import { getSession } from "@/lib/auth";
 import { listUpcomingEvents, listLiveRundownEvents, getEventRundown, listRundownKinds, listRundownTemplates, getRundownState, estouEscaladoNoEvento, getPastaEvento } from "@/lib/data";
 import { fmtWeekdayShort, fmtDayMonthShort } from "@/lib/format";
@@ -38,7 +37,6 @@ export default async function CronogramaPage({ searchParams }: { searchParams: P
   // Estrutura: só admin + Produção (equipe manages_rundown). Conteúdo (link/info
   // por bloco): quem está escalado no evento.
   const canEdit = session.role === "admin" || session.profile.teams.some((t) => t.manages_rundown);
-  const canReview = session.role === "admin" || session.profile.teams.some((t) => t.role === "leader");
   const canContribute = ev ? await estouEscaladoNoEvento(session, ev.id) : false;
   const filesUrl = ev ? await getPastaEvento(ev.id) : null;
 
@@ -124,40 +122,12 @@ export default async function CronogramaPage({ searchParams }: { searchParams: P
               </h2>
               <p className="max-w-xs text-balance text-sm text-muted-foreground">
                 {allEnded.length > 0
-                  ? "Os próximos cultos já foram encerrados. Eles ficam guardados em Finalizados, logo abaixo."
+                  ? "Os próximos cultos já foram encerrados. Eles ficam guardados em Finalizados, na aba Escalas."
                   : "Quando houver um próximo culto, a ordem dele aparece aqui — pra você montar o passo a passo."}
               </p>
             </div>
           </Card>
         )}
-
-        {allEnded.length > 0 ? (
-          <details className="group overflow-hidden rounded-2xl border border-border bg-card">
-            <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-semibold text-muted-foreground [&::-webkit-details-marker]:hidden">
-              <span>Finalizados · {allEnded.length}</span>
-              <ChevronRight className="size-4 transition-transform group-open:rotate-90" />
-            </summary>
-            <div className="flex flex-col gap-1 border-t border-border p-2">
-              {allEnded.map((e) => (
-                <div key={e.id} className="flex items-center gap-1 rounded-xl px-1 hover:bg-muted">
-                  <Link href={`/cronograma?ev=${e.id}`} className="flex min-w-0 flex-1 items-center justify-between gap-3 px-2 py-2.5">
-                    <span className="min-w-0 truncate text-sm font-medium text-foreground">{e.title}</span>
-                    <span className="shrink-0 text-[11px] capitalize text-muted-foreground">
-                      {fmtWeekdayShort(e.starts_at)} · {fmtDayMonthShort(e.starts_at)}
-                    </span>
-                  </Link>
-                  {canReview ? (
-                    <TeamReview
-                      eventId={e.id}
-                      triggerClassName="press-sm shrink-0 rounded-full border border-primary/40 bg-primary/10 px-3 py-1.5 text-[12px] font-bold text-primary"
-                      trigger="Revisar"
-                    />
-                  ) : null}
-                </div>
-              ))}
-            </div>
-          </details>
-        ) : null}
       </div>
     </>
   );
