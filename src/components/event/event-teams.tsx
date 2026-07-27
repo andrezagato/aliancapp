@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, BadgeCheck, Check, Clock, X, RotateCcw } from "lucide-react";
+import { ChevronDown, UserCheck, Check, Clock, X, Trash2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Avatar } from "@/components/ui/avatar";
 import { CoverageBadge, TeamDot } from "@/components/coverage-badge";
@@ -10,20 +10,28 @@ import { ConfirmationAlert } from "@/components/event/confirmation-alert";
 import { AssignmentResponse } from "@/components/assignment-response";
 import { CheckinButton, SwapPending } from "@/components/slot-controls";
 import { WhatsAppButton, WhatsAppGroupButton } from "@/components/whatsapp-button";
-import { EscalarDialog, RemoveAssignmentButton, NecessarioStepper, AdicionarEquipe, RemoverEquipeButton } from "@/components/leader-controls";
-import { definirStatusEscala } from "@/lib/actions";
+import { EscalarDialog, NecessarioStepper, AdicionarEquipe, RemoverEquipeButton } from "@/components/leader-controls";
+import { definirStatusEscala, removerEscalacao } from "@/lib/actions";
 import { cn } from "@/lib/utils";
 import { fmtEventWhen } from "@/lib/format";
 import type { DetailTeam, DetailPosition, SlotPerson } from "@/lib/data";
+
+/** Estados de status que o gestor alterna, em símbolos (uma linha só). */
+const STATUS_SEGS = [
+  { key: "convidado", Icon: Clock, title: "Aguardando", active: "bg-warning/20 text-warning" },
+  { key: "confirmado", Icon: Check, title: "Confirmado", active: "bg-success/20 text-success" },
+  { key: "presente", Icon: UserCheck, title: "Presente", active: "bg-success text-white" },
+] as const;
 
 const EXPAND_KEY = "sirvo:evt-expand-all";
 
 /** Ícone de status por escalado (uma linha; sem texto). */
 function StatusIcon({ status, checkedIn }: { status: SlotPerson["status"]; checkedIn: boolean }) {
   if (status === "presente" || checkedIn) {
+    // Presente = selo cheio (verde sólido + pessoa-com-check) — bem distinto do confirmado.
     return (
-      <span className="grid size-6 shrink-0 place-items-center rounded-full bg-success/15 text-success" title="Presente" aria-label="Presente">
-        <BadgeCheck className="size-4" />
+      <span className="grid size-6 shrink-0 place-items-center rounded-full bg-success text-white" title="Presente" aria-label="Presente">
+        <UserCheck className="size-4" />
       </span>
     );
   }
@@ -233,44 +241,12 @@ function PositionRow({
   );
 }
 
-/** Chip de ação dentro do painel de opções (gestor). */
-function ActionChip({
-  onClick,
-  disabled,
-  tone = "default",
-  icon: Icon,
-  children,
-}: {
-  onClick: () => void;
-  disabled?: boolean;
-  tone?: "default" | "primary" | "success";
-  icon: React.ComponentType<{ className?: string }>;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={cn(
-        "press-sm inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-[13px] font-bold disabled:opacity-50",
-        tone === "primary"
-          ? "border-primary/40 bg-primary/10 text-primary"
-          : tone === "success"
-            ? "border-success/40 bg-success/10 text-success"
-            : "border-border bg-card text-foreground",
-      )}
-    >
-      <Icon className="size-4" /> {children}
-    </button>
-  );
-}
-
 /**
  * Uma pessoa escalada em uma linha: avatar · nome · ícone de status · caret.
  * O gestor vê um caret (▾) que abre, INLINE abaixo da linha (sem modal
- * aninhado), as opções: trocar status (confirmar / presente / aguardando),
- * WhatsApp e remover. A própria pessoa vê suas ações (responder / check-in).
+ * aninhado), TUDO em uma linha só: "Status" + os 3 símbolos (aguardando ·
+ * confirmado · presente) e, à direita, WhatsApp + remover. A própria pessoa
+ * vê suas ações (responder / check-in).
  */
 function PersonRow({
   eventId,
@@ -299,8 +275,18 @@ function PersonRow({
   const manageOther = canManage && !isMe;
 
   function setStatus(novo: "convidado" | "confirmado" | "presente") {
+    if (novo === status) return;
     start(async () => {
       const r = await definirStatusEscala(person.assignmentId, team.teamId, eventId, novo);
+      if (r.ok) router.refresh();
+      else if (typeof window !== "undefined") window.alert(r.error);
+    });
+  }
+
+  function remover() {
+    if (typeof window !== "undefined" && !window.confirm(`Remover ${person.name} da escala?`)) return;
+    start(async () => {
+      const r = await removerEscalacao(person.assignmentId, eventId, team.teamId);
       if (r.ok) {
         setMenuOpen(false);
         router.refresh();
@@ -357,35 +343,52 @@ function PersonRow({
       </div>
 
       {manageOther && menuOpen ? (
-        <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-border/60 pl-[42px] pt-2">
-          {status === "convidado" ? (
-            <ActionChip onClick={() => setStatus("confirmado")} disabled={pending} tone="success" icon={Check}>
-              Confirmar
-            </ActionChip>
-          ) : null}
-          {status === "presente" ? (
-            <ActionChip onClick={() => setStatus("confirmado")} disabled={pending} icon={RotateCcw}>
-              Desfazer presença
-            </ActionChip>
-          ) : status === "confirmado" && canCheckin ? (
-            <ActionChip onClick={() => setStatus("presente")} disabled={pending} tone="primary" icon={BadgeCheck}>
-              Marcar presente
-            </ActionChip>
-          ) : null}
-          {status === "confirmado" ? (
-            <ActionChip onClick={() => setStatus("convidado")} disabled={pending} icon={Clock}>
-              Aguardando
-            </ActionChip>
-          ) : null}
-          {person.phone && !refused ? (
-            <WhatsAppButton
-              phone={person.phone}
-              message={`Oi ${person.name.split(/\s+/)[0]}! Passando pra confirmar sua presença na escala de ${team.name} (${fmtEventWhen(startsAt)}). Consegue? 🙏`}
-              label="WhatsApp"
-              className="h-8 px-3 text-[13px]"
-            />
-          ) : null}
-          <RemoveAssignmentButton assignmentId={person.assignmentId} eventId={eventId} teamId={team.teamId} />
+        <div className="mt-2 flex items-center justify-between gap-2 border-t border-border/60 pt-2">
+          <div className="flex min-w-0 items-center gap-1.5">
+            <span className="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Status</span>
+            <div className="inline-flex items-center gap-0.5 rounded-full border border-border bg-card p-0.5">
+              {STATUS_SEGS.map(({ key, Icon, title, active }) => {
+                const on = status === key;
+                // "presente" nunca sem confirmar antes.
+                const disabled = pending || (key === "presente" && status === "convidado");
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setStatus(key)}
+                    disabled={disabled}
+                    aria-pressed={on}
+                    title={key === "presente" && status === "convidado" ? "Confirme primeiro" : title}
+                    className={cn(
+                      "press-sm grid size-8 place-items-center rounded-full transition-colors disabled:opacity-30",
+                      on ? active : "text-muted-foreground",
+                    )}
+                  >
+                    <Icon className="size-4" strokeWidth={key === "confirmado" ? 3 : 2} />
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
+            {person.phone && !refused ? (
+              <WhatsAppButton
+                phone={person.phone}
+                message={`Oi ${person.name.split(/\s+/)[0]}! Passando pra confirmar sua presença na escala de ${team.name} (${fmtEventWhen(startsAt)}). Consegue? 🙏`}
+                label=""
+                className="size-8 shrink-0 px-0"
+              />
+            ) : null}
+            <button
+              type="button"
+              onClick={remover}
+              disabled={pending}
+              aria-label="Remover da escala"
+              className="press-sm grid size-8 place-items-center rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
+            >
+              <Trash2 className="size-4" />
+            </button>
+          </div>
         </div>
       ) : null}
 

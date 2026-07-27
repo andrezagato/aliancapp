@@ -33,10 +33,10 @@ export function BottomNav() {
         {/* pílula deslizante — wrapper ocupa exatamente 1 célula (w%) e centraliza a barra */}
         <span
           aria-hidden
-          className="pointer-events-none absolute top-1.5 flex justify-center transition-[left] duration-300 ease-[cubic-bezier(.32,.72,.24,1)]"
+          className="pointer-events-none absolute top-1 flex justify-center transition-[left] duration-300 ease-[cubic-bezier(.32,.72,.24,1)]"
           style={{ width: `${w}%`, left: `${activeIdx * w}%` }}
         >
-          <span className="h-8 w-14 rounded-full bg-accent/40" />
+          <span className="h-[54px] w-16 rounded-[20px] bg-accent/40" />
         </span>
         {items.map(({ href, label, icon: Icon }, idx) => {
           const active = idx === activeIdx;

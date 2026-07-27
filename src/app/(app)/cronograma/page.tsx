@@ -6,7 +6,7 @@ import { RundownGrid } from "@/components/rundown-grid";
 import { EventFilesCard } from "@/components/event-files-card";
 import { TeamReview } from "@/components/team-review";
 import { getSession } from "@/lib/auth";
-import { listUpcomingEvents, getEventRundown, listRundownKinds, listRundownTemplates, getRundownState, estouEscaladoNoEvento, getPastaEvento } from "@/lib/data";
+import { listUpcomingEvents, listLiveRundownEvents, getEventRundown, listRundownKinds, listRundownTemplates, getRundownState, estouEscaladoNoEvento, getPastaEvento } from "@/lib/data";
 import { fmtWeekdayShort, fmtDayMonthShort } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -15,7 +15,11 @@ export default async function CronogramaPage({ searchParams }: { searchParams: P
   if (!session) return null;
   const { ev: evParam } = await searchParams;
 
-  const upcoming = await listUpcomingEvents(session, 8);
+  // Próximos + cultos com roteiro aberto que já passaram (senão o líder não
+  // consegue mais encerrar e a avaliação nunca é liberada). "Ao vivo" primeiro.
+  const [live, futuros] = await Promise.all([listLiveRundownEvents(session), listUpcomingEvents(session, 8)]);
+  const seen = new Set<string>();
+  const upcoming = [...live, ...futuros].filter((e) => (seen.has(e.id) ? false : seen.add(e.id)));
   // Encerrados saem: escolhe o primeiro não-encerrado (ou o pedido via ?ev=).
   const states = await Promise.all(upcoming.map((e) => getRundownState(e.id)));
   const firstOpen = upcoming.findIndex((_, i) => !states[i].endedAt);
