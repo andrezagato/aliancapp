@@ -17,6 +17,7 @@ export function CheckinButton({
   checkedIn,
   canMark,
   prominent = false,
+  self = true,
 }: {
   assignmentId: string;
   teamId: string;
@@ -24,6 +25,8 @@ export function CheckinButton({
   checkedIn: boolean;
   canMark: boolean;
   prominent?: boolean;
+  /** Só pede GPS (selo "no local") quando é a própria pessoa marcando. */
+  self?: boolean;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -32,7 +35,7 @@ export function CheckinButton({
     start(async () => {
       let r;
       if (next) {
-        const coords = await getCoords();
+        const coords = self ? await getCoords() : null;
         r = await fazerCheckin(assignmentId, teamId, eventId, coords?.lat ?? null, coords?.lng ?? null);
         if (!r.ok && r.code === "outside") {
           if (typeof window !== "undefined" && window.confirm("Você não está no local do evento. Fazer check-in mesmo assim?")) {

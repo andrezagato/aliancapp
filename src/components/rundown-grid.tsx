@@ -419,15 +419,6 @@ export function RundownGrid({
         </div>
       </div>
 
-      {canEdit && started && !ended && allDone ? (
-        <button
-          onClick={() => window.confirm("Encerrar o culto? Todos os blocos foram concluídos.") && encerrar()}
-          className="press mb-2 flex w-full items-center justify-center gap-2 rounded-2xl bg-success py-3 text-sm font-extrabold text-white"
-        >
-          <Check className="size-4" strokeWidth={3} /> Tudo concluído — encerrar culto
-        </button>
-      ) : null}
-
       {list.length === 0 ? (
         <p className="rounded-2xl border border-dashed border-border bg-card px-4 py-6 text-center text-sm text-muted-foreground">
           {canEdit ? "Monte a ordem do culto adicionando blocos abaixo." : "A ordem do culto ainda não foi montada."}
@@ -605,6 +596,15 @@ export function RundownGrid({
           })}
         </ol>
       )}
+
+      {canEdit && started && !ended && allDone ? (
+        <button
+          onClick={() => window.confirm("Encerrar o culto? Todos os blocos foram concluídos.") && encerrar()}
+          className="press mt-2 flex w-full items-center justify-center gap-2 rounded-2xl bg-success py-3 text-sm font-extrabold text-white"
+        >
+          <Check className="size-4" strokeWidth={3} /> Tudo concluído — encerrar culto
+        </button>
+      ) : null}
 
       {canEdit ? (
         <div className="mt-2 flex gap-2">

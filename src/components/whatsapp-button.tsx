@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { waLink } from "@/lib/whatsapp";
 
 const base =
-  "press-sm inline-flex h-9 items-center gap-1.5 rounded-full border border-success/40 bg-success/10 px-3 text-sm font-bold text-success";
+  "press-sm inline-flex h-9 items-center justify-center gap-1.5 rounded-full border border-success/40 bg-success/10 px-3 text-sm font-bold text-success";
 
 /** Botão que abre o WhatsApp da pessoa (some sozinho se o telefone for inválido). */
 export function WhatsAppButton({
@@ -29,7 +29,8 @@ export function WhatsAppButton({
       onClick={(e) => e.stopPropagation()}
       className={cn(base, className)}
     >
-      <MessageCircle className="size-4" /> {label}
+      <MessageCircle className="size-4" />
+      {label ? <span>{label}</span> : null}
     </a>
   );
 }
@@ -53,7 +54,8 @@ export function WhatsAppGroupButton({
       onClick={(e) => e.stopPropagation()}
       className={cn(base, className)}
     >
-      <Users className="size-4" /> {label}
+      <Users className="size-4" />
+      {label ? <span>{label}</span> : null}
     </a>
   );
 }

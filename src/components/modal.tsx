@@ -25,12 +25,15 @@ export function Modal({
   children,
   sheet = false,
   title,
+  liftY = 0,
 }: {
   open: boolean;
   onClose: () => void;
   children: React.ReactNode;
   sheet?: boolean;
   title?: string;
+  /** Sobe o sheet quando o teclado virtual abre (px) — evita sobreposição no iOS. */
+  liftY?: number;
 }) {
   const [mounted, setMounted] = useState(false);
   const [dy, setDy] = useState(0);
@@ -106,7 +109,14 @@ export function Modal({
             : "m-4 max-w-[420px]",
           settling && "transition-transform duration-300 ease-out",
         )}
-        style={sheet && dy ? { transform: `translateY(${dy}px)` } : undefined}
+        style={
+          sheet && (dy || liftY)
+            ? {
+                transform: `translateY(${dy - liftY}px)`,
+                ...(liftY ? { maxHeight: `calc(100dvh - ${liftY}px)` } : {}),
+              }
+            : undefined
+        }
         onClick={(e) => e.stopPropagation()}
       >
         {sheet ? (

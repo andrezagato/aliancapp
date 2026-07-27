@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { ChevronDown, BadgeCheck, Check, Clock, X } from "lucide-react";
+import { useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { ChevronDown, UserCheck, Check, Clock, X, Trash2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Avatar } from "@/components/ui/avatar";
 import { CoverageBadge, TeamDot } from "@/components/coverage-badge";
@@ -9,23 +10,32 @@ import { ConfirmationAlert } from "@/components/event/confirmation-alert";
 import { AssignmentResponse } from "@/components/assignment-response";
 import { CheckinButton, SwapPending } from "@/components/slot-controls";
 import { WhatsAppButton, WhatsAppGroupButton } from "@/components/whatsapp-button";
-import { EscalarDialog, RemoveAssignmentButton, NecessarioStepper, AdicionarEquipe, RemoverEquipeButton } from "@/components/leader-controls";
+import { EscalarDialog, NecessarioStepper, AdicionarEquipe, RemoverEquipeButton } from "@/components/leader-controls";
+import { definirStatusEscala, removerEscalacao } from "@/lib/actions";
 import { cn } from "@/lib/utils";
 import { fmtEventWhen } from "@/lib/format";
 import type { DetailTeam, DetailPosition, SlotPerson } from "@/lib/data";
+
+/** Estados de status que o gestor alterna, em símbolos (uma linha só). */
+const STATUS_SEGS = [
+  { key: "convidado", Icon: Clock, title: "Aguardando", active: "bg-warning/20 text-warning" },
+  { key: "confirmado", Icon: Check, title: "Confirmado", active: "bg-success/20 text-success" },
+  { key: "presente", Icon: UserCheck, title: "Presente", active: "bg-success text-white" },
+] as const;
 
 const EXPAND_KEY = "sirvo:evt-expand-all";
 
 /** Ícone de status por escalado (uma linha; sem texto). */
 function StatusIcon({ status, checkedIn }: { status: SlotPerson["status"]; checkedIn: boolean }) {
-  if (checkedIn) {
+  if (status === "presente" || checkedIn) {
+    // Presente = selo cheio (verde sólido + pessoa-com-check) — bem distinto do confirmado.
     return (
-      <span className="grid size-6 shrink-0 place-items-center rounded-full bg-success/15 text-success" title="Presente">
-        <BadgeCheck className="size-4" />
+      <span className="grid size-6 shrink-0 place-items-center rounded-full bg-success text-white" title="Presente" aria-label="Presente">
+        <UserCheck className="size-4" />
       </span>
     );
   }
-  if (status === "confirmado" || status === "presente") {
+  if (status === "confirmado") {
     return (
       <span className="grid size-6 shrink-0 place-items-center rounded-full bg-success/15 text-success" title="Confirmado" aria-label="Confirmado">
         <Check className="size-4" strokeWidth={3} />
@@ -231,7 +241,13 @@ function PositionRow({
   );
 }
 
-/** Uma pessoa escalada, tudo em uma linha (avatar · nome · ações/status). */
+/**
+ * Uma pessoa escalada em uma linha: avatar · nome · ícone de status · caret.
+ * O gestor vê um caret (▾) que abre, INLINE abaixo da linha (sem modal
+ * aninhado), TUDO em uma linha só: "Status" + os 3 símbolos (aguardando ·
+ * confirmado · presente) e, à direita, WhatsApp + remover. A própria pessoa
+ * vê suas ações (responder / check-in).
+ */
 function PersonRow({
   eventId,
   startsAt,
@@ -247,9 +263,38 @@ function PersonRow({
   canManage: boolean;
   canCheckin: boolean;
 }) {
+  const router = useRouter();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [pending, start] = useTransition();
+
   const isMe = person.isMe;
-  const refused = person.status === "recusado";
-  const canRespond = isMe && !person.swap && (person.status === "convidado" || person.status === "confirmado");
+  const status = person.status;
+  const refused = status === "recusado";
+  const canRespond = isMe && !person.swap && (status === "convidado" || status === "confirmado");
+  const showSelfCheckin = isMe && canCheckin && !refused && (status === "confirmado" || status === "presente");
+  const manageOther = canManage && !isMe;
+
+  function setStatus(novo: "convidado" | "confirmado" | "presente") {
+    if (novo === status) return;
+    start(async () => {
+      const r = await definirStatusEscala(person.assignmentId, team.teamId, eventId, novo);
+      if (r.ok) router.refresh();
+      else if (typeof window !== "undefined") window.alert(r.error);
+    });
+  }
+
+  function remover() {
+    if (typeof window !== "undefined" && !window.confirm(`Remover ${person.name} da escala?`)) return;
+    start(async () => {
+      const r = await removerEscalacao(person.assignmentId, eventId, team.teamId);
+      if (r.ok) {
+        setMenuOpen(false);
+        router.refresh();
+      } else if (typeof window !== "undefined") {
+        window.alert(r.error);
+      }
+    });
+  }
 
   return (
     <div className="rounded-xl bg-muted/25 px-2.5 py-2">
@@ -266,33 +311,86 @@ function PersonRow({
         </div>
 
         <div className="flex shrink-0 items-center gap-1.5">
-          {canRespond ? (
-            <AssignmentResponse assignmentId={person.assignmentId} status={person.status} teamId={team.teamId} />
-          ) : (
-            <StatusIcon status={person.status} checkedIn={person.checkedIn} />
-          )}
-          {canManage && person.phone && !isMe && !refused ? (
-            <WhatsAppButton
-              phone={person.phone}
-              message={`Oi ${person.name.split(/\s+/)[0]}! Passando pra confirmar sua presença na escala de ${team.name} (${fmtEventWhen(startsAt)}). Consegue? 🙏`}
-              label=""
-              className="size-8 shrink-0 px-0"
-            />
-          ) : null}
-          {canCheckin && !refused && (isMe || canManage) ? (
-            <CheckinButton
-              assignmentId={person.assignmentId}
-              teamId={team.teamId}
-              eventId={eventId}
-              checkedIn={person.checkedIn}
-              canMark
-            />
-          ) : null}
-          {canManage ? (
-            <RemoveAssignmentButton assignmentId={person.assignmentId} eventId={eventId} teamId={team.teamId} />
+          <StatusIcon status={status} checkedIn={person.checkedIn} />
+          {isMe ? (
+            <>
+              {canRespond ? (
+                <AssignmentResponse assignmentId={person.assignmentId} status={status} teamId={team.teamId} />
+              ) : null}
+              {showSelfCheckin ? (
+                <CheckinButton
+                  assignmentId={person.assignmentId}
+                  teamId={team.teamId}
+                  eventId={eventId}
+                  checkedIn={person.checkedIn}
+                  canMark
+                  self
+                />
+              ) : null}
+            </>
+          ) : manageOther ? (
+            <button
+              type="button"
+              onClick={() => setMenuOpen((o) => !o)}
+              aria-expanded={menuOpen}
+              aria-label="Opções"
+              className="press-sm grid size-8 place-items-center rounded-lg text-muted-foreground hover:bg-muted"
+            >
+              <ChevronDown className={cn("size-5 transition-transform", menuOpen && "rotate-180")} />
+            </button>
           ) : null}
         </div>
       </div>
+
+      {manageOther && menuOpen ? (
+        <div className="mt-2 flex items-center justify-between gap-2 border-t border-border/60 pt-2">
+          <div className="flex min-w-0 items-center gap-1.5">
+            <span className="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Status</span>
+            <div className="inline-flex items-center gap-0.5 rounded-full border border-border bg-card p-0.5">
+              {STATUS_SEGS.map(({ key, Icon, title, active }) => {
+                const on = status === key;
+                // "presente" nunca sem confirmar antes.
+                const disabled = pending || (key === "presente" && status === "convidado");
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setStatus(key)}
+                    disabled={disabled}
+                    aria-pressed={on}
+                    title={key === "presente" && status === "convidado" ? "Confirme primeiro" : title}
+                    className={cn(
+                      "press-sm grid size-8 place-items-center rounded-full transition-colors disabled:opacity-30",
+                      on ? active : "text-muted-foreground",
+                    )}
+                  >
+                    <Icon className="size-4" strokeWidth={key === "confirmado" ? 3 : 2} />
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
+            {person.phone && !refused ? (
+              <WhatsAppButton
+                phone={person.phone}
+                message={`Oi ${person.name.split(/\s+/)[0]}! Passando pra confirmar sua presença na escala de ${team.name} (${fmtEventWhen(startsAt)}). Consegue? 🙏`}
+                label=""
+                className="size-8 shrink-0 px-0"
+              />
+            ) : null}
+            <button
+              type="button"
+              onClick={remover}
+              disabled={pending}
+              aria-label="Remover da escala"
+              className="press-sm grid size-8 place-items-center rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
+            >
+              <Trash2 className="size-4" />
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {person.swap ? (
         <div className="mt-1.5 pl-[42px]">

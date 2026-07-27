@@ -338,6 +338,25 @@ export async function listUpcomingEvents(session: Session, limit = 50): Promise<
   return assembleEventList(session, (events ?? []) as EventRowLite[]);
 }
 
+/**
+ * Cultos com roteiro ABERTO (iniciado e ainda não encerrado) que já saíram da
+ * janela de "próximos" — o culto começou, o líder esqueceu de encerrar e ele
+ * sumiria do Roteiro. Traz de volta pra ele poder encerrar (e liberar a
+ * avaliação da equipe).
+ */
+export async function listLiveRundownEvents(session: Session): Promise<EventListItem[]> {
+  const supabase = await createClient();
+  const { data: events } = await supabase
+    .from("events")
+    .select("id, title, starts_at, location, series_id, responsible_id, responsible:profiles!events_responsible_id_fkey ( full_name )")
+    .is("archived_at", null)
+    .not("rundown_started_at", "is", null)
+    .is("rundown_ended_at", null)
+    .lt("starts_at", upcomingCutoffIso())
+    .order("starts_at", { ascending: true });
+  return assembleEventList(session, (events ?? []) as EventRowLite[]);
+}
+
 export async function listEventsInRange(
   session: Session,
   fromIso: string,
@@ -761,7 +780,7 @@ export async function getEventReviewData(session: Session, eventId: string): Pro
 
   let aq = supabase
     .from("assignments")
-    .select("profile_id, team_id, status, profile:profiles ( id, full_name, nickname ), team:teams ( name )")
+    .select("profile_id, team_id, status, profile:profiles!assignments_profile_id_fkey ( id, full_name, nickname ), team:teams ( name )")
     .eq("event_id", eventId)
     .in("status", ["confirmado", "presente"]);
   if (!isAdmin) aq = aq.in("team_id", leadIds);
