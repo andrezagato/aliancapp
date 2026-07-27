@@ -6,6 +6,7 @@ import { CheckCircle2 } from "lucide-react";
 import { solicitarEntrada } from "@/lib/actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { PrimeirosPassosLink } from "@/components/primeiros-passos-link";
 
 export default function CadastroPage() {
   const [sent, setSent] = useState(false);
@@ -43,6 +44,12 @@ export default function CadastroPage() {
             <p className="text-balance text-muted-foreground">
               Um líder vai revisar e liberar seu acesso. Você será avisado assim que aprovado.
             </p>
+            <div className="mt-2 w-full space-y-2">
+              <p className="text-sm text-muted-foreground">
+                Aproveite a espera e veja o passo a passo:
+              </p>
+              <PrimeirosPassosLink />
+            </div>
             <Link href="/entrar" className="mt-2 text-sm font-medium text-primary hover:underline">
               Voltar
             </Link>

@@ -3,6 +3,7 @@ import { Clock } from "lucide-react";
 import { getSession, isActive } from "@/lib/auth";
 import { Card, CardContent } from "@/components/ui/card";
 import { SignOutButton } from "@/components/sign-out-button";
+import { PrimeirosPassosLink } from "@/components/primeiros-passos-link";
 
 export default async function AguardandoPage() {
   const session = await getSession();
@@ -24,6 +25,12 @@ export default async function AguardandoPage() {
               Recebemos seu acesso. Um líder ou administrador precisa liberar sua entrada na
               igreja — assim que aprovarem, tudo aparece por aqui.
             </p>
+          </div>
+          <div className="w-full space-y-2">
+            <p className="text-sm text-muted-foreground">
+              Enquanto isso, veja como o Sirvo funciona:
+            </p>
+            <PrimeirosPassosLink />
           </div>
           <p className="rounded-2xl bg-muted px-4 py-3 text-sm text-muted-foreground">
             Entrou com{" "}

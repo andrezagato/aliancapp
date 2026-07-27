@@ -7,6 +7,7 @@ import { MailCheck } from "lucide-react";
 import { createClient, supabaseConfigured } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { SirvoMark } from "@/components/brand/sirvo-mark";
+import { PrimeirosPassosLink } from "@/components/primeiros-passos-link";
 
 const isDev = process.env.NODE_ENV === "development";
 
@@ -94,6 +95,12 @@ export default function EntrarPage() {
             Enviamos um link de acesso para <span className="font-semibold text-foreground">{email}</span>.
             Abra no seu celular ou computador para entrar — o link vale por 1 hora.
           </p>
+          <div className="mt-2 w-full space-y-2">
+            <p className="text-sm text-muted-foreground">
+              Enquanto o link não chega, veja como o Sirvo funciona:
+            </p>
+            <PrimeirosPassosLink />
+          </div>
           <button
             onClick={() => {
               setMagicSent(false);
