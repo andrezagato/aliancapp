@@ -506,15 +506,28 @@ export async function escalarVoluntario(
 
   const supabase = await createClient();
 
-  // Evita escalar a mesma pessoa duas vezes na mesma posição/evento.
-  const { data: dupes } = await supabase
+  // Outras escalações da pessoa neste MESMO evento (ignora recusadas).
+  const { data: existing } = await supabase
     .from("assignments")
-    .select("id, status")
+    .select("id, team_id, position_id, status")
     .eq("event_id", input.eventId)
-    .eq("position_id", input.positionId)
-    .eq("profile_id", input.profileId);
-  if ((dupes ?? []).some((d) => d.status !== "recusado")) {
+    .eq("profile_id", input.profileId)
+    .neq("status", "recusado");
+
+  if ((existing ?? []).some((a) => a.position_id === input.positionId)) {
     return fail("Essa pessoa já está escalada nesta posição.");
+  }
+  // Bloqueio real, sem exceção: pessoa já escalada em OUTRA equipe neste evento.
+  if ((existing ?? []).some((a) => a.team_id !== input.teamId)) {
+    return fail("Essa pessoa já está escalada em outra equipe neste evento.");
+  }
+  // Aviso: já escalada em outra posição desta MESMA equipe — líder confirma e segue.
+  if (!override && (existing ?? []).some((a) => a.team_id === input.teamId)) {
+    return {
+      ok: false,
+      error: "Essa pessoa já está escalada em outra função desta equipe hoje.",
+      code: "already_in_team",
+    };
   }
 
   // Trava: pessoa indisponível na data (a menos que o líder confirme override).

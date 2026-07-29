@@ -80,7 +80,7 @@ export function ChatBubble({
         onClick={() => setOpen(true)}
         aria-label={total > 0 ? `Chat (${total} não lidas)` : "Chat"}
         className="press fixed right-4 z-40 grid size-14 place-items-center rounded-full bg-primary text-primary-foreground shadow-lift"
-        style={{ bottom: "calc(env(safe-area-inset-bottom) + 5rem)" }}
+        style={{ bottom: "calc(env(safe-area-inset-bottom) + 5.75rem)" }}
       >
         <MessagesSquare className="size-6" />
         {total > 0 ? (

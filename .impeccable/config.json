@@ -1,0 +1,20 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "design-system-color",
+        "value": "#5b6b4e",
+        "createdAt": "2026-07-29T16:50:14.794Z",
+        "reason": "Cor padrão de fallback ao criar equipe sem escolher cor (criarEquipe, actions.ts) - cores de equipe são categoricas/livres por design (cada equipe escolhe a sua), não fazem parte da paleta semantica reservada (musgo/ambar/telha) do DESIGN.md. Confirmado pelo Andre 29/jul."
+      },
+      {
+        "rule": "design-system-color",
+        "value": "#6b7280",
+        "createdAt": "2026-07-29T16:50:44.309Z",
+        "reason": "Cor padrão de fallback ao criar tipo de bloco do roteiro sem escolher cor (adicionarTipoBloco, actions.ts) - mesma categoria do 5B6B4E: cor categorica/livre por design, nao pertence a paleta semantica reservada do DESIGN.md. Confirmado pelo Andre 29/jul."
+      }
+    ]
+  }
+}

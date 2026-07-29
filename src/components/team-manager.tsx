@@ -2,7 +2,22 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Check, X, Pencil, Archive, UserPlus, Crown, ChevronRight, ChevronDown, ChevronsDownUp, ChevronsUpDown } from "lucide-react";
+import {
+  Plus,
+  Check,
+  X,
+  Pencil,
+  Archive,
+  UserPlus,
+  Crown,
+  ChevronRight,
+  ChevronDown,
+  ChevronsDownUp,
+  ChevronsUpDown,
+  ShieldCheck,
+  ArrowDownAZ,
+  CalendarClock,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar } from "@/components/ui/avatar";
@@ -11,6 +26,7 @@ import { TeamDot } from "@/components/coverage-badge";
 import { PessoaConfigModal, type TeamOpt } from "@/components/pessoa-config-modal";
 import { WhatsAppGroupButton } from "@/components/whatsapp-button";
 import { cn } from "@/lib/utils";
+import { fmtDayMonthShort } from "@/lib/format";
 import {
   criarEquipe,
   renomearEquipe,
@@ -24,6 +40,11 @@ import {
 import type { ManageableTeam, MemberRow } from "@/lib/data";
 
 type Profile = { id: string; name: string; avatarUrl: string | null };
+
+type PersonEntry = {
+  row: MemberRow;
+  teamsFor: { teamId: string; name: string; color: string; role: "leader" | "volunteer" }[];
+};
 
 const inputClass =
   "w-full rounded-2xl border border-input bg-card px-4 py-2.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring";
@@ -99,6 +120,68 @@ export function TeamManager({
   );
   const openPerson = openId ? byId.get(openId) ?? null : null;
 
+  // Visão "por equipe" (padrão) / "por pessoa" (lista) / "por cargo" (agrupado).
+  // Monta a lista de pessoas a partir de `teams` (já escopado: admin vê tudo,
+  // líder só as equipes dele) — nunca da diretório inteiro (`members`), senão
+  // um líder veria gente fora do que ele já vê hoje nos cards por equipe.
+  const [viewMode, setViewMode] = useState<"equipe" | "pessoa" | "cargo">("equipe");
+  const [sortBy, setSortBy] = useState<"nome" | "data">("nome");
+  const viewKey = `equipes:viewmode:${meId}`;
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(viewKey);
+      if (raw === "equipe" || raw === "pessoa" || raw === "cargo") setViewMode(raw);
+    } catch {
+      /* ignore */
+    }
+  }, [viewKey]);
+  const changeViewMode = (v: "equipe" | "pessoa" | "cargo") => {
+    setViewMode(v);
+    try {
+      localStorage.setItem(viewKey, v);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const peopleEntries = useMemo(() => {
+    const merged = new Map<string, PersonEntry>();
+    for (const t of teams) {
+      for (const m of t.members) {
+        const row = byId.get(m.profileId);
+        if (!row) continue;
+        const entry = merged.get(m.profileId) ?? { row, teamsFor: [] };
+        entry.teamsFor.push({ teamId: t.id, name: t.name, color: t.color, role: m.role });
+        merged.set(m.profileId, entry);
+      }
+    }
+    return [...merged.values()];
+  }, [teams, byId]);
+
+  const sortedPeople = useMemo(() => {
+    const arr = [...peopleEntries];
+    if (sortBy === "nome") arr.sort((a, b) => a.row.fullName.localeCompare(b.row.fullName, "pt-BR"));
+    else arr.sort((a, b) => b.row.createdAt.localeCompare(a.row.createdAt));
+    return arr;
+  }, [peopleEntries, sortBy]);
+
+  const cargoGroups = useMemo(() => {
+    const byName = (a: PersonEntry, b: PersonEntry) => a.row.fullName.localeCompare(b.row.fullName, "pt-BR");
+    const admin: PersonEntry[] = [];
+    const lider: PersonEntry[] = [];
+    const voluntario: PersonEntry[] = [];
+    for (const e of peopleEntries) {
+      if (e.row.systemRole === "admin") admin.push(e);
+      else if (e.teamsFor.some((t) => t.role === "leader")) lider.push(e);
+      else voluntario.push(e);
+    }
+    return [
+      { key: "admin", label: "Administradores", items: admin.sort(byName) },
+      { key: "lider", label: "Líderes", items: lider.sort(byName) },
+      { key: "voluntario", label: "Voluntários", items: voluntario.sort(byName) },
+    ].filter((g) => g.items.length > 0);
+  }, [peopleEntries]);
+
   return (
     <div className="space-y-4">
       {canCreateTeam ? <NovaEquipe /> : null}
@@ -113,8 +196,30 @@ export function TeamManager({
         </Card>
       ) : (
         <>
-          {teams.length > 1 ? (
-            <div className="flex justify-end">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="inline-flex overflow-hidden rounded-full border border-border text-[12.5px] font-semibold">
+              {(
+                [
+                  ["equipe", "Equipe"],
+                  ["pessoa", "Pessoa"],
+                  ["cargo", "Cargo"],
+                ] as const
+              ).map(([v, label]) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => changeViewMode(v)}
+                  className={cn(
+                    "px-3 py-1.5 transition-colors",
+                    viewMode === v ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted",
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {viewMode === "equipe" && teams.length > 1 ? (
               <button
                 onClick={toggleAll}
                 className="press-sm inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-[13px] font-semibold text-muted-foreground"
@@ -122,21 +227,60 @@ export function TeamManager({
                 {allCollapsed ? <ChevronsUpDown className="size-4" /> : <ChevronsDownUp className="size-4" />}
                 {allCollapsed ? "Expandir todas" : "Recolher todas"}
               </button>
-            </div>
-          ) : null}
-          <div className="grid gap-4 lg:grid-cols-2">
-            {teams.map((team) => (
-              <TeamCard
-                key={team.id}
-                team={team}
-                allProfiles={allProfiles}
-                isAdmin={isAdmin}
-                onOpenPerson={setOpenId}
-                collapsed={collapsed.has(team.id)}
-                onToggleCollapse={() => toggleCollapse(team.id)}
-              />
-            ))}
+            ) : viewMode === "pessoa" ? (
+              <button
+                onClick={() => setSortBy((s) => (s === "nome" ? "data" : "nome"))}
+                className="press-sm inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-[13px] font-semibold text-muted-foreground"
+              >
+                {sortBy === "nome" ? <ArrowDownAZ className="size-4" /> : <CalendarClock className="size-4" />}
+                {sortBy === "nome" ? "A-Z" : "Data"}
+              </button>
+            ) : null}
           </div>
+
+          {viewMode === "equipe" ? (
+            <div className="grid gap-4 lg:grid-cols-2">
+              {teams.map((team) => (
+                <TeamCard
+                  key={team.id}
+                  team={team}
+                  allProfiles={allProfiles}
+                  isAdmin={isAdmin}
+                  onOpenPerson={setOpenId}
+                  collapsed={collapsed.has(team.id)}
+                  onToggleCollapse={() => toggleCollapse(team.id)}
+                />
+              ))}
+            </div>
+          ) : viewMode === "pessoa" ? (
+            <Card>
+              <ul className="divide-y divide-border">
+                {sortedPeople.map((entry) => (
+                  <li key={entry.row.id}>
+                    <PersonListRow entry={entry} showJoinDate={sortBy === "data"} onClick={() => setOpenId(entry.row.id)} />
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          ) : (
+            <div className="space-y-4">
+              {cargoGroups.map((g) => (
+                <Card key={g.key}>
+                  <div className="flex items-center gap-2 border-b border-border p-4">
+                    <h2 className="text-base font-semibold">{g.label}</h2>
+                    <span className="ml-auto text-sm text-muted-foreground">{g.items.length}</span>
+                  </div>
+                  <ul className="divide-y divide-border">
+                    {g.items.map((entry) => (
+                      <li key={entry.row.id}>
+                        <PersonListRow entry={entry} showJoinDate={false} onClick={() => setOpenId(entry.row.id)} />
+                      </li>
+                    ))}
+                  </ul>
+                </Card>
+              ))}
+            </div>
+          )}
         </>
       )}
 
@@ -191,6 +335,51 @@ function PersonButton({
       <Avatar name={name} src={avatarUrl} className="size-8" />
       <span className="min-w-0 flex-1 truncate text-sm font-medium">{name}</span>
       {role === "leader" ? <Crown className="size-4 shrink-0 text-primary" /> : null}
+      <ChevronRight className="size-4 shrink-0 text-muted-foreground/50" />
+    </button>
+  );
+}
+
+/** Linha de pessoa nas visões "Pessoa"/"Cargo": nome + equipes (com coroa se
+ * líder daquela equipe) + selo de admin — compacto, ícones no lugar de texto. */
+function PersonListRow({
+  entry,
+  showJoinDate,
+  onClick,
+}: {
+  entry: PersonEntry;
+  showJoinDate: boolean;
+  onClick: () => void;
+}) {
+  const { row, teamsFor } = entry;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="press-sm flex w-full items-center gap-3 p-3 pl-4 text-left hover:bg-muted/40"
+    >
+      <Avatar name={row.fullName} src={row.avatarUrl} className="size-9 shrink-0" />
+      <div className="min-w-0 flex-1">
+        <p className="flex items-center gap-1.5 truncate text-sm font-medium">
+          <span className="truncate">{row.fullName}</span>
+          {row.systemRole === "admin" ? (
+            <ShieldCheck className="size-3.5 shrink-0 text-primary" aria-label="Admin" />
+          ) : null}
+        </p>
+        {teamsFor.length > 0 ? (
+          <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[12px] text-muted-foreground">
+            {teamsFor.map((t) => (
+              <span key={t.teamId} className="inline-flex items-center gap-1">
+                <TeamDot color={t.color} /> {t.name}
+                {t.role === "leader" ? <Crown className="size-3 text-primary" aria-label="Líder" /> : null}
+              </span>
+            ))}
+          </p>
+        ) : null}
+      </div>
+      {showJoinDate ? (
+        <span className="shrink-0 text-[11px] text-muted-foreground">{fmtDayMonthShort(row.createdAt)}</span>
+      ) : null}
       <ChevronRight className="size-4 shrink-0 text-muted-foreground/50" />
     </button>
   );

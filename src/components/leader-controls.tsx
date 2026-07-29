@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Minus, Trash2, CircleSlash, RotateCcw, Check, CalendarOff } from "lucide-react";
+import { Plus, Minus, Trash2, CircleSlash, RotateCcw, Check, CalendarOff, Ban, Repeat } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
 import { Modal } from "@/components/modal";
@@ -63,7 +63,7 @@ export function EscalarDialog({
     start(async () => {
       const r = await escalarVoluntario({ eventId, teamId, positionId, requirementId, profileId }, override);
       if (!r.ok) {
-        if (r.code === "unavailable") setConfirmId(profileId);
+        if (r.code) setConfirmId(profileId);
         else setError(r.error);
         return;
       }
@@ -77,7 +77,8 @@ export function EscalarDialog({
   }
 
   function onPick(m: EligibleMember) {
-    if (m.unavailable) setConfirmId(m.profileId);
+    if (m.blockedOtherTeam) return;
+    if (m.unavailable || m.alreadyInTeam) setConfirmId(m.profileId);
     else escalar(m.profileId, false);
   }
 
@@ -107,11 +108,11 @@ export function EscalarDialog({
               <div key={m.profileId}>
                 <button
                   type="button"
-                  disabled={pending || m.alreadyInEvent}
+                  disabled={pending || m.blockedOtherTeam}
                   onClick={() => onPick(m)}
                   className={cn(
                     "press-sm flex w-full items-center gap-3 rounded-[16px] border p-2.5 text-left disabled:cursor-default",
-                    m.unavailable ? "border-border bg-muted/40 opacity-60" : "border-border bg-card",
+                    m.blockedOtherTeam ? "border-border bg-muted/40 opacity-60" : "border-border bg-card",
                   )}
                 >
                   <Avatar name={m.name} src={m.avatarUrl} className="size-10 shrink-0" />
@@ -128,11 +129,17 @@ export function EscalarDialog({
                           : "Nunca serviu nesta função"}
                     </p>
                   </div>
-                  {m.alreadyInEvent ? (
-                    <span className="shrink-0 text-[11.5px] font-extrabold text-success">Já na escala</span>
+                  {m.blockedOtherTeam ? (
+                    <span className="inline-flex shrink-0 items-center gap-1 text-[11.5px] font-extrabold text-muted-foreground">
+                      <Ban className="size-3.5" /> Em outra equipe
+                    </span>
                   ) : m.unavailable ? (
                     <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-destructive/10 px-2.5 py-1 text-[11.5px] font-extrabold text-destructive">
                       <CalendarOff className="size-3.5" /> Indisponível
+                    </span>
+                  ) : m.alreadyInTeam ? (
+                    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-warning/10 px-2.5 py-1 text-[11.5px] font-extrabold text-warning">
+                      <Repeat className="size-3.5" /> 2ª função
                     </span>
                   ) : (
                     <span className="grid size-8 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground">
@@ -143,7 +150,11 @@ export function EscalarDialog({
                 {confirmId === m.profileId ? (
                   <div className="mx-1 mt-1 rounded-[14px] bg-warning/10 p-3">
                     <p className="mb-2 text-xs font-semibold text-warning">
-                      {m.name} marcou indisponível nesse dia. Escalar mesmo assim?
+                      {m.unavailable && m.alreadyInTeam
+                        ? `${m.name} marcou indisponível e já está em outra função da equipe hoje. Escalar mesmo assim?`
+                        : m.unavailable
+                          ? `${m.name} marcou indisponível nesse dia. Escalar mesmo assim?`
+                          : `${m.name} já está em outra função desta equipe hoje. Escalar mesmo assim?`}
                     </p>
                     <div className="flex gap-2">
                       <Button size="sm" variant="destructive" onClick={() => escalar(m.profileId, true)} disabled={pending}>

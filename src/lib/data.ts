@@ -1391,7 +1391,10 @@ export type EligibleMember = {
   nickname: string | null;
   avatarUrl: string | null;
   knowsPosition: boolean;
-  alreadyInEvent: boolean;
+  /** Já escalada em OUTRA equipe neste evento — bloqueio real, sem exceção. */
+  blockedOtherTeam: boolean;
+  /** Já escalada em outra posição desta MESMA equipe — aviso, dá pra confirmar mesmo assim. */
+  alreadyInTeam: boolean;
   unavailable: boolean;
   lastServedISO: string | null;
 };
@@ -1407,11 +1410,13 @@ export async function getEligibleMembers(
       .from("memberships")
       .select("id, profile:profiles ( id, full_name, nickname, avatar_url, status ), member_positions ( position_id )")
       .eq("team_id", teamId),
-    supabase.from("assignments").select("profile_id").eq("event_id", eventId),
+    supabase.from("assignments").select("profile_id, team_id, status").eq("event_id", eventId),
     supabase.from("events").select("starts_at").eq("id", eventId).maybeSingle(),
   ]);
 
-  const assignedIds = new Set((eventAssigns ?? []).map((a) => a.profile_id).filter(Boolean));
+  const activeAssigns = (eventAssigns ?? []).filter((a) => a.status !== "recusado" && a.profile_id);
+  const otherTeamIds = new Set(activeAssigns.filter((a) => a.team_id !== teamId).map((a) => a.profile_id));
+  const sameTeamIds = new Set(activeAssigns.filter((a) => a.team_id === teamId).map((a) => a.profile_id));
 
   const rows = (members ?? []) as {
     id: string;
@@ -1458,12 +1463,15 @@ export async function getEligibleMembers(
       nickname: m.profile!.nickname,
       avatarUrl: m.profile!.avatar_url,
       knowsPosition: m.member_positions.some((mp) => mp.position_id === positionId),
-      alreadyInEvent: assignedIds.has(m.profile!.id),
+      blockedOtherTeam: otherTeamIds.has(m.profile!.id),
+      alreadyInTeam: sameTeamIds.has(m.profile!.id),
       unavailable: unavailableIds.has(m.profile!.id),
       lastServedISO: lastServed.get(m.profile!.id) ?? null,
     }))
     .sort((a, b) => {
+      if (a.blockedOtherTeam !== b.blockedOtherTeam) return a.blockedOtherTeam ? 1 : -1;
       if (a.unavailable !== b.unavailable) return a.unavailable ? 1 : -1;
+      if (a.alreadyInTeam !== b.alreadyInTeam) return a.alreadyInTeam ? 1 : -1;
       if (a.knowsPosition !== b.knowsPosition) return a.knowsPosition ? -1 : 1;
       return a.name.localeCompare(b.name, "pt-BR");
     });
