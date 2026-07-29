@@ -1,17 +1,27 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { CheckCircle2 } from "lucide-react";
-import { solicitarEntrada } from "@/lib/actions";
+import { CheckCircle2, Check } from "lucide-react";
+import { solicitarEntrada, listarEquipesPublicas } from "@/lib/actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { TeamDot } from "@/components/coverage-badge";
 import { PrimeirosPassosLink } from "@/components/primeiros-passos-link";
+import { cn } from "@/lib/utils";
+
+type TeamOpt = { id: string; name: string; color: string; icon: string };
 
 export default function CadastroPage() {
   const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [teams, setTeams] = useState<TeamOpt[]>([]);
+  const [teamId, setTeamId] = useState<string | null>(null);
+
+  useEffect(() => {
+    listarEquipesPublicas().then(setTeams);
+  }, []);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -24,6 +34,7 @@ export default function CadastroPage() {
       email: String(form.get("email") ?? ""),
       phone: String(form.get("phone") ?? ""),
       message: String(form.get("message") ?? ""),
+      desiredTeamId: teamId,
     });
     if (!r.ok) {
       setError(r.error);
@@ -71,16 +82,46 @@ export default function CadastroPage() {
           <Field name="full_name" label="Nome completo" required />
           <Field name="email" label="Email" type="email" />
           <Field name="phone" label="Telefone / WhatsApp" type="tel" />
+
+          {teams.length > 0 ? (
+            <div className="space-y-1.5">
+              <span className="text-sm font-medium">Em qual equipe você quer servir?</span>
+              <div className="space-y-2">
+                {teams.map((t) => {
+                  const sel = teamId === t.id;
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => setTeamId(sel ? null : t.id)}
+                      className="flex w-full items-center gap-2 rounded-2xl border border-input bg-card p-3 text-left text-sm font-medium"
+                    >
+                      <span
+                        className={cn(
+                          "inline-flex size-5 shrink-0 items-center justify-center rounded-full border",
+                          sel ? "border-primary bg-primary text-primary-foreground" : "border-border",
+                        )}
+                      >
+                        {sel ? <Check className="size-3.5" /> : null}
+                      </span>
+                      <TeamDot color={t.color} /> {t.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+
           <div className="space-y-1.5">
             <label htmlFor="message" className="text-sm font-medium">
-              Em que gostaria de servir?
+              Observação (opcional)
             </label>
             <textarea
               id="message"
               name="message"
-              rows={3}
+              rows={2}
               className="w-full rounded-2xl border border-input bg-card px-4 py-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              placeholder="Ex.: Louvor (vocal), recepção…"
+              placeholder="Algo que ajude a liderança a te conhecer"
             />
           </div>
 

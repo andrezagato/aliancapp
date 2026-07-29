@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { getSession, canManageTeam, type Session } from "@/lib/auth";
+import { getSession, canManageTeam, leadTeamIds, type Session } from "@/lib/auth";
 import {
   getEligibleMembers,
   getEventDetail,
@@ -94,6 +94,7 @@ export async function solicitarEntrada(input: {
   email: string;
   phone: string;
   message: string;
+  desiredTeamId?: string | null;
 }): Promise<ActionResult> {
   const nome = input.fullName.trim();
   if (nome.length < 2) return fail("Informe seu nome completo.");
@@ -103,8 +104,37 @@ export async function solicitarEntrada(input: {
     p_email: input.email.trim(),
     p_phone: input.phone.trim(),
     p_message: input.message.trim(),
+    p_desired_team_id: input.desiredTeamId || undefined,
   });
   if (error) return fail(error.message);
+  return ok;
+}
+
+/** Lista pública de equipes (RLS normal exige is_active()/is_admin() — não serve
+ * pra anônimo no /cadastro nem pra pendente sem igreja na tela de espera). */
+export async function listarEquipesPublicas(): Promise<{ id: string; name: string; color: string; icon: string }[]> {
+  const supabase = await createClient();
+  const { data } = await supabase.rpc("listar_equipes_publicas");
+  return data ?? [];
+}
+
+/** Perfil pendente (login espontâneo, sem convite) define a equipe que quer
+ * servir — abre a porta pro líder daquela equipe aprovar. */
+export async function definirEquipeDesejada(teamId: string): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  if (session.profile.status !== "pendente") return fail("Isso já foi resolvido.");
+  const supabase = await createClient();
+  const { error } = await supabase.from("profiles").update({ desired_team_id: teamId }).eq("id", session.userId);
+  if (error) return fail(error.message);
+  await notifyMany(await teamLeaderIds(teamId), {
+    kind: "cadastro_pendente",
+    title: "Alguém quer entrar na sua equipe",
+    body: `${session.profile.full_name || "Alguém"} pediu pra servir na sua equipe.`,
+    link: "/equipes",
+    teamId,
+  });
+  revalidatePath("/aguardando");
   return ok;
 }
 
@@ -1395,11 +1425,11 @@ export async function aplicarModeloCronograma(eventId: string, templateId: strin
   return ok;
 }
 
-/** Admin adiciona outra equipe a um evento já criado (copia as posições da equipe). */
+/** Admin ou líder da equipe adiciona outra equipe a um evento já criado (copia as posições da equipe). */
 export async function adicionarEquipeAoEvento(eventId: string, teamId: string): Promise<ActionResult> {
   const session = await getSession();
   if (!session) return fail("Sessão expirada.");
-  if (session.role !== "admin") return fail("Só o administrador adiciona equipes ao evento.");
+  if (!canManageTeam(session, teamId)) return fail("Você não pode adicionar essa equipe.");
   const supabase = await createClient();
 
   const { data: exists } = await supabase
@@ -1436,7 +1466,7 @@ export async function adicionarEquipeAoEvento(eventId: string, teamId: string): 
 export async function removerEquipeDoEvento(eventId: string, teamId: string): Promise<ActionResult> {
   const session = await getSession();
   if (!session) return fail("Sessão expirada.");
-  if (session.role !== "admin") return fail("Só o administrador remove equipes do evento.");
+  if (!canManageTeam(session, teamId)) return fail("Você não pode remover essa equipe.");
   const supabase = await createClient();
   const { error: aErr } = await supabase
     .from("assignments")
@@ -1697,20 +1727,23 @@ export async function cancelarConvite(inviteId: string): Promise<ActionResult> {
   return ok;
 }
 
-/** Aprova um auto-cadastro (pré-login) transformando-o em convite. */
+/** Aprova um auto-cadastro (pré-login) transformando-o em convite. Admin aprova
+ * qualquer um; líder só o que pediu a equipe dele. */
 export async function aprovarJoinRequest(joinId: string, teams: InviteTeamInput[] = []): Promise<ActionResult> {
   const session = await getSession();
   if (!session) return fail("Sessão expirada.");
-  if (session.role !== "admin") return fail("Só o administrador aprova cadastros.");
   if (!session.profile.church_id) return fail("Sua conta não está ligada a uma igreja.");
   const supabase = await createClient();
 
   const { data: jr } = await supabase
     .from("join_requests")
-    .select("id, full_name, email")
+    .select("id, full_name, email, desired_team_id")
     .eq("id", joinId)
     .maybeSingle();
   if (!jr) return fail("Solicitação não encontrada.");
+  if (session.role !== "admin" && !(jr.desired_team_id && canManageTeam(session, jr.desired_team_id))) {
+    return fail("Você só pode aprovar pedidos da sua equipe.");
+  }
   if (!jr.email) return fail("Essa solicitação não tem email — não dá pra casar no login.");
 
   const email = jr.email.trim().toLowerCase();
@@ -1736,7 +1769,7 @@ export async function aprovarJoinRequest(joinId: string, teams: InviteTeamInput[
     inviteId = inv.id;
   }
 
-  const picked = teams.filter((t) => t.teamId);
+  const picked = teams.filter((t) => t.teamId && (session.role === "admin" || canManageTeam(session, t.teamId)));
   if (inviteId && picked.length > 0) {
     await supabase.from("invite_teams").insert(
       picked.map((t) => ({ invite_id: inviteId, team_id: t.teamId, role: t.role })),
@@ -1752,8 +1785,14 @@ export async function aprovarJoinRequest(joinId: string, teams: InviteTeamInput[
 
 export async function recusarJoinRequest(joinId: string): Promise<ActionResult> {
   const session = await getSession();
-  if (!session || session.role !== "admin") return fail("Sem permissão.");
+  if (!session) return fail("Sem permissão.");
   const supabase = await createClient();
+  if (session.role !== "admin") {
+    const { data: jr } = await supabase.from("join_requests").select("desired_team_id").eq("id", joinId).maybeSingle();
+    if (!jr?.desired_team_id || !canManageTeam(session, jr.desired_team_id)) {
+      return fail("Você só pode recusar pedidos da sua equipe.");
+    }
+  }
   const { error } = await supabase
     .from("join_requests")
     .update({ status: "recusado", resolved_by: session.userId })
@@ -1763,13 +1802,20 @@ export async function recusarJoinRequest(joinId: string): Promise<ActionResult> 
   return ok;
 }
 
-/** Aprova alguém que logou sem convite (profile pendente) -> ativa + equipes. */
+/** Aprova alguém que logou sem convite (profile pendente) -> ativa + equipes.
+ * Admin aprova qualquer um; líder só quem pediu a equipe dele. */
 export async function aprovarProfilePendente(input: AprovarProfileInput): Promise<ActionResult> {
   const session = await getSession();
   if (!session) return fail("Sessão expirada.");
-  if (session.role !== "admin") return fail("Só o administrador aprova cadastros.");
   if (!session.profile.church_id) return fail("Sua conta não está ligada a uma igreja.");
   const supabase = await createClient();
+
+  if (session.role !== "admin") {
+    const { data: p } = await supabase.from("profiles").select("desired_team_id").eq("id", input.profileId).maybeSingle();
+    if (!p?.desired_team_id || !canManageTeam(session, p.desired_team_id)) {
+      return fail("Você só pode aprovar quem pediu a sua equipe.");
+    }
+  }
 
   const { error } = await supabase
     .from("profiles")
@@ -1777,7 +1823,7 @@ export async function aprovarProfilePendente(input: AprovarProfileInput): Promis
     .eq("id", input.profileId);
   if (error) return fail(error.message);
 
-  const teams = (input.teams ?? []).filter((t) => t.teamId);
+  const teams = (input.teams ?? []).filter((t) => t.teamId && (session.role === "admin" || canManageTeam(session, t.teamId)));
   if (teams.length > 0) {
     const { error: mErr } = await supabase.from("memberships").insert(
       teams.map((t) => ({ profile_id: input.profileId, team_id: t.teamId, role: t.role })),
@@ -2090,14 +2136,17 @@ export async function carregarEventoParaModal(eventId: string): Promise<EventoMo
   if (!ev) return { ok: false, error: "Evento não encontrado." };
   const canCheckin = churchDateISO(ev.starts_at) <= churchDateISO(new Date().toISOString());
   const isAdmin = session.role === "admin";
+  const isLeader = session.role === "leader";
   const [churchLoc, profiles, allTeams] = await Promise.all([
     isAdmin ? getChurchLocation(session) : Promise.resolve(null),
     isAdmin ? listChurchProfiles() : Promise.resolve([]),
-    isAdmin ? listTeams() : Promise.resolve([]),
+    isAdmin || isLeader ? listTeams() : Promise.resolve([]),
   ]);
   const inEvent = new Set((ev.teams ?? []).map((t) => t.teamId));
+  const leadIds = new Set(leadTeamIds(session.profile));
   const availableTeams = allTeams
     .filter((t) => !inEvent.has(t.id))
+    .filter((t) => isAdmin || leadIds.has(t.id))
     .map((t) => ({ id: t.id, name: t.name, color: t.color }));
   return {
     ok: true,

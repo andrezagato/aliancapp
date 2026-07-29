@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarPlus, MapPin } from "lucide-react";
+import { CalendarPlus, MapPin, Plus } from "lucide-react";
 import { Modal } from "@/components/modal";
 import { TeamDot } from "@/components/coverage-badge";
 import { useToast } from "@/components/ui/toast";
@@ -167,6 +167,40 @@ export function SugerirEventoButton({ teams }: { teams: TeamOption[] }) {
 }
 
 // -----------------------------------------------------------------------------
+// Botão compacto (só ícone) que abre o mesmo formulário — usado ao lado de
+// "ver o mês inteiro" na aba Escalas.
+// -----------------------------------------------------------------------------
+export function SugerirEventoIconButton({ teams }: { teams: TeamOption[] }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        aria-label="Sugerir evento"
+        className="press-sm inline-flex size-9 items-center justify-center rounded-full bg-primary text-primary-foreground"
+      >
+        <Plus className="size-[18px]" />
+      </button>
+
+      <Modal open={open} onClose={() => setOpen(false)} sheet title="Sugerir evento">
+        <div className="mt-1">
+          <SugerirEventoForm
+            teams={teams}
+            onDone={() => {
+              setOpen(false);
+              router.refresh();
+            }}
+          />
+        </div>
+      </Modal>
+    </>
+  );
+}
+
+// -----------------------------------------------------------------------------
 // Admin: caixa de entrada dos pedidos de evento
 // -----------------------------------------------------------------------------
 export function EventRequestInbox({ requests }: { requests: PendingEventRequest[] }) {
@@ -196,13 +230,8 @@ function EventRequestCard({ req }: { req: PendingEventRequest }) {
       if (r.ok) {
         setOpen(false);
         setNote("");
-        if (aprovar && r.eventId) {
-          showToast(warm("eventoAprovado"));
-          router.push(`/escalas/${r.eventId}`);
-        } else {
-          showToast(warm(aprovar ? "eventoAprovado" : "pedidoRecusado"));
-          router.refresh();
-        }
+        showToast(warm(aprovar ? "eventoAprovado" : "pedidoRecusado"));
+        router.refresh();
       } else {
         showToast(r.error);
       }
@@ -237,7 +266,7 @@ function EventRequestCard({ req }: { req: PendingEventRequest }) {
           {req.desiredAt ? <> · {fmtEventWhen(req.desiredAt)}</> : null} — pedido de {req.requesterName}.
         </p>
         <p className="mt-2 text-[13px] text-muted-foreground">
-          Ao aprovar, o evento entra no calendário e você já cai na escala pra ajustar as equipes.
+          Ao aprovar, o evento entra no calendário. Você ajusta as equipes na escala quando quiser.
         </p>
         <textarea
           value={note}

@@ -83,7 +83,6 @@ export function EventEscalaModal({
               startsAt={detail.startsAt!}
               canCheckin={!!detail.canCheckin}
               teams={detail.teams}
-              isAdmin={!!isAdmin}
               availableTeams={detail.availableTeams ?? []}
             />
           )}

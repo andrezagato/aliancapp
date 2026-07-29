@@ -14,60 +14,6 @@ export type Database = {
   }
   public: {
     Tables: {
-      chat_messages: {
-        Row: {
-          body: string
-          channel_ref: string
-          channel_type: string
-          church_id: string
-          created_at: string
-          id: string
-          sender_id: string
-        }
-        Insert: {
-          body: string
-          channel_ref: string
-          channel_type: string
-          church_id: string
-          created_at?: string
-          id?: string
-          sender_id: string
-        }
-        Update: {
-          body?: string
-          channel_ref?: string
-          channel_type?: string
-          church_id?: string
-          created_at?: string
-          id?: string
-          sender_id?: string
-        }
-        Relationships: []
-      }
-      chat_reads: {
-        Row: {
-          channel_ref: string
-          channel_type: string
-          last_read_at: string
-          muted: boolean
-          profile_id: string
-        }
-        Insert: {
-          channel_ref: string
-          channel_type: string
-          last_read_at?: string
-          muted?: boolean
-          profile_id: string
-        }
-        Update: {
-          channel_ref?: string
-          channel_type?: string
-          last_read_at?: string
-          muted?: boolean
-          profile_id?: string
-        }
-        Relationships: []
-      }
       achievements: {
         Row: {
           code: string
@@ -131,7 +77,50 @@ export type Database = {
           profile_id?: string | null
           team_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "activity_log_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activity_log_church_id_fkey"
+            columns: ["church_id"]
+            isOneToOne: false
+            referencedRelation: "churches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activity_log_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activity_log_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "v_assignment_history"
+            referencedColumns: ["event_id"]
+          },
+          {
+            foreignKeyName: "activity_log_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activity_log_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       assignments: {
         Row: {
@@ -263,6 +252,83 @@ export type Database = {
           },
         ]
       }
+      chat_messages: {
+        Row: {
+          body: string
+          channel_ref: string
+          channel_type: string
+          church_id: string
+          created_at: string
+          id: string
+          sender_id: string
+        }
+        Insert: {
+          body: string
+          channel_ref: string
+          channel_type: string
+          church_id: string
+          created_at?: string
+          id?: string
+          sender_id: string
+        }
+        Update: {
+          body?: string
+          channel_ref?: string
+          channel_type?: string
+          church_id?: string
+          created_at?: string
+          id?: string
+          sender_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_messages_church_id_fkey"
+            columns: ["church_id"]
+            isOneToOne: false
+            referencedRelation: "churches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_messages_sender_id_fkey"
+            columns: ["sender_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chat_reads: {
+        Row: {
+          channel_ref: string
+          channel_type: string
+          last_read_at: string
+          muted: boolean
+          profile_id: string
+        }
+        Insert: {
+          channel_ref: string
+          channel_type: string
+          last_read_at?: string
+          muted?: boolean
+          profile_id: string
+        }
+        Update: {
+          channel_ref?: string
+          channel_type?: string
+          last_read_at?: string
+          muted?: boolean
+          profile_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_reads_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       checkins: {
         Row: {
           assignment_id: string
@@ -345,48 +411,6 @@ export type Database = {
         }
         Relationships: []
       }
-      event_feedback: {
-        Row: {
-          comment: string | null
-          created_at: string
-          event_id: string
-          id: string
-          profile_id: string
-          rating: number
-        }
-        Insert: {
-          comment?: string | null
-          created_at?: string
-          event_id: string
-          id?: string
-          profile_id: string
-          rating: number
-        }
-        Update: {
-          comment?: string | null
-          created_at?: string
-          event_id?: string
-          id?: string
-          profile_id?: string
-          rating?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "event_feedback_event_id_fkey"
-            columns: ["event_id"]
-            isOneToOne: false
-            referencedRelation: "events"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "event_feedback_profile_id_fkey"
-            columns: ["profile_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       culto_avaliacoes: {
         Row: {
           author_id: string
@@ -437,64 +461,58 @@ export type Database = {
             referencedRelation: "events"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "culto_avaliacoes_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "v_assignment_history"
+            referencedColumns: ["event_id"]
+          },
         ]
       }
-      pessoa_observacoes: {
+      event_feedback: {
         Row: {
-          author_id: string
-          church_id: string
+          comment: string | null
           created_at: string
           event_id: string
           id: string
-          note: string
-          subject_id: string
-          updated_at: string
+          profile_id: string
+          rating: number
         }
         Insert: {
-          author_id: string
-          church_id: string
+          comment?: string | null
           created_at?: string
           event_id: string
           id?: string
-          note: string
-          subject_id: string
-          updated_at?: string
+          profile_id: string
+          rating: number
         }
         Update: {
-          author_id?: string
-          church_id?: string
+          comment?: string | null
           created_at?: string
           event_id?: string
           id?: string
-          note?: string
-          subject_id?: string
-          updated_at?: string
+          profile_id?: string
+          rating?: number
         }
         Relationships: [
           {
-            foreignKeyName: "pessoa_observacoes_author_id_fkey"
-            columns: ["author_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pessoa_observacoes_church_id_fkey"
-            columns: ["church_id"]
-            isOneToOne: false
-            referencedRelation: "churches"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pessoa_observacoes_event_id_fkey"
+            foreignKeyName: "event_feedback_event_id_fkey"
             columns: ["event_id"]
             isOneToOne: false
             referencedRelation: "events"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "pessoa_observacoes_subject_id_fkey"
-            columns: ["subject_id"]
+            foreignKeyName: "event_feedback_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "v_assignment_history"
+            referencedColumns: ["event_id"]
+          },
+          {
+            foreignKeyName: "event_feedback_profile_id_fkey"
+            columns: ["profile_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -691,6 +709,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "events"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_rundown_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "v_assignment_history"
+            referencedColumns: ["event_id"]
           },
         ]
       }
@@ -937,6 +962,7 @@ export type Database = {
         Row: {
           church_id: string
           created_at: string
+          desired_team_id: string | null
           email: string | null
           full_name: string
           id: string
@@ -948,6 +974,7 @@ export type Database = {
         Insert: {
           church_id: string
           created_at?: string
+          desired_team_id?: string | null
           email?: string | null
           full_name: string
           id?: string
@@ -959,6 +986,7 @@ export type Database = {
         Update: {
           church_id?: string
           created_at?: string
+          desired_team_id?: string | null
           email?: string | null
           full_name?: string
           id?: string
@@ -973,6 +1001,13 @@ export type Database = {
             columns: ["church_id"]
             isOneToOne: false
             referencedRelation: "churches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "join_requests_desired_team_id_fkey"
+            columns: ["desired_team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
             referencedColumns: ["id"]
           },
           {
@@ -1153,6 +1188,75 @@ export type Database = {
           },
         ]
       }
+      pessoa_observacoes: {
+        Row: {
+          author_id: string
+          church_id: string
+          created_at: string
+          event_id: string
+          id: string
+          note: string
+          subject_id: string
+          updated_at: string
+        }
+        Insert: {
+          author_id: string
+          church_id: string
+          created_at?: string
+          event_id: string
+          id?: string
+          note: string
+          subject_id: string
+          updated_at?: string
+        }
+        Update: {
+          author_id?: string
+          church_id?: string
+          created_at?: string
+          event_id?: string
+          id?: string
+          note?: string
+          subject_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pessoa_observacoes_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pessoa_observacoes_church_id_fkey"
+            columns: ["church_id"]
+            isOneToOne: false
+            referencedRelation: "churches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pessoa_observacoes_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pessoa_observacoes_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "v_assignment_history"
+            referencedColumns: ["event_id"]
+          },
+          {
+            foreignKeyName: "pessoa_observacoes_subject_id_fkey"
+            columns: ["subject_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       positions: {
         Row: {
           archived_at: string | null
@@ -1194,6 +1298,7 @@ export type Database = {
           birth_date: string | null
           church_id: string | null
           created_at: string
+          desired_team_id: string | null
           email: string | null
           full_name: string
           id: string
@@ -1208,6 +1313,7 @@ export type Database = {
           birth_date?: string | null
           church_id?: string | null
           created_at?: string
+          desired_team_id?: string | null
           email?: string | null
           full_name?: string
           id: string
@@ -1222,6 +1328,7 @@ export type Database = {
           birth_date?: string | null
           church_id?: string | null
           created_at?: string
+          desired_team_id?: string | null
           email?: string | null
           full_name?: string
           id?: string
@@ -1237,6 +1344,13 @@ export type Database = {
             columns: ["church_id"]
             isOneToOne: false
             referencedRelation: "churches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profiles_desired_team_id_fkey"
+            columns: ["desired_team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
             referencedColumns: ["id"]
           },
         ]
@@ -1567,8 +1681,8 @@ export type Database = {
           created_at: string
           icon: string
           id: string
-          name: string
           manages_rundown: boolean
+          name: string
           sort_order: number
           whatsapp_group: string | null
         }
@@ -1579,8 +1693,8 @@ export type Database = {
           created_at?: string
           icon?: string
           id?: string
-          name: string
           manages_rundown?: boolean
+          name: string
           sort_order?: number
           whatsapp_group?: string | null
         }
@@ -1591,8 +1705,8 @@ export type Database = {
           created_at?: string
           icon?: string
           id?: string
-          name?: string
           manages_rundown?: boolean
+          name?: string
           sort_order?: number
           whatsapp_group?: string | null
         }
@@ -1647,59 +1761,30 @@ export type Database = {
       }
     }
     Functions: {
-      reconciliar_onboarding: { Args: never; Returns: undefined }
+      can_post_channel: {
+        Args: { p_ref: string; p_type: string }
+        Returns: boolean
+      }
+      can_read_channel: {
+        Args: { p_ref: string; p_type: string }
+        Returns: boolean
+      }
+      chat_push_recipients: {
+        Args: { p_ref: string; p_type: string }
+        Returns: {
+          auth: string
+          endpoint: string
+          p256dh: string
+        }[]
+      }
       confirmar_escalacao: {
         Args: { p_assignment: string }
         Returns: undefined
       }
       confirmar_evento: {
-        Args: { p_event: string; p_confirmar: boolean }
+        Args: { p_confirmar: boolean; p_event: string }
         Returns: undefined
       }
-      is_active: { Args: never; Returns: boolean }
-      is_admin: { Args: never; Returns: boolean }
-      is_any_leader: { Args: never; Returns: boolean }
-      is_team_leader: { Args: { t: string }; Returns: boolean }
-      is_team_member: { Args: { t: string }; Returns: boolean }
-      leads_team_of: { Args: { p: string }; Returns: boolean }
-      log_activity: {
-        Args: {
-          p_profile: string
-          p_actor: string
-          p_kind: string
-          p_event?: string
-          p_team?: string
-          p_meta?: Json
-        }
-        Returns: undefined
-      }
-      recusar_escalacao: {
-        Args: { p_assignment: string; p_motivo: string }
-        Returns: undefined
-      }
-      notificar: {
-        Args: {
-          p_recipient: string
-          p_kind: Database["public"]["Enums"]["notification_kind"]
-          p_title: string
-          p_body?: string
-          p_link?: string
-          p_team?: string
-          p_event?: string
-        }
-        Returns: undefined
-      }
-      solicitar_entrada: {
-        Args: {
-          p_full_name: string
-          p_email: string
-          p_phone: string
-          p_message: string
-        }
-        Returns: undefined
-      }
-      manages_rundown: { Args: never; Returns: boolean }
-      primeiro_no_local_count: { Args: never; Returns: number }
       contribuir_no_bloco: {
         Args: { p_bloco: string; p_link: string; p_note: string }
         Returns: undefined
@@ -1710,19 +1795,66 @@ export type Database = {
       }
       get_push_subs: {
         Args: { p_profile: string }
-        Returns: { endpoint: string; p256dh: string; auth: string }[]
+        Returns: {
+          auth: string
+          endpoint: string
+          p256dh: string
+        }[]
       }
-      can_read_channel: {
-        Args: { p_type: string; p_ref: string }
-        Returns: boolean
+      is_active: { Args: never; Returns: boolean }
+      is_admin: { Args: never; Returns: boolean }
+      is_any_leader: { Args: never; Returns: boolean }
+      is_team_leader: { Args: { t: string }; Returns: boolean }
+      is_team_member: { Args: { t: string }; Returns: boolean }
+      leads_team_of: { Args: { p: string }; Returns: boolean }
+      listar_equipes_publicas: {
+        Args: never
+        Returns: {
+          color: string
+          icon: string
+          id: string
+          name: string
+        }[]
       }
-      can_post_channel: {
-        Args: { p_type: string; p_ref: string }
-        Returns: boolean
+      log_activity: {
+        Args: {
+          p_actor: string
+          p_event?: string
+          p_kind: string
+          p_meta?: Json
+          p_profile: string
+          p_team?: string
+        }
+        Returns: undefined
       }
-      chat_push_recipients: {
-        Args: { p_type: string; p_ref: string }
-        Returns: { endpoint: string; p256dh: string; auth: string }[]
+      manages_rundown: { Args: never; Returns: boolean }
+      notificar: {
+        Args: {
+          p_body?: string
+          p_event?: string
+          p_kind: Database["public"]["Enums"]["notification_kind"]
+          p_link?: string
+          p_recipient: string
+          p_team?: string
+          p_title: string
+        }
+        Returns: undefined
+      }
+      primeiro_no_local_count: { Args: never; Returns: number }
+      reconciliar_onboarding: { Args: never; Returns: undefined }
+      recusar_escalacao: {
+        Args: { p_assignment: string; p_motivo: string }
+        Returns: undefined
+      }
+      solicitar_entrada: {
+        Args: {
+          p_desired_team_id?: string
+          p_email: string
+          p_full_name: string
+          p_message: string
+          p_phone: string
+        }
+        Returns: undefined
       }
     }
     Enums: {

@@ -204,6 +204,7 @@ function AprovarModal({
   pending,
   error,
   onConfirm,
+  initialTeamId,
 }: {
   open: boolean;
   onClose: () => void;
@@ -211,8 +212,11 @@ function AprovarModal({
   pending: boolean;
   error: string | null;
   onConfirm: (picked: InviteTeamInput[]) => void;
+  initialTeamId?: string | null;
 }) {
-  const [picked, setPicked] = useState<InviteTeamInput[]>([]);
+  const [picked, setPicked] = useState<InviteTeamInput[]>(
+    initialTeamId ? [{ teamId: initialTeamId, role: "volunteer" }] : [],
+  );
   return (
     <Modal open={open} onClose={() => !pending && onClose()} sheet title="Aprovar entrada">
       <p className="mt-1 text-sm text-muted-foreground">Escolha as equipes e quem é líder — dá pra ajustar depois.</p>
@@ -235,7 +239,15 @@ function AprovarModal({
 // -----------------------------------------------------------------------------
 // Aprovar / recusar auto-cadastro (join_request)
 // -----------------------------------------------------------------------------
-export function JoinRequestActions({ joinId, teams }: { joinId: string; teams: TeamOpt[] }) {
+export function JoinRequestActions({
+  joinId,
+  teams,
+  desiredTeamId,
+}: {
+  joinId: string;
+  teams: TeamOpt[];
+  desiredTeamId?: string | null;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
@@ -272,7 +284,15 @@ export function JoinRequestActions({ joinId, teams }: { joinId: string; teams: T
         </Button>
       </div>
       {error && !open ? <p className="text-xs text-destructive">{error}</p> : null}
-      <AprovarModal open={open} onClose={() => setOpen(false)} teams={teams} pending={pending} error={open ? error : null} onConfirm={approve} />
+      <AprovarModal
+        open={open}
+        onClose={() => setOpen(false)}
+        teams={teams}
+        pending={pending}
+        error={open ? error : null}
+        onConfirm={approve}
+        initialTeamId={desiredTeamId}
+      />
     </div>
   );
 }
@@ -280,7 +300,17 @@ export function JoinRequestActions({ joinId, teams }: { joinId: string; teams: T
 // -----------------------------------------------------------------------------
 // Aprovar profile pendente (logou sem convite) com equipes
 // -----------------------------------------------------------------------------
-export function PendingProfileActions({ profileId, teams }: { profileId: string; teams: TeamOpt[] }) {
+export function PendingProfileActions({
+  profileId,
+  teams,
+  allowReject = true,
+  desiredTeamId,
+}: {
+  profileId: string;
+  teams: TeamOpt[];
+  allowReject?: boolean;
+  desiredTeamId?: string | null;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [confirmReject, setConfirmReject] = useState(false);
@@ -321,9 +351,11 @@ export function PendingProfileActions({ profileId, teams }: { profileId: string;
           </>
         ) : (
           <>
-            <Button size="sm" variant="outline" onClick={() => setConfirmReject(true)} disabled={pending}>
-              Recusar
-            </Button>
+            {allowReject ? (
+              <Button size="sm" variant="outline" onClick={() => setConfirmReject(true)} disabled={pending}>
+                Recusar
+              </Button>
+            ) : null}
             <Button size="sm" onClick={() => setOpen(true)}>
               Aprovar
             </Button>
@@ -331,7 +363,15 @@ export function PendingProfileActions({ profileId, teams }: { profileId: string;
         )}
       </div>
       {error && !open ? <p className="text-xs text-destructive">{error}</p> : null}
-      <AprovarModal open={open} onClose={() => setOpen(false)} teams={teams} pending={pending} error={open ? error : null} onConfirm={approve} />
+      <AprovarModal
+        open={open}
+        onClose={() => setOpen(false)}
+        teams={teams}
+        pending={pending}
+        error={open ? error : null}
+        onConfirm={approve}
+        initialTeamId={desiredTeamId}
+      />
     </div>
   );
 }

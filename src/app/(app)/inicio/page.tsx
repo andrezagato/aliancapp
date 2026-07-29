@@ -2,6 +2,7 @@ import Link from "next/link";
 import {
   MapPin,
   CalendarDays,
+  ChevronLeft,
   ChevronRight,
   Sparkles,
   Cake,
@@ -147,7 +148,7 @@ export default async function InicioPage({
       <TeamReviewPrompt pending={pendingReviews} />
       <SwapInbox items={swaps} />
       <ResponsibleConfirm events={respEvents} />
-      <LeaderSection hideHeroForEventId={myResponsibleEvent?.id ?? null} />
+      <LeaderSection hideHeroForEventId={myResponsibleEvent?.id ?? null} mes={sp.m} />
       <Servir teams={teamsWithPos} interests={myInterests} />
       <Birthdays />
     </HomeShell>
@@ -237,17 +238,29 @@ function MyScheduleList({ mine, title }: { mine: MyAssignment[]; title: string }
 // -----------------------------------------------------------------------------
 // LÍDER
 // -----------------------------------------------------------------------------
-async function LeaderSection({ hideHeroForEventId }: { hideHeroForEventId: string | null }) {
+async function LeaderSection({
+  hideHeroForEventId,
+  mes,
+}: {
+  hideHeroForEventId: string | null;
+  mes?: string;
+}) {
   const session = (await getSession())!;
   const leadIds = session.profile.teams.filter((t) => t.role === "leader").map((t) => t.id);
 
   const todayISO = churchDateISO(new Date().toISOString());
-  const y = Number(todayISO.slice(0, 4));
-  const m = Number(todayISO.slice(5, 7));
+  const monthStr = /^\d{4}-\d{2}$/.test(mes ?? "") ? mes! : todayISO.slice(0, 7);
+  const y = Number(monthStr.slice(0, 4));
+  const m = Number(monthStr.slice(5, 7));
   const fromIso = new Date(`${y}-${pad(m)}-01T00:00:00-03:00`).toISOString();
   const ny = m === 12 ? y + 1 : y;
   const nm = m === 12 ? 1 : m + 1;
   const toIso = new Date(`${ny}-${pad(nm)}-01T00:00:00-03:00`).toISOString();
+  const prevM = m === 1 ? `${y - 1}-12` : `${y}-${pad(m - 1)}`;
+  const nextM = m === 12 ? `${y + 1}-01` : `${y}-${pad(m + 1)}`;
+  const monthLabel = new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric", timeZone: "UTC" }).format(
+    new Date(Date.UTC(y, m - 1, 1)),
+  );
 
   const [home, mine, monthRaw, myEventRequests, teams, teamCare, teamAchv] = await Promise.all([
     getLeaderHome(session),
@@ -274,7 +287,23 @@ async function LeaderSection({ hideHeroForEventId }: { hideHeroForEventId: strin
       {nextTeamEvent ? <NextEventHero ev={nextTeamEvent} kicker="Próximo da sua equipe" caption="confirmados" /> : null}
 
       <section>
-        <h3 className="mb-2 px-1 text-base font-semibold">Calendário da sua equipe</h3>
+        <div className="mb-2 flex items-center gap-1">
+          <Link
+            href={`/inicio?m=${prevM}`}
+            aria-label="Mês anterior"
+            className="inline-flex size-9 items-center justify-center rounded-full hover:bg-muted"
+          >
+            <ChevronLeft className="size-5" />
+          </Link>
+          <h3 className="flex-1 text-center text-base font-semibold capitalize">{monthLabel}</h3>
+          <Link
+            href={`/inicio?m=${nextM}`}
+            aria-label="Próximo mês"
+            className="inline-flex size-9 items-center justify-center rounded-full hover:bg-muted"
+          >
+            <ChevronRight className="size-5" />
+          </Link>
+        </div>
         <TeamCalendar
           year={y}
           month={m}

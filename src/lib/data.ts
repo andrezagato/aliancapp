@@ -13,6 +13,7 @@ import { BADGES, earnedCodes, type JourneyMetrics } from "@/lib/achievements";
 import {
   type Session,
   memberTeamIds,
+  leadTeamIds,
 } from "@/lib/auth";
 import { churchDateISO } from "@/lib/format";
 import type { AssignmentStatus, RequirementStatus } from "@/lib/supabase/database.types";
@@ -1923,22 +1924,31 @@ export type PendingJoin = {
   email: string | null;
   phone: string | null;
   message: string | null;
+  desiredTeamId: string | null;
   createdAt: string;
 };
 
-export async function listPendingJoinRequests(): Promise<PendingJoin[]> {
+/** Pedidos de entrada pendentes (auto-cadastro). Admin vê todos; líder só os
+ * que pediram a equipe dele. */
+export async function listPendingJoinRequests(session: Session): Promise<PendingJoin[]> {
+  const isAdmin = session.role === "admin";
+  const leadIds = leadTeamIds(session.profile);
+  if (!isAdmin && leadIds.length === 0) return [];
   const supabase = await createClient();
-  const { data } = await supabase
+  let q = supabase
     .from("join_requests")
-    .select("id, full_name, email, phone, message, created_at")
+    .select("id, full_name, email, phone, message, desired_team_id, created_at")
     .eq("status", "pendente")
     .order("created_at", { ascending: false });
+  if (!isAdmin) q = q.in("desired_team_id", leadIds);
+  const { data } = await q;
   return ((data ?? []) as {
     id: string;
     full_name: string;
     email: string | null;
     phone: string | null;
     message: string | null;
+    desired_team_id: string | null;
     created_at: string;
   }[]).map((j) => ({
     id: j.id,
@@ -1946,7 +1956,48 @@ export async function listPendingJoinRequests(): Promise<PendingJoin[]> {
     email: j.email,
     phone: j.phone,
     message: j.message,
+    desiredTeamId: j.desired_team_id,
     createdAt: j.created_at,
+  }));
+}
+
+export type PendingProfile = {
+  id: string;
+  fullName: string;
+  email: string | null;
+  avatarUrl: string | null;
+  desiredTeamId: string | null;
+  createdAt: string;
+};
+
+/** Perfis pendentes (logou sem convite). Admin vê todos; líder só os que
+ * pediram a equipe dele. */
+export async function listPendingProfiles(session: Session): Promise<PendingProfile[]> {
+  const isAdmin = session.role === "admin";
+  const leadIds = leadTeamIds(session.profile);
+  if (!isAdmin && leadIds.length === 0) return [];
+  const supabase = await createClient();
+  let q = supabase
+    .from("profiles")
+    .select("id, full_name, email, avatar_url, desired_team_id, created_at")
+    .eq("status", "pendente")
+    .order("created_at", { ascending: false });
+  if (!isAdmin) q = q.in("desired_team_id", leadIds);
+  const { data } = await q;
+  return ((data ?? []) as {
+    id: string;
+    full_name: string;
+    email: string | null;
+    avatar_url: string | null;
+    desired_team_id: string | null;
+    created_at: string;
+  }[]).map((p) => ({
+    id: p.id,
+    fullName: p.full_name,
+    email: p.email,
+    avatarUrl: p.avatar_url,
+    desiredTeamId: p.desired_team_id,
+    createdAt: p.created_at,
   }));
 }
 

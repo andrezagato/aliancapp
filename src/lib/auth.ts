@@ -83,6 +83,7 @@ export const getSession = cache(async (): Promise<Session | null> => {
       phone: null,
       avatar_url: (user.user_metadata?.avatar_url as string) ?? null,
       birth_date: null,
+      desired_team_id: null,
       system_role: "member",
       status: "pendente",
       created_at: new Date(0).toISOString(),

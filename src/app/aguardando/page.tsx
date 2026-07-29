@@ -4,6 +4,8 @@ import { getSession, isActive } from "@/lib/auth";
 import { Card, CardContent } from "@/components/ui/card";
 import { SignOutButton } from "@/components/sign-out-button";
 import { PrimeirosPassosLink } from "@/components/primeiros-passos-link";
+import { EscolherEquipeDesejada } from "@/components/escolher-equipe-desejada";
+import { listarEquipesPublicas } from "@/lib/actions";
 
 export default async function AguardandoPage() {
   const session = await getSession();
@@ -11,6 +13,10 @@ export default async function AguardandoPage() {
   if (isActive(session.profile)) redirect("/inicio");
 
   const firstName = session.profile.full_name?.split(/\s+/)[0] || "Olá";
+  const desiredTeamId = session.profile.desired_team_id;
+  const desiredTeamName = desiredTeamId
+    ? (await listarEquipesPublicas()).find((t) => t.id === desiredTeamId)?.name ?? null
+    : null;
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-[480px] flex-col justify-center px-6 py-10">
@@ -26,6 +32,14 @@ export default async function AguardandoPage() {
               igreja — assim que aprovarem, tudo aparece por aqui.
             </p>
           </div>
+          {desiredTeamName ? (
+            <p className="w-full rounded-2xl bg-primary/10 px-4 py-3 text-sm font-medium text-primary">
+              Você pediu pra servir em {desiredTeamName}. Avisamos a liderança de lá.
+            </p>
+          ) : (
+            <EscolherEquipeDesejada />
+          )}
+
           <div className="w-full space-y-2">
             <p className="text-sm text-muted-foreground">
               Enquanto isso, veja como o Sirvo funciona:
