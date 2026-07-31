@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { STATUS_META } from "@/lib/status";
 import { TeamDot } from "@/components/coverage-badge";
 import { EventPiesCard } from "@/components/event-pies-card";
+import { AbrirEscala } from "@/components/event/abrir-escala";
 import { AssignmentResponse } from "@/components/assignment-response";
 import { getSession } from "@/lib/auth";
 import {
@@ -196,9 +197,9 @@ function MyScheduleList({ mine, title }: { mine: MyAssignment[]; title: string }
                     <span className="text-[10px] text-muted-foreground">{fmtTime(a.startsAt)}</span>
                   </div>
                   <div className="min-w-0 flex-1">
-                    <Link href={`/escalas/${a.eventId}`} className="font-medium hover:underline">
+                    <AbrirEscala eventId={a.eventId} className="text-left font-medium hover:underline">
                       {a.eventTitle}
-                    </Link>
+                    </AbrirEscala>
                     <p className="mt-0.5 flex items-center gap-1.5 text-sm text-muted-foreground">
                       <TeamDot color={a.teamColor} /> {a.teamName} · {a.positionName}
                     </p>
@@ -591,7 +592,10 @@ function ResponsibleConfirm({ events }: { events: MyResponsibleEvent[] }) {
         <ul className="divide-y divide-border">
           {events.map((e) => (
             <li key={e.eventId}>
-              <Link href={`/escalas/${e.eventId}`} className="flex items-center gap-3 p-4 hover:bg-muted/50">
+              <AbrirEscala
+                eventId={e.eventId}
+                className="flex w-full items-center gap-3 p-4 text-left hover:bg-muted/50"
+              >
                 <span className="inline-flex size-10 items-center justify-center rounded-full bg-warning/12 text-warning-ink">
                   <Clock className="size-5" />
                 </span>
@@ -600,7 +604,7 @@ function ResponsibleConfirm({ events }: { events: MyResponsibleEvent[] }) {
                   <p className="text-sm text-muted-foreground">{fmtEventWhen(e.startsAt)} · confirme que vai acontecer</p>
                 </div>
                 <ChevronRight className="size-5 shrink-0 text-muted-foreground" />
-              </Link>
+              </AbrirEscala>
             </li>
           ))}
         </ul>

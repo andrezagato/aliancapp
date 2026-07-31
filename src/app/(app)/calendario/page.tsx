@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card";
 import { CoverageBadge } from "@/components/coverage-badge";
 import { TeamCalendar } from "@/components/home/team-calendar";
 import { getSession } from "@/lib/auth";
+import { AbrirEscala } from "@/components/event/abrir-escala";
 import { listEventsInRange, listPendingEventRequests, listTeams, type EventListItem } from "@/lib/data";
 import { EventRequestInbox, SugerirEventoButton } from "@/components/event-request-controls";
 import { churchDateISO, fmtTime } from "@/lib/format";
@@ -104,7 +105,10 @@ export default async function CalendarioPage({
                 <div className="space-y-3">
                   {byDay.get(day)!.map((ev) => (
                     <Card key={ev.id}>
-                      <Link href={`/escalas/${ev.id}`} className="block p-4 hover:bg-muted/40">
+                      <AbrirEscala
+                        eventId={ev.id}
+                        className="block w-full p-4 text-left hover:bg-muted/40"
+                      >
                         <div className="flex items-center justify-between gap-2">
                           <p className="font-medium">{ev.title}</p>
                           <span className="text-sm text-muted-foreground">{fmtTime(ev.starts_at)}</span>
@@ -121,7 +125,7 @@ export default async function CalendarioPage({
                             ))}
                           </div>
                         ) : null}
-                      </Link>
+                      </AbrirEscala>
                     </Card>
                   ))}
                 </div>

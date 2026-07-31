@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Settings2 } from "lucide-react";
 import { Modal } from "@/components/modal";
 import { EventTeams } from "@/components/event/event-teams";
@@ -25,6 +25,8 @@ export function EventEscalaModal({
   onClose: () => void;
 }) {
   const [detail, setDetail] = useState<EventoModalData | null>(null);
+  // espelho do detail pra decidir "é primeira carga?" sem virar dependência do efeito
+  const detailRef = useRef<EventoModalData | null>(null);
   const [loading, setLoading] = useState(false);
   const [manage, setManage] = useState(false);
   const [reload, setReload] = useState(0);
@@ -32,14 +34,20 @@ export function EventEscalaModal({
   useEffect(() => {
     if (!eventId) {
       setDetail(null);
+      detailRef.current = null;
       setManage(false);
       return;
     }
     let alive = true;
-    setLoading(true);
+    // "Carregando…" só na PRIMEIRA carga. Recarga (depois de escalar alguém, de
+    // confirmar presença, de um refresh) acontece por baixo, com o conteúdo
+    // antigo na tela — era esse loading no meio do caminho que dava a sensação
+    // de o sheet piscar / subir duas vezes.
+    setLoading((atual) => atual || detailRef.current === null);
     carregarEventoParaModal(eventId).then((d) => {
       if (alive) {
         setDetail(d);
+        detailRef.current = d;
         setLoading(false);
       }
     });

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { CalendarDays, Check, Users } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { Modal } from "@/components/modal";
+import { useEventModal } from "@/components/event/event-modal-provider";
 import { ReactiveHeader } from "@/components/app-shell/reactive-header";
 import { PullToRefresh } from "@/components/app-shell/pull-to-refresh";
 import { useToast } from "@/components/ui/toast";
@@ -60,6 +61,7 @@ export function VolunteerHome({
   };
 
   // sheet único de resposta — confirmar OU recusar uma escala
+  const eventModal = useEventModal();
   const [respond, setRespond] = useState<MyAssignment | null>(null);
   const [reason, setReason] = useState("");
   const [subOpen, setSubOpen] = useState(false);
@@ -168,7 +170,10 @@ export function VolunteerHome({
   const list = upcoming.slice(1);
   const nothing = pending.length === 0 && !today && !hero && list.length === 0;
 
-  const open = (id: string) => router.push(`/escalas/${id}`);
+  // abre o modal da escala em cima da Home — antes isso era router.push e
+  // mudava de aba
+  const open = (id: string) =>
+    eventModal ? eventModal.abrirEscala(id) : router.push(`/escalas/${id}`);
   const isPending = respond?.status === "convidado";
 
   return (

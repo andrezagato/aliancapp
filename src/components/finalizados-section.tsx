@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { TeamReview } from "@/components/team-review";
+import { AbrirEscala } from "@/components/event/abrir-escala";
 import { fmtWeekdayShort, fmtDayMonthShort } from "@/lib/format";
 import type { EventListItem } from "@/lib/data";
 
@@ -20,15 +20,15 @@ export function FinalizadosSection({ events, canReview }: { events: EventListIte
       <div className="flex flex-col gap-1 border-t border-border p-2">
         {events.map((e) => (
           <div key={e.id} className="flex items-center gap-1 rounded-xl px-1 hover:bg-muted">
-            <Link
-              href={`/escalas/${e.id}`}
+            <AbrirEscala
+              eventId={e.id}
               className="flex min-w-0 flex-1 items-center justify-between gap-3 px-2 py-2.5"
             >
               <span className="min-w-0 truncate text-sm font-medium text-foreground">{e.title}</span>
               <span className="shrink-0 text-[11px] capitalize text-muted-foreground">
                 {fmtWeekdayShort(e.starts_at)} · {fmtDayMonthShort(e.starts_at)}
               </span>
-            </Link>
+            </AbrirEscala>
             {canReview ? (
               <TeamReview
                 eventId={e.id}

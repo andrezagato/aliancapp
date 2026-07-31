@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { AbrirEscala } from "@/components/event/abrir-escala";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, Plus, CalendarPlus } from "lucide-react";
 import { MonthCalendar } from "@/components/month-calendar";
@@ -103,12 +104,12 @@ export function AdminMonthOverview({
                   ))}
                 </div>
               ) : null}
-              <Link
-                href={`/escalas/${ev.id}`}
+              <AbrirEscala
+                eventId={ev.id}
                 className="mt-3 inline-block text-sm font-semibold text-primary hover:underline"
               >
                 Abrir escala →
-              </Link>
+              </AbrirEscala>
             </div>
           ))}
 

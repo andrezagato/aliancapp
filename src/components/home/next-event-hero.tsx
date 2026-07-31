@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { AlertTriangle, Check } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
+import { AbrirEscala } from "@/components/event/abrir-escala";
 import { cn } from "@/lib/utils";
 import { fmtEventWhen } from "@/lib/format";
 import type { EventListItem } from "@/lib/data";
@@ -72,17 +72,17 @@ export function NextEventHero({
             </p>
             <p className="text-primary-foreground/80">{gaps.length > 0 ? gaps.join(" · ") : "tudo pronto 🎉"}</p>
           </div>
-          <Link
-            href={`/escalas/${ev.id}`}
+          <AbrirEscala
+            eventId={ev.id}
             className={cn(buttonVariants({ variant: "accent", size: "sm" }), "ml-auto press shrink-0")}
           >
             Abrir escala
-          </Link>
+          </AbrirEscala>
         </div>
 
         {urgent ? (
-          <Link
-            href={`/escalas/${ev.id}`}
+          <AbrirEscala
+            eventId={ev.id}
             className="press mt-3 flex items-center gap-2 rounded-[14px] border border-white/25 bg-white/15 px-3.5 py-2.5 text-sm font-bold text-white"
           >
             <AlertTriangle className="size-4 shrink-0 text-accent" strokeWidth={2.4} />
@@ -90,7 +90,7 @@ export function NextEventHero({
               Faltam {needed - confirmed} confirmaç{needed - confirmed > 1 ? "ões" : "ão"} e o culto é em breve
             </span>
             <span className="shrink-0 text-accent">Resolver ›</span>
-          </Link>
+          </AbrirEscala>
         ) : null}
 
         {ev.teams.length > 1 ? (

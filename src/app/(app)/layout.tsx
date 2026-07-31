@@ -3,6 +3,7 @@ import { getSession, isActive } from "@/lib/auth";
 import { BottomNav } from "@/components/app-shell/bottom-nav";
 import { ToastProvider } from "@/components/ui/toast";
 import { AchievementWatcher } from "@/components/achievement-watcher";
+import { EventModalProvider } from "@/components/event/event-modal-provider";
 import { ChatBubble } from "@/components/chat/chat-bubble";
 import { listarCanais } from "@/lib/chat";
 
@@ -16,12 +17,17 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <ToastProvider>
-      <div className="min-h-dvh">
-        <main className="mx-auto max-w-[520px] px-4 pb-28 pt-2 lg:max-w-[720px]">{children}</main>
-        <BottomNav />
-        <ChatBubble canais={canais} meId={session.userId} role={session.role} />
-        <AchievementWatcher />
-      </div>
+      {/* O modal da escala vive aqui: sobe por cima de qualquer tela, sem navegar */}
+      {/* serverKey muda a cada render do layout — inclusive nos router.refresh()
+          das ações — e é o que faz o modal recarregar o detalhe sozinho */}
+      <EventModalProvider serverKey={Date.now().toString(36)}>
+        <div className="min-h-dvh">
+          <main className="mx-auto max-w-[520px] px-4 pb-28 pt-2 lg:max-w-[720px]">{children}</main>
+          <BottomNav />
+          <ChatBubble canais={canais} meId={session.userId} role={session.role} />
+          <AchievementWatcher />
+        </div>
+      </EventModalProvider>
     </ToastProvider>
   );
 }

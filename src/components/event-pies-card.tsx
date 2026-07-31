@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { fmtWeekdayShort, fmtDayMonthShort, fmtTime } from "@/lib/format";
+import { useEventModal } from "@/components/event/event-modal-provider";
 import type { EventListItem } from "@/lib/data";
 
 /**
@@ -48,9 +49,12 @@ function Pie({ label, confirmed, needed }: { label: string; confirmed: number; n
  */
 export function EventPiesCard({ ev, manage = true }: { ev: EventListItem; manage?: boolean }) {
   const router = useRouter();
+  const modal = useEventModal();
   const href = `/escalas/${ev.id}`;
   const done = ev.neededTotal > 0 && ev.confirmedTotal >= ev.neededTotal;
-  const go = () => router.push(href);
+  // Abre o modal onde a pessoa está. Sem provider (fora do layout do app), cai no
+  // comportamento antigo de navegar pro deep link.
+  const go = () => (modal ? modal.abrirEscala(ev.id) : router.push(href));
 
   return (
     <div

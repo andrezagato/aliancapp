@@ -123,8 +123,9 @@ export function GerenciarEventoSheet({
       const r = await excluirEvento(eventId);
       if (r.ok) {
         showToast(warm("eventoExcluido"));
-        onDeleted();
-        router.push("/escalas");
+        onDeleted(); // fecha o sheet e o modal
+        // Não navega mais: excluir estando na Home te jogava pra aba Escalas. O
+        // refresh já faz o card sumir de onde a pessoa estiver.
         router.refresh();
       } else {
         showToast(r.error);
