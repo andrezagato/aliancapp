@@ -1390,6 +1390,55 @@ export type Database = {
           },
         ]
       }
+      reminder_log: {
+        Row: {
+          event_id: string
+          id: string
+          kind: string
+          profile_id: string
+          sent_at: string
+          step: number
+        }
+        Insert: {
+          event_id: string
+          id?: string
+          kind: string
+          profile_id: string
+          sent_at?: string
+          step: number
+        }
+        Update: {
+          event_id?: string
+          id?: string
+          kind?: string
+          profile_id?: string
+          sent_at?: string
+          step?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reminder_log_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reminder_log_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "v_assignment_history"
+            referencedColumns: ["event_id"]
+          },
+          {
+            foreignKeyName: "reminder_log_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       rundown_kinds: {
         Row: {
           church_id: string

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { CalendarDays, Check, Users } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { Modal } from "@/components/modal";
@@ -60,6 +60,7 @@ export function VolunteerHome({
   };
 
   // sheet único de resposta — confirmar OU recusar uma escala
+  const searchParams = useSearchParams();
   const [respond, setRespond] = useState<MyAssignment | null>(null);
   const [reason, setReason] = useState("");
   const [subOpen, setSubOpen] = useState(false);
@@ -159,6 +160,17 @@ export function VolunteerHome({
   // convites pendentes sobem pro topo; o resto (confirmado/presente) vira today/hero/lista
   const todaySP = churchDateISO(new Date().toISOString());
   const sorted = [...items].sort((a, b) => (a.startsAt < b.startsAt ? -1 : 1));
+
+  // Chegou de "Não posso" na notificação (?responder=<assignmentId>): abre o
+  // sheet já na pergunta, senão a pessoa cai na home e tem que caçar a escala.
+  const alvoResponder = searchParams.get("responder");
+  useEffect(() => {
+    if (!alvoResponder) return;
+    const a = items.find((x) => x.assignmentId === alvoResponder);
+    if (a) openRespond(a);
+    router.replace("/inicio"); // limpa a URL pra não reabrir a cada refresh
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [alvoResponder]);
   const pending = sorted.filter((a) => a.status === "convidado");
   const rest = sorted.filter((a) => a.status !== "convidado");
   const today = rest.find((a) => churchDateISO(a.startsAt) === todaySP) || null;
