@@ -2054,6 +2054,8 @@ export type InviteRow = {
   systemRole: string;
   status: string;
   createdAt: string;
+  /** Dias desde o convite — sem isso "pendente" não diz se é de ontem ou de abril. */
+  diasEsperando: number;
   teams: { name: string; color: string; role: string }[];
 };
 
@@ -2073,17 +2075,23 @@ export async function listInvites(): Promise<InviteRow[]> {
     status: string;
     created_at: string;
     invite_teams: { role: string; team: { name: string; color: string } | null }[];
-  }[]).map((i) => ({
-    id: i.id,
-    email: i.email,
-    fullName: i.full_name,
-    systemRole: i.system_role,
-    status: i.status,
-    createdAt: i.created_at,
-    teams: (i.invite_teams ?? [])
-      .filter((t) => t.team)
-      .map((t) => ({ name: t.team!.name, color: t.team!.color, role: t.role })),
-  }));
+  }[]).map((i) => {
+    return {
+      id: i.id,
+      email: i.email,
+      fullName: i.full_name,
+      systemRole: i.system_role,
+      status: i.status,
+      createdAt: i.created_at,
+      diasEsperando: Math.max(
+        0,
+        Math.floor((Date.now() - new Date(i.created_at).getTime()) / 86_400_000),
+      ),
+      teams: (i.invite_teams ?? [])
+        .filter((t) => t.team)
+        .map((t) => ({ name: t.team!.name, color: t.team!.color, role: t.role })),
+    };
+  });
 }
 
 /** Aniversariantes do mês (igreja toda). */

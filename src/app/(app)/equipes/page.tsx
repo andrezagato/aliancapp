@@ -158,6 +158,11 @@ export default async function EquipesPage() {
                       <p className="inline-flex items-center gap-1 truncate text-sm text-muted-foreground">
                         <Mail className="size-3" /> {i.email}
                       </p>
+                      <p className="text-[12.5px] text-muted-foreground">
+                        {i.diasEsperando === 0
+                          ? "convidado hoje · ainda não entrou"
+                          : `convidado há ${i.diasEsperando} ${i.diasEsperando === 1 ? "dia" : "dias"} · ainda não entrou`}
+                      </p>
                       <div className="mt-1 flex flex-wrap gap-1.5">
                         {i.systemRole === "admin" ? <Badge variant="primary">Admin</Badge> : null}
                         {i.teams.map((t, idx) => (
