@@ -19,8 +19,9 @@ import {
 } from "@/lib/data";
 import { BADGE_BY_CODE, type UnlockedBadge } from "@/lib/achievements";
 import { nextCategoryColor } from "@/lib/palette";
+import { TOPIC_BY_ID, type TopicId, type TopicChannel } from "@/lib/notification-topics";
 import { logActivity } from "@/lib/activity";
-import { notify, notifyMany, teamLeaderIds } from "@/lib/notify";
+import { notify, notifyMany, teamLeaderIds, avisoPrefs, quemAceitaEmail } from "@/lib/notify";
 import { sendPushToSubs } from "@/lib/push";
 import { sendEmail, conviteEmail, escaladoEmail, lembreteEmail, siteUrl } from "@/lib/email";
 import { churchDateISO, fmtEventWhen } from "@/lib/format";
@@ -201,6 +202,51 @@ export async function atualizarAniversario(
   revalidatePath("/equipes");
   revalidatePath("/inicio");
   return { ok: true, unlocked };
+}
+
+// =============================================================================
+// PREFERÊNCIAS DE AVISO (WS2.2 — migration 0044)
+// =============================================================================
+/**
+ * Liga/desliga um ASSUNTO num canal. O assunto é a embalagem: escreve a linha de
+ * cada `notification_kind` que ele contém, preservando o outro canal. Upsert por
+ * (profile_id, kind), que é a PK.
+ */
+export async function definirPreferenciaAviso(
+  topicId: TopicId,
+  channel: TopicChannel,
+  value: boolean,
+): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  const topic = TOPIC_BY_ID[topicId];
+  if (!topic) return fail("Assunto desconhecido.");
+  if (!topic.channels.includes(channel)) return fail("Esse assunto não usa esse canal.");
+
+  const supabase = await createClient();
+  const { data: atuais } = await supabase
+    .from("notification_prefs")
+    .select("kind, push, email, in_app")
+    .eq("profile_id", session.userId)
+    .in("kind", topic.kinds);
+  const byKind = new Map((atuais ?? []).map((r) => [r.kind as string, r]));
+
+  const rows = topic.kinds.map((kind) => {
+    const atual = byKind.get(kind);
+    return {
+      profile_id: session.userId,
+      kind,
+      push: channel === "push" ? value : (atual?.push ?? true),
+      email: channel === "email" ? value : (atual?.email ?? true),
+      in_app: atual?.in_app ?? true,
+    };
+  });
+  const { error } = await supabase
+    .from("notification_prefs")
+    .upsert(rows, { onConflict: "profile_id,kind" });
+  if (error) return fail(error.message);
+  revalidatePath("/perfil");
+  return ok;
 }
 
 // =============================================================================
@@ -551,7 +597,8 @@ export async function lembrarPendentes(eventId: string): Promise<ActionResult> {
   });
 
   try {
-    const { data: profs } = await supabase.from("profiles").select("email").in("id", ids);
+    const querem = await quemAceitaEmail(ids, "lembrete");
+    const { data: profs } = await supabase.from("profiles").select("email").in("id", querem);
     const emails = (profs ?? []).map((p) => p.email).filter((e): e is string => !!e);
     if (emails.length > 0) {
       const em = lembreteEmail({ evento: titulo, quando, href: `${siteUrl()}/escalas/${eventId}` });
@@ -669,7 +716,7 @@ export async function escalarVoluntario(
       supabase.from("profiles").select("email").eq("id", input.profileId).maybeSingle(),
       supabase.from("events").select("title, starts_at").eq("id", input.eventId).maybeSingle(),
     ]);
-    if (prof?.email) {
+    if (prof?.email && (await avisoPrefs(input.profileId, "escalado")).email) {
       const esc = escaladoEmail({
         evento: evInfo?.title ?? "um evento",
         quando: fmtEventWhen(evInfo?.starts_at),

@@ -1761,6 +1761,17 @@ export type Database = {
       }
     }
     Functions: {
+      aviso_prefs: {
+        Args: {
+          p_kind: Database["public"]["Enums"]["notification_kind"]
+          p_recipient: string
+        }
+        Returns: {
+          email: boolean
+          in_app: boolean
+          push: boolean
+        }[]
+      }
       can_post_channel: {
         Args: { p_ref: string; p_type: string }
         Returns: boolean

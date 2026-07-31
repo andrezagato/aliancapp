@@ -6,17 +6,22 @@ import { SignOutButton } from "@/components/sign-out-button";
 import { ProfileEditableField } from "@/components/profile-field";
 import { ChurchLocationCard } from "@/components/church-location-card";
 import { PushSetup } from "@/components/push-setup";
+import { NotificationPrefs } from "@/components/notification-prefs";
 import { atualizarNome, atualizarApelido, atualizarTelefone, atualizarAniversario } from "@/lib/actions";
 import { cn, displayName } from "@/lib/utils";
 import { getSession } from "@/lib/auth";
-import { getChurchLocation } from "@/lib/data";
+import { getChurchLocation, getMyNotificationPrefs } from "@/lib/data";
 import { fmtBirthday } from "@/lib/format";
 
 export default async function PerfilPage() {
   const session = await getSession();
   if (!session) return null;
   const p = session.profile;
-  const churchLoc = session.role === "admin" ? await getChurchLocation(session) : null;
+  const [churchLoc, notifPrefs] = await Promise.all([
+    session.role === "admin" ? getChurchLocation(session) : Promise.resolve(null),
+    getMyNotificationPrefs(session),
+  ]);
+  const isGestor = session.role === "admin" || session.profile.teams.some((t) => t.role === "leader");
 
   const roleLabel =
     session.role === "admin" ? "Administrador" : session.role === "leader" ? "Líder" : "Voluntário";
@@ -81,6 +86,9 @@ export default async function PerfilPage() {
             <Bell className="size-4 text-muted-foreground/70" /> Notificações neste aparelho
           </p>
           <PushSetup />
+          <div className="mt-1 w-full border-t border-border/70 pt-2.5">
+            <NotificationPrefs initial={notifPrefs} isGestor={isGestor} />
+          </div>
         </CardContent>
       </Card>
 

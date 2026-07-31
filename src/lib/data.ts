@@ -12,6 +12,11 @@ import {
 import { BADGES, earnedCodes, type JourneyMetrics } from "@/lib/achievements";
 import { CATEGORY_PALETTE } from "@/lib/palette";
 import {
+  NOTIFICATION_TOPICS,
+  defaultTopicPrefs,
+  type TopicPrefs,
+} from "@/lib/notification-topics";
+import {
   type Session,
   memberTeamIds,
   leadTeamIds,
@@ -672,6 +677,33 @@ export async function syncAchievements(
       );
   }
   return { metrics, newly: missing, earned };
+}
+
+// =============================================================================
+// PREFERÊNCIAS DE AVISO (por assunto — ver notification-topics.ts)
+// =============================================================================
+
+/**
+ * Preferências da PRÓPRIA pessoa, já traduzidas de tipo pra assunto. Linha
+ * ausente = ligado (é o default do banco). Um assunto só aparece desligado
+ * quando TODOS os tipos dele estão desligados — que é exatamente o que o
+ * interruptor escreve.
+ */
+export async function getMyNotificationPrefs(session: Session): Promise<TopicPrefs> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("notification_prefs")
+    .select("kind, push, email")
+    .eq("profile_id", session.userId);
+  const byKind = new Map((data ?? []).map((r) => [r.kind as string, r]));
+  const out = defaultTopicPrefs();
+  for (const t of NOTIFICATION_TOPICS) {
+    out[t.id] = {
+      push: t.kinds.some((k) => byKind.get(k)?.push !== false),
+      email: t.kinds.some((k) => byKind.get(k)?.email !== false),
+    };
+  }
+  return out;
 }
 
 export async function getMyJourney(session: Session): Promise<Journey> {
