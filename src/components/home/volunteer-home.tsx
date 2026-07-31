@@ -29,7 +29,7 @@ import { SwipeCard } from "./swipe-card";
 import { PendingInviteBanner } from "./pending-invite-banner";
 
 const REASONS = ["Viajando", "Trabalho", "Saúde", "Compromisso", "Outro"];
-type Sub = { profileId: string; name: string; avatarUrl: string | null };
+type Sub = { profileId: string; name: string; avatarUrl: string | null; recusouAntes: boolean };
 
 export function VolunteerHome({
   title,
@@ -125,7 +125,7 @@ export function VolunteerHome({
     if (subs) return;
     setSubLoading(true);
     startTransition(async () => {
-      const list = await listMembrosParaTroca(respond.teamId);
+      const list = await listMembrosParaTroca(respond.teamId, respond.assignmentId);
       setSubs(list);
       setSubLoading(false);
     });
@@ -304,7 +304,14 @@ export function VolunteerHome({
                           )}
                         >
                           <Avatar name={s.name} src={s.avatarUrl} className="size-9" />
-                          <span className="flex-1 text-sm font-semibold">{s.name}</span>
+                          <span className="flex-1 text-sm font-semibold">
+                            {s.name}
+                            {s.recusouAntes ? (
+                              <span className="block text-[11px] font-medium text-muted-foreground">
+                                já recusou este culto
+                              </span>
+                            ) : null}
+                          </span>
                           {on ? <Check className="size-4 text-primary" strokeWidth={2.6} /> : null}
                         </button>
                       );

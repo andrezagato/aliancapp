@@ -1657,6 +1657,7 @@ export type Database = {
           id: string
           reason: string | null
           requested_by: string
+          resolved_at: string | null
           resolved_by: string | null
           status: Database["public"]["Enums"]["swap_status"]
           substitute_accepted_at: string | null
@@ -1668,6 +1669,7 @@ export type Database = {
           id?: string
           reason?: string | null
           requested_by: string
+          resolved_at?: string | null
           resolved_by?: string | null
           status?: Database["public"]["Enums"]["swap_status"]
           substitute_accepted_at?: string | null
@@ -1679,6 +1681,7 @@ export type Database = {
           id?: string
           reason?: string | null
           requested_by?: string
+          resolved_at?: string | null
           resolved_by?: string | null
           status?: Database["public"]["Enums"]["swap_status"]
           substitute_accepted_at?: string | null

@@ -101,6 +101,7 @@ export type CobrancaResumo = {
     quando: string;
     diasAte: number;
     pendentes: number;
+    trocasAbertas?: number;
     cobrados: string[];
     gestoresAvisados: string[];
     pulado?: string;
@@ -169,9 +170,26 @@ export async function rodarCobranca({ dry = false }: { dry?: boolean } = {}): Pr
       .select("id, profile_id, team_id, profiles!assignments_profile_id_fkey ( full_name, nickname, email )")
       .eq("event_id", ev.id)
       .eq("status", "convidado");
-    const alvos = (pendentes ?? []).filter((a) => a.profile_id);
+
+    // Quem já pediu troca NÃO é cobrado: a pessoa avisou que não pode e a bola
+    // está com o líder. Cobrar "confirma sua presença" aqui é o app não ter
+    // ouvido a resposta que já recebeu. Mas a troca também não pode sumir do
+    // radar — ela vai pro resumo do gestor, porque é ELE que precisa decidir.
+    const idsDoEvento = (pendentes ?? []).map((a) => a.id);
+    const { data: trocas } = idsDoEvento.length
+      ? await admin
+          .from("swap_requests")
+          .select(
+            "assignment_id, substitute_accepted_at, requester:profiles!swap_requests_requested_by_fkey ( full_name, nickname ), sugerido:profiles!swap_requests_suggested_profile_id_fkey ( full_name, nickname )",
+          )
+          .eq("status", "pendente")
+          .in("assignment_id", idsDoEvento)
+      : { data: [] as never[] };
+    const bloqueados = new Set((trocas ?? []).map((t) => t.assignment_id));
+    const alvos = (pendentes ?? []).filter((a) => a.profile_id && !bloqueados.has(a.id));
     linha.pendentes = alvos.length;
-    if (alvos.length === 0) {
+    linha.trocasAbertas = (trocas ?? []).length;
+    if (alvos.length === 0 && (trocas ?? []).length === 0) {
       resumo.eventos.push(linha);
       continue;
     }
@@ -245,7 +263,25 @@ export async function rodarCobranca({ dry = false }: { dry?: boolean } = {}): Pr
         return p?.nickname || p?.full_name || "alguém";
       })
       .join(", ");
-    const teamIds = [...new Set(alvos.map((a) => a.team_id).filter(Boolean) as string[])];
+    // Troca aberta é decisão do gestor: entra no resumo com o estado real ("já
+    // aceitou, falta você aprovar" vs "ainda esperando o substituto").
+    const trocasTexto = (trocas ?? [])
+      .map((t) => {
+        const req = t.requester as { full_name: string | null; nickname: string | null } | null;
+        const sug = t.sugerido as { full_name: string | null; nickname: string | null } | null;
+        const quem = req?.nickname || req?.full_name || "alguém";
+        const sub = sug?.nickname || sug?.full_name || null;
+        if (!sub) return `${quem} pediu troca sem substituto`;
+        return t.substitute_accepted_at
+          ? `${quem} → ${sub} (aceitou, falta você aprovar)`
+          : `${quem} → ${sub} (aguardando ${sub})`;
+      })
+      .join("; ");
+    const teamIdsPendentes = alvos.map((a) => a.team_id);
+    const teamIdsTroca = (pendentes ?? [])
+      .filter((a) => bloqueados.has(a.id))
+      .map((a) => a.team_id);
+    const teamIds = [...new Set([...teamIdsPendentes, ...teamIdsTroca].filter(Boolean) as string[])];
     const { data: lideres } = teamIds.length
       ? await admin.from("memberships").select("profile_id").in("team_id", teamIds).eq("role", "leader")
       : { data: [] as { profile_id: string }[] };
@@ -269,13 +305,19 @@ export async function rodarCobranca({ dry = false }: { dry?: boolean } = {}): Pr
       if (dry) continue;
 
       const quantos = alvos.length;
-      const title =
-        step === 0
-          ? `Hoje: ${quantos} sem resposta`
-          : step === 1
-            ? `Amanhã: ${quantos} sem resposta`
-            : `${quantos} ainda não responderam`;
-      const body = `${titulo} (${quando}): ${nomesPendentes}. Dá pra cobrar no WhatsApp pela escala.`;
+      const quantasTrocas = (trocas ?? []).length;
+      const prefixo = step === 0 ? "Hoje" : step === 1 ? "Amanhã" : null;
+      const assunto =
+        quantos > 0 && quantasTrocas > 0
+          ? `${quantos} sem resposta e ${quantasTrocas} troca${quantasTrocas > 1 ? "s" : ""} pra decidir`
+          : quantos > 0
+            ? `${quantos} sem resposta`
+            : `${quantasTrocas} troca${quantasTrocas > 1 ? "s" : ""} esperando você`;
+      const title = prefixo ? `${prefixo}: ${assunto}` : assunto;
+      const partes = [`${titulo} (${quando})`];
+      if (quantos > 0) partes.push(`sem resposta: ${nomesPendentes}`);
+      if (quantasTrocas > 0) partes.push(`troca: ${trocasTexto}`);
+      const body = `${partes.join(" · ")}.`;
       const prefs = await lerPrefs(admin, gestorId, "cobertura");
       if (prefs.in_app) {
         await admin.from("notifications").insert({

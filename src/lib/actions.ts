@@ -569,16 +569,24 @@ export async function lembrarPendentes(eventId: string): Promise<ActionResult> {
 
   const { data: rows, error } = await supabase
     .from("assignments")
-    .select("profile_id, team_id, status")
+    .select("id, profile_id, team_id, status")
     .eq("event_id", eventId)
     .eq("status", "convidado");
   if (error) return fail(error.message);
 
+  // Quem já pediu troca NÃO é cobrado: a pessoa avisou que não pode e a bola
+  // está com o líder. Cobrar aqui é pedir que ela responda algo que já respondeu.
+  const { data: comTroca } = await supabase
+    .from("swap_requests")
+    .select("assignment_id")
+    .eq("status", "pendente");
+  const bloqueados = new Set((comTroca ?? []).map((t) => t.assignment_id));
+
   const targets = (rows ?? [])
-    .filter((r) => r.profile_id && canManageTeam(session, r.team_id))
+    .filter((r) => r.profile_id && canManageTeam(session, r.team_id) && !bloqueados.has(r.id))
     .map((r) => r.profile_id as string);
   const ids = Array.from(new Set(targets));
-  if (ids.length === 0) return fail("Ninguém pra lembrar — todo mundo já respondeu.");
+  if (ids.length === 0) return fail("Ninguém pra lembrar — todo mundo já respondeu ou pediu troca.");
 
   const { data: evInfo } = await supabase
     .from("events")
@@ -2543,20 +2551,50 @@ export async function definirStatusEscala(
 // =============================================================================
 // TROCA / SUBSTITUTO (swap_requests)
 // =============================================================================
+/**
+ * Colegas de equipe que podem cobrir. Passando o `assignmentId`, marca quem já
+ * RECUSOU cobrir essa mesma escala — sem isso a pessoa que recusou volta pra
+ * lista limpa e acaba sendo sugerida de novo (foi o que aconteceu em 31/jul:
+ * mesma dupla, mesmo culto, dois pedidos seguidos). Continua selecionável, é só
+ * informação: gente muda de ideia, mas quem sugere merece saber.
+ */
 export async function listMembrosParaTroca(
   teamId: string,
-): Promise<{ profileId: string; name: string; avatarUrl: string | null }[]> {
+  assignmentId?: string,
+): Promise<{ profileId: string; name: string; avatarUrl: string | null; recusouAntes: boolean }[]> {
   const session = await getSession();
   if (!session) return [];
   const supabase = await createClient();
-  const { data } = await supabase
-    .from("memberships")
-    .select("profile:profiles ( id, full_name, avatar_url, status )")
-    .eq("team_id", teamId);
+  const [{ data }, { data: recusas }] = await Promise.all([
+    supabase
+      .from("memberships")
+      .select("profile:profiles ( id, full_name, avatar_url, status )")
+      .eq("team_id", teamId),
+    assignmentId
+      ? supabase
+          .from("swap_requests")
+          .select("suggested_profile_id")
+          .eq("assignment_id", assignmentId)
+          .eq("status", "recusada")
+      : Promise.resolve({ data: [] as { suggested_profile_id: string | null }[] }),
+  ]);
+  const recusou = new Set((recusas ?? []).map((r) => r.suggested_profile_id).filter(Boolean) as string[]);
   return ((data ?? []) as { profile: { id: string; full_name: string; avatar_url: string | null; status: string } | null }[])
     .filter((m) => m.profile && m.profile.status === "ativo" && m.profile.id !== session.userId)
-    .map((m) => ({ profileId: m.profile!.id, name: m.profile!.full_name || "Sem nome", avatarUrl: m.profile!.avatar_url }))
-    .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+    .map((m) => ({
+      profileId: m.profile!.id,
+      name: m.profile!.full_name || "Sem nome",
+      avatarUrl: m.profile!.avatar_url,
+      recusouAntes: recusou.has(m.profile!.id),
+    }))
+    // quem já recusou vai pro fim da lista
+    .sort((a, b) =>
+      a.recusouAntes !== b.recusouAntes
+        ? a.recusouAntes
+          ? 1
+          : -1
+        : a.name.localeCompare(b.name, "pt-BR"),
+    );
 }
 
 export async function pedirTroca(
@@ -2680,7 +2718,11 @@ export async function resolverTroca(swapId: string, aprovar: boolean, eventId: s
 
   const { error: sErr } = await supabase
     .from("swap_requests")
-    .update({ status: aprovar ? "aprovada" : "recusada", resolved_by: session.userId })
+    .update({
+      status: aprovar ? "aprovada" : "recusada",
+      resolved_by: session.userId,
+      resolved_at: new Date().toISOString(),
+    })
     .eq("id", swapId);
   if (sErr) return fail(sErr.message);
 
@@ -2708,7 +2750,14 @@ export async function resolverTroca(swapId: string, aprovar: boolean, eventId: s
   return ok;
 }
 
-/** O substituto sugerido aceita a indicação (falta só o líder aprovar). */
+/**
+ * O substituto sugerido aceita a indicação (falta só o líder aprovar).
+ *
+ * AVISA quem pediu e os líderes. Antes de 31/jul isto era silencioso: a resposta
+ * do substituto não gerava aviso nem registro, e um caso real (Moisés→Pedro)
+ * mostrou o estrago — o substituto recusou, ninguém soube, o pedido morreu no
+ * silêncio e dois dias depois a mesma pessoa foi sugerida de novo.
+ */
 export async function aceitarSubstituicao(swapId: string): Promise<ActionResult> {
   const session = await getSession();
   if (!session) return fail("Sessão expirada.");
@@ -2716,7 +2765,7 @@ export async function aceitarSubstituicao(swapId: string): Promise<ActionResult>
   const { data: swap } = await supabase
     .from("swap_requests")
     .select(
-      "id, suggested_profile_id, status, assignment:assignments!swap_requests_assignment_id_fkey ( event_id )",
+      "id, suggested_profile_id, status, requested_by, assignment:assignments!swap_requests_assignment_id_fkey ( event_id, team_id )",
     )
     .eq("id", swapId)
     .maybeSingle();
@@ -2730,13 +2779,53 @@ export async function aceitarSubstituicao(swapId: string): Promise<ActionResult>
     .eq("id", swapId);
   if (error) return fail(error.message);
 
-  const eventId = (swap.assignment as { event_id: string } | null)?.event_id;
+  const alvo = swap.assignment as { event_id: string; team_id: string | null } | null;
+  const eventId = alvo?.event_id;
+  const teamId = alvo?.team_id ?? null;
+  const quem = session.profile.nickname || session.profile.full_name || "Alguém";
+  const link = eventId ? `/escalas/${eventId}` : "/inicio";
+
+  await logActivity({
+    profileId: session.userId,
+    actorId: session.userId,
+    kind: "aceitou_substituicao",
+    eventId: eventId ?? null,
+    teamId,
+    meta: { swapId, requestedBy: swap.requested_by },
+  });
+  await notify({
+    recipientId: swap.requested_by,
+    kind: "troca_resolvida",
+    title: `${quem} topou cobrir!`,
+    body: "Agora falta só o líder aprovar a troca.",
+    link,
+    teamId,
+    eventId: eventId ?? null,
+  });
+  if (teamId) {
+    await notifyMany(await teamLeaderIds(teamId), {
+      kind: "troca_solicitada",
+      title: "Troca pronta pra aprovar",
+      body: `${quem} aceitou cobrir a vaga. Falta sua aprovação.`,
+      link,
+      teamId,
+      eventId: eventId ?? null,
+    });
+  }
+
   revalidatePath("/inicio");
   if (eventId) revalidatePath(`/escalas/${eventId}`);
   return ok;
 }
 
-/** O substituto sugerido recusa a indicação (o pedido morre). */
+/**
+ * O substituto sugerido recusa a indicação (o pedido morre).
+ *
+ * A recusa é a resposta mais importante de avisar: quem pediu volta a ser o
+ * responsável pela vaga e precisa procurar outra pessoa. Sem este aviso (era o
+ * caso até 31/jul), a escala fica "Aguardando X aceitar" pra sempre na tela do
+ * líder, e ninguém descobre que a vaga voltou a estar em risco.
+ */
 export async function recusarSubstituicao(swapId: string): Promise<ActionResult> {
   const session = await getSession();
   if (!session) return fail("Sessão expirada.");
@@ -2744,7 +2833,7 @@ export async function recusarSubstituicao(swapId: string): Promise<ActionResult>
   const { data: swap } = await supabase
     .from("swap_requests")
     .select(
-      "id, suggested_profile_id, status, assignment:assignments!swap_requests_assignment_id_fkey ( event_id )",
+      "id, suggested_profile_id, status, requested_by, assignment:assignments!swap_requests_assignment_id_fkey ( event_id, team_id )",
     )
     .eq("id", swapId)
     .maybeSingle();
@@ -2754,11 +2843,44 @@ export async function recusarSubstituicao(swapId: string): Promise<ActionResult>
 
   const { error } = await supabase
     .from("swap_requests")
-    .update({ status: "recusada", resolved_by: session.userId })
+    .update({ status: "recusada", resolved_by: session.userId, resolved_at: new Date().toISOString() })
     .eq("id", swapId);
   if (error) return fail(error.message);
 
-  const eventId = (swap.assignment as { event_id: string } | null)?.event_id;
+  const alvo = swap.assignment as { event_id: string; team_id: string | null } | null;
+  const eventId = alvo?.event_id;
+  const teamId = alvo?.team_id ?? null;
+  const quem = session.profile.nickname || session.profile.full_name || "A pessoa sugerida";
+  const link = eventId ? `/escalas/${eventId}` : "/inicio";
+
+  await logActivity({
+    profileId: session.userId,
+    actorId: session.userId,
+    kind: "recusou_substituicao",
+    eventId: eventId ?? null,
+    teamId,
+    meta: { swapId, requestedBy: swap.requested_by },
+  });
+  await notify({
+    recipientId: swap.requested_by,
+    kind: "troca_resolvida",
+    title: `${quem} não vai poder cobrir`,
+    body: "Sugira outra pessoa ou fale com o líder — a vaga continua sua até a troca ser aprovada.",
+    link,
+    teamId,
+    eventId: eventId ?? null,
+  });
+  if (teamId) {
+    await notifyMany(await teamLeaderIds(teamId), {
+      kind: "troca_solicitada",
+      title: "Substituto recusou",
+      body: `${quem} não vai poder cobrir. A troca segue em aberto.`,
+      link,
+      teamId,
+      eventId: eventId ?? null,
+    });
+  }
+
   revalidatePath("/inicio");
   if (eventId) revalidatePath(`/escalas/${eventId}`);
   return ok;

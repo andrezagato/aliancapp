@@ -12,7 +12,7 @@ import { confirmarEscalacao, recusarEscalacao, pedirTroca, listMembrosParaTroca 
 import type { AssignmentStatus } from "@/lib/supabase/database.types";
 
 const REASONS = ["Viajando", "Trabalho", "Saúde", "Compromisso", "Outro"];
-type Sub = { profileId: string; name: string; avatarUrl: string | null };
+type Sub = { profileId: string; name: string; avatarUrl: string | null; recusouAntes: boolean };
 
 /**
  * Resposta do escalado — um único botão "Responder" que abre um sheet com
@@ -48,7 +48,7 @@ export function AssignmentResponse({
 
   const loadSubs = async () => {
     setSubOpen(true);
-    if (members === null) setMembers(await listMembrosParaTroca(teamId));
+    if (members === null) setMembers(await listMembrosParaTroca(teamId, assignmentId));
   };
 
   const confirmar = () => {
@@ -180,7 +180,14 @@ export function AssignmentResponse({
                       )}
                     >
                       <Avatar name={s.name} src={s.avatarUrl} className="size-9" />
-                      <span className="flex-1 text-sm font-semibold">{s.name}</span>
+                      <span className="flex-1 text-sm font-semibold">
+                        {s.name}
+                        {s.recusouAntes ? (
+                          <span className="block text-[11px] font-medium text-muted-foreground">
+                            já recusou este culto
+                          </span>
+                        ) : null}
+                      </span>
                       {on ? <Check className="size-4 text-primary" strokeWidth={2.6} /> : null}
                     </button>
                   );
