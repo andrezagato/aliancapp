@@ -11,7 +11,7 @@ function iconFor(kind: NotificationKind): { Icon: typeof Bell; tone: string } {
   switch (kind) {
     case "confirmado":
     case "cadastro_aprovado":
-      return { Icon: Check, tone: "text-success bg-success/12" };
+      return { Icon: Check, tone: "text-success-ink bg-success/12" };
     case "vaga_aberta":
     case "cobertura":
       return { Icon: CircleDashed, tone: "text-primary bg-primary/10" };
@@ -20,7 +20,7 @@ function iconFor(kind: NotificationKind): { Icon: typeof Bell; tone: string } {
     case "evento_alterado":
     case "lembrete":
     case "evento_confirmar":
-      return { Icon: CalendarClock, tone: "text-warning bg-warning/12" };
+      return { Icon: CalendarClock, tone: "text-warning-ink bg-warning/12" };
     case "escalado":
     case "cadastro_pendente":
       return { Icon: UserCheck, tone: "text-primary bg-primary/10" };

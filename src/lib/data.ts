@@ -10,6 +10,12 @@ import {
   type AssignRow,
 } from "@/lib/coverage";
 import { BADGES, earnedCodes, type JourneyMetrics } from "@/lib/achievements";
+import { CATEGORY_PALETTE } from "@/lib/palette";
+import {
+  NOTIFICATION_TOPICS,
+  defaultTopicPrefs,
+  type TopicPrefs,
+} from "@/lib/notification-topics";
 import {
   type Session,
   memberTeamIds,
@@ -504,6 +510,7 @@ async function computeJourneyMetrics(
   userId: string,
   active: boolean,
   isLeader: boolean,
+  perfilCompleto: boolean,
 ): Promise<JourneyMetrics> {
   const nowIso = new Date().toISOString();
 
@@ -618,6 +625,7 @@ async function computeJourneyMetrics(
     feedbacks,
     no_local: noLocal,
     primeiro_local: primeiroLocal,
+    perfil: perfilCompleto ? 1 : 0,
   };
 }
 
@@ -648,7 +656,10 @@ export async function syncAchievements(
   const supabase = await createClient();
   const active = session.profile.status === "ativo";
   const isLeader = session.profile.teams.some((t) => t.role === "leader");
-  const metrics = await computeJourneyMetrics(supabase, session.userId, active, isLeader);
+  // mesmos 3 campos que o card "Complete seu perfil" cobra na home
+  const p = session.profile;
+  const perfilCompleto = !!(p.avatar_url && p.phone && p.birth_date);
+  const metrics = await computeJourneyMetrics(supabase, session.userId, active, isLeader, perfilCompleto);
   const earned = earnedCodes(metrics);
 
   const { data: existingRows } = await supabase
@@ -666,6 +677,33 @@ export async function syncAchievements(
       );
   }
   return { metrics, newly: missing, earned };
+}
+
+// =============================================================================
+// PREFERÊNCIAS DE AVISO (por assunto — ver notification-topics.ts)
+// =============================================================================
+
+/**
+ * Preferências da PRÓPRIA pessoa, já traduzidas de tipo pra assunto. Linha
+ * ausente = ligado (é o default do banco). Um assunto só aparece desligado
+ * quando TODOS os tipos dele estão desligados — que é exatamente o que o
+ * interruptor escreve.
+ */
+export async function getMyNotificationPrefs(session: Session): Promise<TopicPrefs> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("notification_prefs")
+    .select("kind, push, email")
+    .eq("profile_id", session.userId);
+  const byKind = new Map((data ?? []).map((r) => [r.kind as string, r]));
+  const out = defaultTopicPrefs();
+  for (const t of NOTIFICATION_TOPICS) {
+    out[t.id] = {
+      push: t.kinds.some((k) => byKind.get(k)?.push !== false),
+      email: t.kinds.some((k) => byKind.get(k)?.email !== false),
+    };
+  }
+  return out;
 }
 
 export async function getMyJourney(session: Session): Promise<Journey> {
@@ -1572,7 +1610,7 @@ export async function getMyUpcomingAssignments(session: Session): Promise<MyAssi
       positionName: r.positions?.name || "Posição",
       teamId: r.team_id,
       teamName: r.teams?.name || "Equipe",
-      teamColor: r.teams?.color || "#C4633E",
+      teamColor: r.teams?.color || CATEGORY_PALETTE[0].hex,
       checkedIn: checkedIn.has(r.id),
     }))
     .sort((a, b) => a.startsAt.localeCompare(b.startsAt));
@@ -2171,7 +2209,7 @@ export async function listRecentHistory(): Promise<HistoryEvent[]> {
       name: r.full_name,
       positionName: r.position_name || "Posição",
       teamName: meta?.name || "Equipe",
-      teamColor: meta?.color || "#C4633E",
+      teamColor: meta?.color || CATEGORY_PALETTE[0].hex,
       status: r.status!,
     });
   }

@@ -159,6 +159,7 @@ export function VolunteerHome({
   // convites pendentes sobem pro topo; o resto (confirmado/presente) vira today/hero/lista
   const todaySP = churchDateISO(new Date().toISOString());
   const sorted = [...items].sort((a, b) => (a.startsAt < b.startsAt ? -1 : 1));
+
   const pending = sorted.filter((a) => a.status === "convidado");
   const rest = sorted.filter((a) => a.status !== "convidado");
   const today = rest.find((a) => churchDateISO(a.startsAt) === todaySP) || null;

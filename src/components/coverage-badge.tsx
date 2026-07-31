@@ -2,9 +2,9 @@ import { cn } from "@/lib/utils";
 import type { CoverageTone } from "@/lib/coverage";
 
 const TONE: Record<CoverageTone, { pill: string; dot: string }> = {
-  full: { pill: "bg-success/12 text-success", dot: "bg-success" },
-  partial: { pill: "bg-warning/15 text-warning", dot: "bg-warning" },
-  empty: { pill: "bg-destructive/12 text-destructive", dot: "bg-destructive" },
+  full: { pill: "bg-success/12 text-success-ink", dot: "bg-success" },
+  partial: { pill: "bg-warning/15 text-warning-ink", dot: "bg-warning" },
+  empty: { pill: "bg-destructive/12 text-destructive-ink", dot: "bg-destructive" },
 };
 
 export function CoverageBadge({

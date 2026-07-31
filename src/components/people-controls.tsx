@@ -176,7 +176,7 @@ export function ConvidarForm({ teams }: { teams: TeamOpt[] }) {
           Tornar administrador da igreja
         </label>
 
-        {error ? <p className="text-sm text-destructive">{error}</p> : null}
+        {error ? <p className="text-sm text-destructive-ink">{error}</p> : null}
 
         <div className="flex gap-2">
           <Button variant="ghost" className="flex-1" onClick={() => setOpen(false)} disabled={pending}>
@@ -223,7 +223,7 @@ function AprovarModal({
       <div className="mt-3">
         <TeamPicker teams={teams} value={picked} onChange={setPicked} />
       </div>
-      {error ? <p className="mt-2 text-sm text-destructive">{error}</p> : null}
+      {error ? <p className="mt-2 text-sm text-destructive-ink">{error}</p> : null}
       <div className="mt-4 flex gap-2">
         <Button variant="ghost" className="flex-1" onClick={onClose} disabled={pending}>
           Cancelar
@@ -283,7 +283,7 @@ export function JoinRequestActions({
           Aprovar
         </Button>
       </div>
-      {error && !open ? <p className="text-xs text-destructive">{error}</p> : null}
+      {error && !open ? <p className="text-xs text-destructive-ink">{error}</p> : null}
       <AprovarModal
         open={open}
         onClose={() => setOpen(false)}
@@ -362,7 +362,7 @@ export function PendingProfileActions({
           </>
         )}
       </div>
-      {error && !open ? <p className="text-xs text-destructive">{error}</p> : null}
+      {error && !open ? <p className="text-xs text-destructive-ink">{error}</p> : null}
       <AprovarModal
         open={open}
         onClose={() => setOpen(false)}

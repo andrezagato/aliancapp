@@ -22,7 +22,7 @@ export default async function AguardandoPage() {
     <main className="mx-auto flex min-h-dvh max-w-[480px] flex-col justify-center px-6 py-10">
       <Card className="animate-fade-in">
         <CardContent className="flex flex-col items-center gap-4 p-8 text-center">
-          <span className="inline-flex size-16 items-center justify-center rounded-full bg-warning/12 text-warning">
+          <span className="inline-flex size-16 items-center justify-center rounded-full bg-warning/12 text-warning-ink">
             <Clock className="size-8" />
           </span>
           <div>

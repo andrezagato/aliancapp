@@ -18,8 +18,10 @@ import {
   type PersonObservation,
 } from "@/lib/data";
 import { BADGE_BY_CODE, type UnlockedBadge } from "@/lib/achievements";
+import { nextCategoryColor } from "@/lib/palette";
+import { TOPIC_BY_ID, type TopicId, type TopicChannel } from "@/lib/notification-topics";
 import { logActivity } from "@/lib/activity";
-import { notify, notifyMany, teamLeaderIds } from "@/lib/notify";
+import { notify, notifyMany, teamLeaderIds, avisoPrefs, quemAceitaEmail } from "@/lib/notify";
 import { sendPushToSubs } from "@/lib/push";
 import { sendEmail, conviteEmail, escaladoEmail, lembreteEmail, siteUrl } from "@/lib/email";
 import { churchDateISO, fmtEventWhen } from "@/lib/format";
@@ -166,20 +168,26 @@ export async function atualizarNome(fullName: string): Promise<ActionResult> {
 }
 
 // Telefone (WhatsApp): a própria pessoa edita o próprio.
-export async function atualizarTelefone(phone: string): Promise<ActionResult> {
+export async function atualizarTelefone(
+  phone: string,
+): Promise<ActionResult & { unlocked?: UnlockedBadge[] }> {
   const session = await getSession();
   if (!session) return fail("Sessão expirada.");
   const value = phone.trim();
   const supabase = await createClient();
   const { error } = await supabase.from("profiles").update({ phone: value || null }).eq("id", session.userId);
   if (error) return fail(error.message);
+  // pode ter sido o último campo que faltava pro "Perfil completo"
+  const unlocked = value ? await notificarConquistas({ ...session, profile: { ...session.profile, phone: value } }) : [];
   revalidatePath("/perfil");
   revalidatePath("/equipes");
-  return ok;
+  return { ok: true, unlocked };
 }
 
 // Aniversário: a própria pessoa define o próprio (aceita vazio pra limpar).
-export async function atualizarAniversario(birth: string): Promise<ActionResult> {
+export async function atualizarAniversario(
+  birth: string,
+): Promise<ActionResult & { unlocked?: UnlockedBadge[] }> {
   const session = await getSession();
   if (!session) return fail("Sessão expirada.");
   const value = birth.trim();
@@ -187,9 +195,131 @@ export async function atualizarAniversario(birth: string): Promise<ActionResult>
   const supabase = await createClient();
   const { error } = await supabase.from("profiles").update({ birth_date: value || null }).eq("id", session.userId);
   if (error) return fail(error.message);
+  const unlocked = value
+    ? await notificarConquistas({ ...session, profile: { ...session.profile, birth_date: value } })
+    : [];
   revalidatePath("/perfil");
   revalidatePath("/equipes");
   revalidatePath("/inicio");
+  return { ok: true, unlocked };
+}
+
+// =============================================================================
+// PREFERÊNCIAS DE AVISO (WS2.2 — migration 0044)
+// =============================================================================
+/**
+ * Liga/desliga um ASSUNTO num canal. O assunto é a embalagem: escreve a linha de
+ * cada `notification_kind` que ele contém, preservando o outro canal. Upsert por
+ * (profile_id, kind), que é a PK.
+ */
+export async function definirPreferenciaAviso(
+  topicId: TopicId,
+  channel: TopicChannel,
+  value: boolean,
+): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  const topic = TOPIC_BY_ID[topicId];
+  if (!topic) return fail("Assunto desconhecido.");
+  if (!topic.channels.includes(channel)) return fail("Esse assunto não usa esse canal.");
+
+  const supabase = await createClient();
+  const { data: atuais } = await supabase
+    .from("notification_prefs")
+    .select("kind, push, email, in_app")
+    .eq("profile_id", session.userId)
+    .in("kind", topic.kinds);
+  const byKind = new Map((atuais ?? []).map((r) => [r.kind as string, r]));
+
+  const rows = topic.kinds.map((kind) => {
+    const atual = byKind.get(kind);
+    return {
+      profile_id: session.userId,
+      kind,
+      push: channel === "push" ? value : (atual?.push ?? true),
+      email: channel === "email" ? value : (atual?.email ?? true),
+      in_app: atual?.in_app ?? true,
+    };
+  });
+  const { error } = await supabase
+    .from("notification_prefs")
+    .upsert(rows, { onConflict: "profile_id,kind" });
+  if (error) return fail(error.message);
+  revalidatePath("/perfil");
+  return ok;
+}
+
+// =============================================================================
+// FOTO DE PERFIL (bucket `avatars`, migration 0043)
+// =============================================================================
+// O navegador já corta e comprime a imagem (avatar-upload.tsx) — aqui chega um
+// JPEG pequeno. O caminho é avatars/<user_id>/<timestamp>.jpg: a pasta com o id
+// é o que a RLS do storage checa, e o timestamp no nome mata o cache do CDN
+// quando a pessoa troca a foto.
+const AVATAR_MAX_BYTES = 1_500_000;
+const AVATAR_BUCKET = "avatars";
+
+/** Caminho dentro do bucket, se a URL for de um avatar NOSSO (ignora a do Google). */
+function avatarPathFromUrl(url: string | null): string | null {
+  if (!url) return null;
+  const marker = `/storage/v1/object/public/${AVATAR_BUCKET}/`;
+  const i = url.indexOf(marker);
+  if (i === -1) return null;
+  return decodeURIComponent(url.slice(i + marker.length).split("?")[0]) || null;
+}
+
+export async function atualizarFotoPerfil(
+  form: FormData,
+): Promise<ActionResult & { unlocked?: UnlockedBadge[] }> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  const file = form.get("foto");
+  if (!(file instanceof File) || file.size === 0) return fail("Escolha uma imagem.");
+  if (file.size > AVATAR_MAX_BYTES) return fail("Imagem muito grande. Tente outra foto.");
+  if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+    return fail("Formato não aceito. Use JPG, PNG ou WEBP.");
+  }
+
+  const supabase = await createClient();
+  const ext = file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
+  const path = `${session.userId}/${Date.now()}.${ext}`;
+
+  const { error: upErr } = await supabase.storage
+    .from(AVATAR_BUCKET)
+    .upload(path, file, { contentType: file.type, cacheControl: "31536000", upsert: false });
+  if (upErr) return fail(upErr.message);
+
+  const { data: pub } = supabase.storage.from(AVATAR_BUCKET).getPublicUrl(path);
+  const publicUrl = pub.publicUrl;
+
+  const anterior = avatarPathFromUrl(session.profile.avatar_url);
+  const { error } = await supabase.from("profiles").update({ avatar_url: publicUrl }).eq("id", session.userId);
+  if (error) {
+    // não deixa arquivo órfão se o update falhou
+    await supabase.storage.from(AVATAR_BUCKET).remove([path]);
+    return fail(error.message);
+  }
+  // só depois de gravar a nova: se a limpeza falhar, ninguém perde a foto
+  if (anterior && anterior !== path) await supabase.storage.from(AVATAR_BUCKET).remove([anterior]);
+
+  const unlocked = await notificarConquistas(session);
+  revalidatePath("/perfil");
+  revalidatePath("/inicio");
+  revalidatePath("/equipes");
+  return { ok: true, unlocked };
+}
+
+export async function removerFotoPerfil(): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  const supabase = await createClient();
+  const atual = avatarPathFromUrl(session.profile.avatar_url);
+  const { error } = await supabase.from("profiles").update({ avatar_url: null }).eq("id", session.userId);
+  if (error) return fail(error.message);
+  if (atual) await supabase.storage.from(AVATAR_BUCKET).remove([atual]);
+  revalidatePath("/perfil");
+  revalidatePath("/inicio");
+  revalidatePath("/equipes");
   return ok;
 }
 
@@ -467,7 +597,8 @@ export async function lembrarPendentes(eventId: string): Promise<ActionResult> {
   });
 
   try {
-    const { data: profs } = await supabase.from("profiles").select("email").in("id", ids);
+    const querem = await quemAceitaEmail(ids, "lembrete");
+    const { data: profs } = await supabase.from("profiles").select("email").in("id", querem);
     const emails = (profs ?? []).map((p) => p.email).filter((e): e is string => !!e);
     if (emails.length > 0) {
       const em = lembreteEmail({ evento: titulo, quando, href: `${siteUrl()}/escalas/${eventId}` });
@@ -585,7 +716,7 @@ export async function escalarVoluntario(
       supabase.from("profiles").select("email").eq("id", input.profileId).maybeSingle(),
       supabase.from("events").select("title, starts_at").eq("id", input.eventId).maybeSingle(),
     ]);
-    if (prof?.email) {
+    if (prof?.email && (await avisoPrefs(input.profileId, "escalado")).email) {
       const esc = escaladoEmail({
         evento: evInfo?.title ?? "um evento",
         quando: fmtEventWhen(evInfo?.starts_at),
@@ -1342,17 +1473,17 @@ export async function adicionarTipoBloco(label: string, color: string): Promise<
   const l = label.trim();
   if (!l) return fail("Dê um nome ao tipo.");
   const supabase = await createClient();
-  const { data: last } = await supabase
+  const { data: irmaos } = await supabase
     .from("rundown_kinds")
-    .select("sort_order")
+    .select("color, sort_order")
     .eq("church_id", session.profile.church_id)
-    .order("sort_order", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .order("sort_order", { ascending: false });
+  const last = irmaos?.[0];
   const { error } = await supabase.from("rundown_kinds").insert({
     church_id: session.profile.church_id,
     label: l,
-    color: color || "#6b7280",
+    // idem equipes: tipo novo sem cor pega o próximo tom livre da paleta
+    color: color || nextCategoryColor((irmaos ?? []).map((k) => k.color ?? "")),
     sort_order: (last?.sort_order ?? -1) + 1,
   });
   if (error) return fail(error.message);
@@ -1918,18 +2049,19 @@ export async function criarEquipe(name: string, color?: string): Promise<ActionR
   if (!nome) return fail("Dê um nome à equipe.");
 
   const supabase = await createClient();
-  const { data: last } = await supabase
+  // Sem cor escolhida, a equipe nova ganha o próximo tom LIVRE da paleta — não um
+  // default fixo (era assim que várias equipes terminavam com o mesmo pontinho).
+  const { data: irmas } = await supabase
     .from("teams")
-    .select("sort_order")
+    .select("color, sort_order")
     .eq("church_id", session.profile.church_id)
-    .order("sort_order", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .order("sort_order", { ascending: false });
+  const last = irmas?.[0];
 
   const { error } = await supabase.from("teams").insert({
     church_id: session.profile.church_id,
     name: nome,
-    color: color?.trim() || "#5B6B4E",
+    color: color?.trim() || nextCategoryColor((irmas ?? []).map((t) => t.color ?? "")),
     sort_order: (last?.sort_order ?? 0) + 1,
   });
   if (error) return fail(error.message);

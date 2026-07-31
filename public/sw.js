@@ -1,5 +1,10 @@
 // Service worker — Web Push (WS2.1). Recebe o push e mostra a notificação;
 // o clique foca uma aba aberta do app (navegando pra URL) ou abre uma nova.
+//
+// Sem botões de ação dentro da notificação, por dois motivos: iOS não suporta
+// `actions` em web push (e a igreja é majoritariamente iPhone), e responder
+// olhando a ESCALA é melhor que responder no escuro — a pessoa vê com quem vai
+// servir e em que posição antes de aceitar. Então o toque leva pro culto.
 self.addEventListener("push", (event) => {
   let data = {};
   try {

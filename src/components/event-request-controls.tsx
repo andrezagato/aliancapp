@@ -113,7 +113,7 @@ export function SugerirEventoForm({
           className={cn(inputCls, "resize-none")}
         />
       </Field>
-      {error ? <p className="text-sm text-destructive">{error}</p> : null}
+      {error ? <p className="text-sm text-destructive-ink">{error}</p> : null}
       <button
         onClick={submit}
         disabled={pending || !canSubmit}
@@ -279,7 +279,7 @@ function EventRequestCard({ req }: { req: PendingEventRequest }) {
           <button
             onClick={() => resolve(false)}
             disabled={pending}
-            className="press h-[50px] flex-1 rounded-[14px] border border-destructive/30 bg-card text-[15px] font-bold text-destructive"
+            className="press h-[50px] flex-1 rounded-[14px] border border-destructive/30 bg-card text-[15px] font-bold text-destructive-ink"
           >
             Recusar
           </button>

@@ -23,7 +23,7 @@ function Pie({ label, confirmed, needed }: { label: string; confirmed: number; n
           {confirmed}/{needed}
         </div>
       ) : empty ? (
-        <div className="grid size-11 place-items-center rounded-full border-2 border-dashed border-destructive/60 text-[11px] font-bold tabular-nums text-destructive">
+        <div className="grid size-11 place-items-center rounded-full border-2 border-dashed border-destructive/60 text-[11px] font-bold tabular-nums text-destructive-ink">
           {confirmed}/{needed}
         </div>
       ) : (
@@ -31,7 +31,7 @@ function Pie({ label, confirmed, needed }: { label: string; confirmed: number; n
           className="grid size-11 place-items-center rounded-full"
           style={{ background: `conic-gradient(hsl(var(--warning)) ${pct}%, hsl(var(--muted)) ${pct}% 100%)` }}
         >
-          <span className="grid size-8 place-items-center rounded-full bg-card text-[11px] font-bold tabular-nums text-warning">
+          <span className="grid size-8 place-items-center rounded-full bg-card text-[11px] font-bold tabular-nums text-warning-ink">
             {confirmed}/{needed}
           </span>
         </div>
@@ -83,7 +83,7 @@ export function EventPiesCard({ ev, manage = true }: { ev: EventListItem; manage
           <span
             className={cn(
               "rounded-full px-2.5 py-1 text-[12px] font-bold tabular-nums",
-              done ? "bg-success/15 text-success" : "bg-warning/15 text-warning",
+              done ? "bg-success/15 text-success-ink" : "bg-warning/15 text-warning-ink",
             )}
           >
             {ev.confirmedTotal}/{ev.neededTotal}

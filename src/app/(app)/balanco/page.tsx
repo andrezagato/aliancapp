@@ -199,7 +199,7 @@ export default async function BalancoPage({
             {/* Ainda não escalados no mês */}
             {zeroed.length > 0 ? (
               <Card className="border-warning/30 bg-warning/5 p-4">
-                <p className="mb-2 text-sm font-bold text-warning">Ainda não escalados · {zeroed.length}</p>
+                <p className="mb-2 text-sm font-bold text-warning-ink">Ainda não escalados · {zeroed.length}</p>
                 <div className="flex flex-wrap gap-2">
                   {zeroed.map((r) => (
                     <span key={r.profileId} className="inline-flex items-center gap-1.5 rounded-full bg-card px-2.5 py-1 text-sm">

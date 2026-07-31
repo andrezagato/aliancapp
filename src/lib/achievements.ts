@@ -19,7 +19,8 @@ export type BadgeMetric =
   | "pontual"
   | "feedbacks"
   | "no_local"
-  | "primeiro_local";
+  | "primeiro_local"
+  | "perfil";
 
 export type Badge = {
   code: string;
@@ -28,12 +29,42 @@ export type Badge = {
   desc: string;
   metric: BadgeMetric;
   target: number;
+  /**
+   * "passos" = conquista de ONBOARDING (dá em 30 segundos, existe pra empurrar
+   * uma ação que ajuda a igreja de verdade). Fica numa seção separada da Jornada
+   * pra não disputar espaço com "100 cultos servidos" — o que desvaloriza medalha
+   * não é ela ser fácil, é ela receber o mesmo ritual de uma difícil.
+   */
+  group?: "passos";
+  /** "toast" comemora discreto; o padrão é a celebração de tela cheia. */
+  celebration?: "toast";
+  /** Convite que aparece DENTRO da celebração (só onde há próximo passo óbvio). */
+  cta?: { label: string; href: string };
 };
 
 export type JourneyMetrics = Record<BadgeMetric, number>;
 
 export const BADGES: Badge[] = [
-  { code: "cadastro", emoji: "🎉", title: "Bem-vindo ao time!", desc: "Você faz parte do Servir.", metric: "cadastro", target: 1 },
+  {
+    code: "cadastro",
+    emoji: "🎉",
+    title: "Bem-vindo ao time!",
+    desc: "Você faz parte do Servir.",
+    metric: "cadastro",
+    target: 1,
+    group: "passos",
+    cta: { label: "Deixar meu perfil com a minha cara", href: "/perfil" },
+  },
+  {
+    code: "perfil_completo",
+    emoji: "🪪",
+    title: "Perfil completo",
+    desc: "Foto, telefone e aniversário no lugar — a equipe te reconhece.",
+    metric: "perfil",
+    target: 1,
+    group: "passos",
+    celebration: "toast",
+  },
   { code: "primeira_escala", emoji: "📌", title: "Primeira escala", desc: "Você foi escalado pela primeira vez.", metric: "escalado", target: 1 },
   { code: "serviu_1", emoji: "🌱", title: "Estreia no culto", desc: "Serviu pela primeira vez.", metric: "servido", target: 1 },
   { code: "primeiro_checkin", emoji: "✅", title: "Presente!", desc: "Fez seu primeiro check-in.", metric: "checkin", target: 1 },
@@ -81,4 +112,21 @@ export const BADGE_BY_CODE: Record<string, Badge> = Object.fromEntries(BADGES.ma
 /** Códigos desbloqueados dado o conjunto de métricas. */
 export function earnedCodes(m: JourneyMetrics): string[] {
   return BADGES.filter((b) => (m[b.metric] ?? 0) >= b.target).map((b) => b.code);
+}
+
+/**
+ * Separa o que merece tela cheia do que comemora discreto (ver `celebration`).
+ * Quem chama decide: `full` vai pro <AchievementCelebration/>, `toasts` viram
+ * mensagem curta.
+ */
+export function splitCelebrations(unlocked: UnlockedBadge[]): {
+  full: UnlockedBadge[];
+  toasts: UnlockedBadge[];
+} {
+  const full: UnlockedBadge[] = [];
+  const toasts: UnlockedBadge[] = [];
+  for (const b of unlocked) {
+    (BADGE_BY_CODE[b.code]?.celebration === "toast" ? toasts : full).push(b);
+  }
+  return { full, toasts };
 }

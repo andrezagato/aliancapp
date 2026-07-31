@@ -2,6 +2,7 @@ import "server-only";
 
 import webpush from "web-push";
 import { createClient } from "@/lib/supabase/server";
+import type { createAdminClient } from "@/lib/supabase/admin";
 
 /**
  * Envio de Web Push (WS2.1). Best-effort: nunca lança — um push que falha não
@@ -65,6 +66,27 @@ export async function sendPushToUser(recipientId: string, payload: PushPayload):
     const supabase = await createClient();
     const { data: subs } = await supabase.rpc("get_push_subs", { p_profile: recipientId });
     await sendPushToSubs(subs ?? [], payload);
+  } catch {
+    /* push é best-effort */
+  }
+}
+
+/**
+ * Igual ao de cima, mas lendo as subs com SERVICE-ROLE — pra quem roda sem
+ * usuário logado (o cron da cobrança). A RPC `get_push_subs` depende de
+ * `auth.uid()` e devolveria vazio nesse contexto.
+ */
+export async function sendPushToUserAsAdmin(
+  admin: NonNullable<ReturnType<typeof createAdminClient>>,
+  recipientId: string,
+  payload: PushPayload,
+): Promise<void> {
+  try {
+    const { data } = await admin
+      .from("push_subscriptions")
+      .select("endpoint, p256dh, auth")
+      .eq("profile_id", recipientId);
+    await sendPushToSubs(data ?? [], payload);
   } catch {
     /* push é best-effort */
   }

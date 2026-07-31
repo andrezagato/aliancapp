@@ -419,7 +419,7 @@ function NovaEquipe() {
             <Plus className="size-4" /> Criar
           </Button>
         </div>
-        {error ? <p className="text-sm text-destructive">{error}</p> : null}
+        {error ? <p className="text-sm text-destructive-ink">{error}</p> : null}
       </CardContent>
     </Card>
   );
@@ -466,7 +466,7 @@ function TeamHeader({
           onClick={save}
           disabled={pending || !value.trim()}
           aria-label="Salvar"
-          className="inline-flex size-8 shrink-0 items-center justify-center rounded-full text-success hover:bg-success/10"
+          className="inline-flex size-8 shrink-0 items-center justify-center rounded-full text-success-ink hover:bg-success/10"
         >
           <Check className="size-4" />
         </button>
@@ -521,7 +521,7 @@ function TeamHeader({
           <button
             onClick={() => setConfirming(true)}
             aria-label="Arquivar equipe"
-            className="inline-flex size-8 items-center justify-center rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+            className="inline-flex size-8 items-center justify-center rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive-ink"
           >
             <Archive className="size-4" />
           </button>
@@ -567,7 +567,7 @@ function TeamGroupControl({ team, isAdmin }: { team: ManageableTeam; isAdmin: bo
         <p className="text-[11px] text-muted-foreground">
           No WhatsApp: grupo → <b>Convidar via link</b> → copiar e colar aqui.
         </p>
-        {err ? <p className="text-xs text-destructive">{err}</p> : null}
+        {err ? <p className="text-xs text-destructive-ink">{err}</p> : null}
         <div className="flex gap-2">
           <Button size="sm" onClick={() => persist(value, true)} disabled={pending}>
             {pending ? "…" : "Salvar"}
@@ -588,7 +588,7 @@ function TeamGroupControl({ team, isAdmin }: { team: ManageableTeam; isAdmin: bo
             <Button
               size="sm"
               variant="ghost"
-              className="text-destructive"
+              className="text-destructive-ink"
               onClick={() => {
                 setValue("");
                 persist("", true);
@@ -795,7 +795,7 @@ function PositionItem({ positionId, teamId, name }: { positionId: string; teamId
           onClick={save}
           disabled={pending || !value.trim()}
           aria-label="Salvar"
-          className="inline-flex size-8 items-center justify-center rounded-full text-success hover:bg-success/10"
+          className="inline-flex size-8 items-center justify-center rounded-full text-success-ink hover:bg-success/10"
         >
           <Check className="size-4" />
         </button>
@@ -837,7 +837,7 @@ function PositionItem({ positionId, teamId, name }: { positionId: string; teamId
           <button
             onClick={() => setConfirming(true)}
             aria-label="Arquivar"
-            className="inline-flex size-8 items-center justify-center rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+            className="inline-flex size-8 items-center justify-center rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive-ink"
           >
             <Archive className="size-4" />
           </button>
@@ -897,7 +897,7 @@ function AddPosition({ teamId, existing }: { teamId: string; existing: string[] 
           ))}
         </div>
       ) : null}
-      {error ? <p className="text-sm text-destructive">{error}</p> : null}
+      {error ? <p className="text-sm text-destructive-ink">{error}</p> : null}
     </div>
   );
 }

@@ -486,7 +486,7 @@ function DeleteBtn({ onClick }: { onClick: () => void }) {
     <button
       onClick={onClick}
       aria-label="Apagar mensagem"
-      className="press-sm grid size-7 shrink-0 place-items-center rounded-full text-muted-foreground/60 hover:text-destructive"
+      className="press-sm grid size-7 shrink-0 place-items-center rounded-full text-muted-foreground/60 hover:text-destructive-ink"
     >
       <Trash2 className="size-[15px]" />
     </button>

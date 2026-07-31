@@ -37,24 +37,14 @@ import {
 } from "@/lib/actions";
 import { warm } from "@/lib/toasts";
 import type { RundownItem, RundownKind, RundownTemplate } from "@/lib/data";
+import { CATEGORY_HEXES, CATEGORY_NEUTRAL } from "@/lib/palette";
 
 const PX_PER_MIN = 6; // altura do bloco = duração × isto (arrastar 1min = 6px)
 const MIN_H = 72; // altura mínima pra caber os contadores/toque
-const DEFAULT_COLOR = "#6b7280";
-const SWATCHES = [
-  "#0e7490",
-  "#7c3aed",
-  "#2563eb",
-  "#b45309",
-  "#be185d",
-  "#9d174d",
-  "#0891b2",
-  "#15803d",
-  "#db2777",
-  "#ea580c",
-  "#4f46e5",
-  "#6b7280",
-];
+// Cor de bloco vem da Paleta de Categoria (DESIGN.md) — a rampa antiga era a
+// paleta default do Tailwind (ciano/violeta/azul), fria e de outra casa.
+const DEFAULT_COLOR = CATEGORY_NEUTRAL;
+const SWATCHES = [...CATEGORY_HEXES, CATEGORY_NEUTRAL];
 
 const tf = new Intl.DateTimeFormat("pt-BR", {
   timeZone: "America/Sao_Paulo",
@@ -80,11 +70,13 @@ function heatOf(remainingMs: number): Heat {
   if (remainingMs <= 120_000) return "amber";
   return "normal";
 }
+// O sistema tem DUAS cores de alerta (âmbar = atenção, telha = estourou), não
+// três. O terceiro degrau escala no PESO, não numa cor nova de biblioteca.
 const HEAT_TEXT: Record<Heat, string> = {
   normal: "text-foreground",
-  amber: "text-amber-500",
-  orange: "text-orange-500",
-  red: "text-red-600",
+  amber: "text-warning-ink",
+  orange: "text-destructive-ink",
+  red: "text-destructive-ink font-extrabold",
 };
 
 /** Contador com rótulo (início · corrido · passou). */
@@ -370,7 +362,7 @@ export function RundownGrid({
           <h3 className="font-display text-xl font-extrabold leading-tight">Ordem do culto</h3>
           {list.length > 0 ? (
             <p className="text-sm font-semibold tabular-nums text-muted-foreground">
-              {fmt(startedMs ?? plannedStartMs)} → <span className={cn(overFinish && "text-warning")}>{fmt(finishMs)}</span>
+              {fmt(startedMs ?? plannedStartMs)} → <span className={cn(overFinish && "text-warning-ink")}>{fmt(finishMs)}</span>
               <span className="font-normal"> · {totalMin} min</span>
             </p>
           ) : null}
@@ -382,17 +374,17 @@ export function RundownGrid({
               <div className="flex items-center gap-1.5">
                 <div className={cn("flex items-center gap-2 rounded-full px-3.5 py-2", ended ? "bg-success/12" : "bg-destructive/10")}>
                   {ended ? null : <span className="size-2.5 animate-pulse rounded-full bg-destructive" />}
-                  <span className={cn("text-[11px] font-extrabold uppercase tracking-wide", ended ? "text-success" : "text-destructive")}>
+                  <span className={cn("text-[11px] font-extrabold uppercase tracking-wide", ended ? "text-success-ink" : "text-destructive-ink")}>
                     {ended ? "Encerrado" : "Ao vivo"}
                   </span>
-                  <span className={cn("text-3xl font-extrabold tabular-nums leading-none", ended ? "text-success" : "text-destructive")}>
+                  <span className={cn("text-3xl font-extrabold tabular-nums leading-none", ended ? "text-success-ink" : "text-destructive-ink")}>
                     {clock((liveNow ?? startedMs ?? 0) - (startedMs ?? 0))}
                   </span>
                 </div>
                 {canEdit && !ended ? (
                   <button
                     onClick={() => window.confirm("Encerrar o culto agora? O relógio para.") && encerrar()}
-                    className="press-sm inline-flex items-center gap-1 rounded-full border border-destructive/40 bg-destructive/10 px-2.5 py-1.5 text-[12px] font-bold text-destructive"
+                    className="press-sm inline-flex items-center gap-1 rounded-full border border-destructive/40 bg-destructive/10 px-2.5 py-1.5 text-[12px] font-bold text-destructive-ink"
                   >
                     <Flag className="size-3.5" /> Encerrar
                   </button>
@@ -451,7 +443,7 @@ export function RundownGrid({
                   <span
                     className={cn(
                       "text-[13px] font-bold leading-none tabular-nums",
-                      done ? "text-muted-foreground line-through" : liveRed ? "text-red-600" : live ? "text-primary" : "text-foreground",
+                      done ? "text-muted-foreground line-through" : liveRed ? "text-destructive-ink" : live ? "text-primary" : "text-foreground",
                     )}
                   >
                     {fmt(startMs)}
@@ -464,7 +456,7 @@ export function RundownGrid({
                   <span className={cn("absolute left-1/2 top-0 w-px -translate-x-1/2 bg-border", last ? "bottom-2.5" : "-bottom-2")} />
                   <span
                     className="absolute left-1/2 top-2.5 size-2.5 -translate-x-1/2 rounded-full ring-2 ring-background"
-                    style={{ backgroundColor: liveRed ? "#ef4444" : color }}
+                    style={{ backgroundColor: liveRed ? "hsl(var(--destructive))" : color }}
                   />
                 </div>
 
@@ -481,7 +473,7 @@ export function RundownGrid({
                     (canEdit || canContribute) && "cursor-pointer",
                     done && "opacity-55",
                     live && !liveRed && "border-primary shadow-[0_0_0_2px_hsl(var(--primary))]",
-                    liveRed && "border-red-500 bg-red-600/5 shadow-[0_0_0_2px_#ef4444]",
+                    liveRed && "border-destructive bg-destructive/5 shadow-[0_0_0_2px_hsl(var(--destructive))]",
                     !live && "border-border",
                     reorderingThis && "z-30 scale-[1.04] rotate-1 opacity-95 shadow-2xl ring-2 ring-primary",
                     flashId === it.id && "animate-pop ring-2 ring-primary",
@@ -529,7 +521,7 @@ export function RundownGrid({
                           className={live ? HEAT_TEXT[h] : "text-muted-foreground"}
                         />
                         {overMs > 0 ? (
-                          <Stat label="passou" value={`+${clock(overMs)}`} big={live} className="text-red-600" />
+                          <Stat label="passou" value={`+${clock(overMs)}`} big={live} className="text-destructive-ink" />
                         ) : null}
                       </div>
                     ) : (
@@ -705,7 +697,7 @@ function ContribuirModal({ item, onClose }: { item: RundownItem; onClose: () => 
           <span className="mb-1 block text-sm font-medium">Observação (opcional)</span>
           <textarea rows={2} className={cn(inputCls, "resize-none")} value={note} onChange={(e) => setNote(e.target.value)} />
         </label>
-        {error ? <p className="text-sm text-destructive">{error}</p> : null}
+        {error ? <p className="text-sm text-destructive-ink">{error}</p> : null}
         <button
           onClick={save}
           disabled={pending}
@@ -832,7 +824,7 @@ function BlocoModal({
           <span className="mb-1 block text-sm font-medium">Link (opcional)</span>
           <input className={inputCls} placeholder="YouTube, Drive, letra…" value={link} onChange={(e) => setLink(e.target.value)} />
         </label>
-        {error ? <p className="text-sm text-destructive">{error}</p> : null}
+        {error ? <p className="text-sm text-destructive-ink">{error}</p> : null}
         <button
           onClick={save}
           disabled={pending || (!title.trim() && !kind)}
@@ -850,7 +842,7 @@ function BlocoModal({
               onClose();
             }}
             disabled={pending}
-            className="press-sm inline-flex w-full items-center justify-center gap-1.5 py-1 text-sm font-semibold text-destructive"
+            className="press-sm inline-flex w-full items-center justify-center gap-1.5 py-1 text-sm font-semibold text-destructive-ink"
           >
             <Trash2 className="size-4" /> Remover bloco
           </button>
@@ -902,7 +894,7 @@ function KindsManager({ kinds, onClose }: { kinds: RundownKind[]; onClose: () =>
                 onClick={() => del(k.id)}
                 disabled={pending}
                 aria-label={`Remover ${k.label}`}
-                className="press-sm grid size-7 place-items-center rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                className="press-sm grid size-7 place-items-center rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive-ink"
               >
                 <X className="size-4" />
               </button>
@@ -1021,7 +1013,7 @@ function TemplatesManager({
                     onClick={() => del(t.id)}
                     disabled={pending}
                     aria-label={`Excluir ${t.name}`}
-                    className="press-sm grid size-7 place-items-center rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                    className="press-sm grid size-7 place-items-center rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive-ink"
                   >
                     <X className="size-4" />
                   </button>

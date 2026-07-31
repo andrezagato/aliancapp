@@ -150,7 +150,7 @@ export default async function EquipesPage() {
               <ul className="divide-y divide-border">
                 {pendingInvites.map((i) => (
                   <li key={i.id} className="flex items-center gap-3 p-4">
-                    <span className="inline-flex size-10 items-center justify-center rounded-full bg-warning/12 text-warning">
+                    <span className="inline-flex size-10 items-center justify-center rounded-full bg-warning/12 text-warning-ink">
                       <Clock className="size-5" />
                     </span>
                     <div className="min-w-0 flex-1">
@@ -199,7 +199,7 @@ export default async function EquipesPage() {
                     <span className="text-muted-foreground">· {i.teamName}</span>
                     <span
                       className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
-                        i.status === "atendido" ? "bg-success/15 text-success" : "bg-muted text-muted-foreground"
+                        i.status === "atendido" ? "bg-success/15 text-success-ink" : "bg-muted text-muted-foreground"
                       }`}
                     >
                       {i.status === "atendido" ? "Aceito" : "Recusado"}

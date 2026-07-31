@@ -326,7 +326,7 @@ async function LeaderSection({
                   <div className="flex items-center justify-between gap-2">
                     <p className="font-semibold">{tc.teamName}</p>
                     {tc.servedThisMonth > 0 ? (
-                      <span className="text-[12px] font-semibold text-success">
+                      <span className="text-[12px] font-semibold text-success-ink">
                         {tc.servedThisMonth} presenças este mês 🎉
                       </span>
                     ) : null}
@@ -339,7 +339,7 @@ async function LeaderSection({
                         mem.served90 >= 4 && mem.served90 === top
                           ? { t: "💪 carregando bastante", c: "text-primary" }
                           : inactive
-                            ? { t: "😴 dá um alô", c: "text-warning" }
+                            ? { t: "😴 dá um alô", c: "text-warning-ink" }
                             : null;
                       return (
                         <li key={mem.personName} className="flex items-center justify-between gap-2 text-sm">
@@ -438,10 +438,10 @@ async function LeaderSection({
                   <span
                     className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold ${
                       r.status === "aprovado"
-                        ? "bg-success/15 text-success"
+                        ? "bg-success/15 text-success-ink"
                         : r.status === "recusado"
                           ? "bg-muted text-muted-foreground"
-                          : "bg-warning/15 text-warning"
+                          : "bg-warning/15 text-warning-ink"
                     }`}
                   >
                     {r.status === "aprovado" ? "Aprovado" : r.status === "recusado" ? "Recusado" : "Aguardando"}
@@ -518,7 +518,7 @@ async function AdminSection({
           href="/pessoas"
           className="flex items-center gap-3 rounded-2xl border border-warning/30 bg-warning/10 p-3.5"
         >
-          <span className="inline-flex size-9 items-center justify-center rounded-full bg-warning/15 text-warning">
+          <span className="inline-flex size-9 items-center justify-center rounded-full bg-warning/15 text-warning-ink">
             <UserPlus className="size-5" />
           </span>
           <span className="flex-1 text-sm font-medium">
@@ -559,7 +559,7 @@ function AdminUpcomingList({ events }: { events: EventListItem[] }) {
     return (
       <Card className="border-dashed">
         <CardContent className="flex flex-col items-center gap-2 px-6 py-8 text-center">
-          <CheckCircle2 className="size-8 text-success" />
+          <CheckCircle2 className="size-8 text-success-ink" />
           <p className="max-w-xs text-balance text-sm text-muted-foreground">
             Nenhum evento à frente. Que tal criar o próximo culto?
           </p>
@@ -592,7 +592,7 @@ function ResponsibleConfirm({ events }: { events: MyResponsibleEvent[] }) {
           {events.map((e) => (
             <li key={e.eventId}>
               <Link href={`/escalas/${e.eventId}`} className="flex items-center gap-3 p-4 hover:bg-muted/50">
-                <span className="inline-flex size-10 items-center justify-center rounded-full bg-warning/12 text-warning">
+                <span className="inline-flex size-10 items-center justify-center rounded-full bg-warning/12 text-warning-ink">
                   <Clock className="size-5" />
                 </span>
                 <div className="min-w-0 flex-1">

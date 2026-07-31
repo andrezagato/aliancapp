@@ -138,7 +138,7 @@ export function ModelosManager({
                     onClick={() => remove(t.id)}
                     disabled={pending}
                     aria-label="Excluir modelo"
-                    className="inline-flex size-8 items-center justify-center rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                    className="inline-flex size-8 items-center justify-center rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive-ink"
                   >
                     <Trash2 className="size-4" />
                   </button>
@@ -193,7 +193,7 @@ export function ModelosManager({
                 })}
               </div>
             </div>
-            {error ? <p className="text-sm text-destructive">{error}</p> : null}
+            {error ? <p className="text-sm text-destructive-ink">{error}</p> : null}
             <div className="flex gap-2">
               {templates.length > 0 ? (
                 <Button

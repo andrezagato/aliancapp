@@ -85,7 +85,7 @@ export function AssignmentResponse({
   // --- gatilho (uma linha) ---
   if (status === "presente") {
     return (
-      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-success/12 px-2.5 py-1 text-[12px] font-bold text-success">
+      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-success/12 px-2.5 py-1 text-[12px] font-bold text-success-ink">
         <Check className="size-3.5" strokeWidth={3} /> Presente
       </span>
     );
@@ -103,7 +103,7 @@ export function AssignmentResponse({
         className={cn(
           "press-sm inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-[13px] font-bold",
           confirmed
-            ? "bg-success/12 text-success"
+            ? "bg-success/12 text-success-ink"
             : "bg-primary text-primary-foreground",
         )}
       >
@@ -191,7 +191,7 @@ export function AssignmentResponse({
             </div>
           )}
 
-          {error ? <p className="text-sm text-destructive">{error}</p> : null}
+          {error ? <p className="text-sm text-destructive-ink">{error}</p> : null}
 
           <button
             onClick={submitDecline}

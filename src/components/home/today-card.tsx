@@ -45,7 +45,7 @@ export function TodayCard({
 
       <div className="mt-3.5">
         {a.checkedIn ? (
-          <div className="flex h-[46px] animate-pop items-center justify-center gap-2 rounded-[14px] bg-success/15 text-[15px] font-extrabold text-success">
+          <div className="flex h-[46px] animate-pop items-center justify-center gap-2 rounded-[14px] bg-success/15 text-[15px] font-extrabold text-success-ink">
             <DrawnCheck className="size-[19px]" /> Presente
           </div>
         ) : canCheckin ? (

@@ -99,7 +99,7 @@ function EditModal({ eventId, url, onClose }: { eventId: string; url: string | n
           Crie uma pasta compartilhada com edição para “qualquer pessoa com o link” e cole aqui. Todos os
           escalados poderão abrir e subir arquivos.
         </p>
-        {error ? <p className="text-sm text-destructive">{error}</p> : null}
+        {error ? <p className="text-sm text-destructive-ink">{error}</p> : null}
         <button
           onClick={() => save(value)}
           disabled={pending}
@@ -111,7 +111,7 @@ function EditModal({ eventId, url, onClose }: { eventId: string; url: string | n
           <button
             onClick={() => save("")}
             disabled={pending}
-            className="press-sm inline-flex w-full items-center justify-center gap-1.5 py-1 text-sm font-semibold text-destructive"
+            className="press-sm inline-flex w-full items-center justify-center gap-1.5 py-1 text-sm font-semibold text-destructive-ink"
           >
             Remover pasta
           </button>

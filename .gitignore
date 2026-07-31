@@ -40,3 +40,7 @@ yarn-error.log*
 
 # graphify (knowledge graph output — gerado localmente)
 /graphify-out
+
+# impeccable (guardrail de design) — cache do hook e skill instalada por máquina
+.impeccable/hook.cache.json
+/.claude/skills/

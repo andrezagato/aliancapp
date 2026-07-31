@@ -61,7 +61,7 @@ export function EscolherEquipeDesejada() {
           );
         })}
       </div>
-      {error ? <p className="text-sm text-destructive">{error}</p> : null}
+      {error ? <p className="text-sm text-destructive-ink">{error}</p> : null}
       <Button className="w-full" onClick={confirmar} disabled={pending || !teamId}>
         {pending ? "Enviando…" : "Confirmar equipe"}
       </Button>

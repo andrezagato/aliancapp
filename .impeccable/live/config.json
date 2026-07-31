@@ -1,0 +1,7 @@
+{
+  "files": ["src/app/layout.tsx"],
+  "exclude": ["public/primeiros-passos.html"],
+  "insertBefore": "</body>",
+  "commentSyntax": "jsx",
+  "cspChecked": true
+}

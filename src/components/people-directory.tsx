@@ -227,7 +227,7 @@ function PersonRow({
                     disabled={pending}
                     onClick={() => run(() => removerMembro(t.membershipId, t.teamId))}
                     aria-label={`Remover de ${t.name}`}
-                    className="inline-flex size-7 items-center justify-center rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                    className="inline-flex size-7 items-center justify-center rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive-ink"
                   >
                     <X className="size-4" />
                   </button>
@@ -256,7 +256,7 @@ function PersonRow({
             <p className="text-xs text-muted-foreground">Já está em todas as equipes.</p>
           )}
 
-          {err ? <p className="text-xs font-medium text-destructive">{err}</p> : null}
+          {err ? <p className="text-xs font-medium text-destructive-ink">{err}</p> : null}
 
           <div className="border-t border-border/60 pt-2.5">
             {confirmDelete ? (
@@ -283,7 +283,7 @@ function PersonRow({
               <button
                 disabled={pending}
                 onClick={() => setConfirmDelete(true)}
-                className="inline-flex items-center gap-1.5 text-xs font-semibold text-destructive hover:underline disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-destructive-ink hover:underline disabled:opacity-50"
               >
                 <Trash2 className="size-3.5" /> Excluir pessoa
               </button>

@@ -1,0 +1,297 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-28T17:35:19Z",
+  "title": "Design System: Sirvo — instância Aliança",
+  "extensions": {
+    "colorMeta": {
+      "vinho": {
+        "role": "primary",
+        "displayName": "Vinho de Veludo",
+        "canonical": "hsl(349 70% 26%)",
+        "tonalRamp": ["hsl(349 70% 15%)", "hsl(349 70% 26%)", "hsl(349 70% 37%)", "hsl(349 70% 48%)", "hsl(349 70% 60%)", "hsl(349 70% 72%)", "hsl(349 70% 84%)", "hsl(349 70% 95%)"]
+      },
+      "vinho-foco": {
+        "role": "primary",
+        "displayName": "Vinho de Foco",
+        "canonical": "hsl(349 70% 32%)",
+        "tonalRamp": ["hsl(349 70% 15%)", "hsl(349 70% 26%)", "hsl(349 70% 37%)", "hsl(349 70% 48%)", "hsl(349 70% 60%)", "hsl(349 70% 72%)", "hsl(349 70% 84%)", "hsl(349 70% 95%)"]
+      },
+      "vinho-hero-de": {
+        "role": "primary",
+        "displayName": "Vinho do Herói (topo)",
+        "canonical": "hsl(349 72% 28%)",
+        "tonalRamp": ["hsl(349 72% 15%)", "hsl(349 72% 26%)", "hsl(349 72% 37%)", "hsl(349 72% 48%)", "hsl(349 72% 60%)", "hsl(349 72% 72%)", "hsl(349 72% 84%)", "hsl(349 72% 95%)"]
+      },
+      "vinho-hero-ate": {
+        "role": "primary",
+        "displayName": "Vinho do Herói (base)",
+        "canonical": "hsl(349 69% 15%)",
+        "tonalRamp": ["hsl(349 69% 15%)", "hsl(349 69% 26%)", "hsl(349 69% 37%)", "hsl(349 69% 48%)", "hsl(349 69% 60%)", "hsl(349 69% 72%)", "hsl(349 69% 84%)", "hsl(349 69% 95%)"]
+      },
+      "dourado": {
+        "role": "secondary",
+        "displayName": "Dourado de Chama",
+        "canonical": "hsl(42 78% 60%)",
+        "tonalRamp": ["hsl(42 78% 15%)", "hsl(42 78% 26%)", "hsl(42 78% 37%)", "hsl(42 78% 48%)", "hsl(42 78% 60%)", "hsl(42 78% 72%)", "hsl(42 78% 84%)", "hsl(42 78% 95%)"]
+      },
+      "marrom-cacau": {
+        "role": "secondary",
+        "displayName": "Marrom Cacau",
+        "canonical": "hsl(32 70% 16%)",
+        "tonalRamp": ["hsl(32 70% 15%)", "hsl(32 70% 26%)", "hsl(32 70% 37%)", "hsl(32 70% 48%)", "hsl(32 70% 60%)", "hsl(32 70% 72%)", "hsl(32 70% 84%)", "hsl(32 70% 95%)"]
+      },
+      "creme": {
+        "role": "neutral",
+        "displayName": "Creme de Parede",
+        "canonical": "hsl(44 56% 95%)",
+        "tonalRamp": ["hsl(44 56% 15%)", "hsl(44 56% 26%)", "hsl(44 56% 37%)", "hsl(44 56% 48%)", "hsl(44 56% 60%)", "hsl(44 56% 72%)", "hsl(44 56% 84%)", "hsl(44 56% 95%)"]
+      },
+      "creme-carta": {
+        "role": "neutral",
+        "displayName": "Creme de Carta",
+        "canonical": "hsl(48 60% 98%)",
+        "tonalRamp": ["hsl(48 60% 15%)", "hsl(48 60% 26%)", "hsl(48 60% 37%)", "hsl(48 60% 48%)", "hsl(48 60% 60%)", "hsl(48 60% 72%)", "hsl(48 60% 84%)", "hsl(48 60% 98%)"]
+      },
+      "creme-claro": {
+        "role": "neutral",
+        "displayName": "Creme Claro",
+        "canonical": "hsl(36 78% 95%)",
+        "tonalRamp": ["hsl(36 78% 15%)", "hsl(36 78% 26%)", "hsl(36 78% 37%)", "hsl(36 78% 48%)", "hsl(36 78% 60%)", "hsl(36 78% 72%)", "hsl(36 78% 84%)", "hsl(36 78% 95%)"]
+      },
+      "grafite-quente": {
+        "role": "neutral",
+        "displayName": "Grafite Quente",
+        "canonical": "hsl(8 20% 18%)",
+        "tonalRamp": ["hsl(8 20% 15%)", "hsl(8 20% 26%)", "hsl(8 20% 37%)", "hsl(8 20% 48%)", "hsl(8 20% 60%)", "hsl(8 20% 72%)", "hsl(8 20% 84%)", "hsl(8 20% 95%)"]
+      },
+      "areia": {
+        "role": "neutral",
+        "displayName": "Areia",
+        "canonical": "hsl(43 46% 89%)",
+        "tonalRamp": ["hsl(43 46% 15%)", "hsl(43 46% 26%)", "hsl(43 46% 37%)", "hsl(43 46% 48%)", "hsl(43 46% 60%)", "hsl(43 46% 72%)", "hsl(43 46% 84%)", "hsl(43 46% 95%)"]
+      },
+      "pedra": {
+        "role": "neutral",
+        "displayName": "Pedra",
+        "canonical": "hsl(27 13% 40%)",
+        "tonalRamp": ["hsl(27 13% 15%)", "hsl(27 13% 26%)", "hsl(27 13% 37%)", "hsl(27 13% 48%)", "hsl(27 13% 60%)", "hsl(27 13% 72%)", "hsl(27 13% 84%)", "hsl(27 13% 95%)"]
+      },
+      "linha": {
+        "role": "neutral",
+        "displayName": "Linha Quente",
+        "canonical": "hsl(40 40% 85%)",
+        "tonalRamp": ["hsl(40 40% 15%)", "hsl(40 40% 26%)", "hsl(40 40% 37%)", "hsl(40 40% 48%)", "hsl(40 40% 60%)", "hsl(40 40% 72%)", "hsl(40 40% 85%)", "hsl(40 40% 95%)"]
+      },
+      "musgo": {
+        "role": "tertiary",
+        "displayName": "Musgo",
+        "canonical": "hsl(138 34% 37%)",
+        "tonalRamp": ["hsl(138 34% 15%)", "hsl(138 34% 26%)", "hsl(138 34% 37%)", "hsl(138 34% 48%)", "hsl(138 34% 60%)", "hsl(138 34% 72%)", "hsl(138 34% 84%)", "hsl(138 34% 95%)"]
+      },
+      "ambar": {
+        "role": "tertiary",
+        "displayName": "Âmbar de Barro",
+        "canonical": "hsl(36 62% 47%)",
+        "tonalRamp": ["hsl(36 62% 15%)", "hsl(36 62% 26%)", "hsl(36 62% 37%)", "hsl(36 62% 47%)", "hsl(36 62% 60%)", "hsl(36 62% 72%)", "hsl(36 62% 84%)", "hsl(36 62% 95%)"]
+      },
+      "telha": {
+        "role": "tertiary",
+        "displayName": "Telha",
+        "canonical": "hsl(6 62% 46%)",
+        "tonalRamp": ["hsl(6 62% 15%)", "hsl(6 62% 26%)", "hsl(6 62% 37%)", "hsl(6 62% 46%)", "hsl(6 62% 60%)", "hsl(6 62% 72%)", "hsl(6 62% 84%)", "hsl(6 62% 95%)"]
+      },
+      "azul-manso": {
+        "role": "tertiary",
+        "displayName": "Azul Manso",
+        "canonical": "hsl(217 54% 63%)",
+        "tonalRamp": ["hsl(217 54% 15%)", "hsl(217 54% 26%)", "hsl(217 54% 37%)", "hsl(217 54% 48%)", "hsl(217 54% 63%)", "hsl(217 54% 72%)", "hsl(217 54% 84%)", "hsl(217 54% 95%)"]
+      },
+      "branco": {
+        "role": "neutral",
+        "displayName": "Branco",
+        "canonical": "hsl(0 0% 100%)",
+        "tonalRamp": ["hsl(0 0% 15%)", "hsl(0 0% 26%)", "hsl(0 0% 37%)", "hsl(0 0% 48%)", "hsl(0 0% 60%)", "hsl(0 0% 72%)", "hsl(0 0% 84%)", "hsl(0 0% 100%)"]
+      },
+      "atmosfera-ambar": {
+        "role": "neutral",
+        "displayName": "Atmosfera Âmbar",
+        "canonical": "hsl(45 80% 88% / 0.55)",
+        "tonalRamp": ["hsl(45 80% 88% / 0.1)", "hsl(45 80% 88% / 0.2)", "hsl(45 80% 88% / 0.3)", "hsl(45 80% 88% / 0.4)", "hsl(45 80% 88% / 0.55)", "hsl(45 80% 88% / 0.7)", "hsl(45 80% 88% / 0.85)", "hsl(45 80% 88%)"]
+      },
+      "atmosfera-terracota": {
+        "role": "neutral",
+        "displayName": "Atmosfera Terracota",
+        "canonical": "hsl(6 40% 88% / 0.4)",
+        "tonalRamp": ["hsl(6 40% 88% / 0.1)", "hsl(6 40% 88% / 0.2)", "hsl(6 40% 88% / 0.3)", "hsl(6 40% 88% / 0.4)", "hsl(6 40% 88% / 0.55)", "hsl(6 40% 88% / 0.7)", "hsl(6 40% 88% / 0.85)", "hsl(6 40% 88%)"]
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Título dentro do herói vinho. O maior tipo do app e sempre sobre vinho." },
+      "headline": { "displayName": "Headline", "purpose": "Título de página no cabeçalho reativo; encolhe e apaga na rolagem." },
+      "title": { "displayName": "Title", "purpose": "Nome de evento no card, título de sheet (22px), cabeçalho de seção. Sempre serifa." },
+      "body": { "displayName": "Body", "purpose": "Todo texto corrido, em Alegreya Sans com ss01/cv01 ligados." },
+      "micro": { "displayName": "Micro", "purpose": "O degrau abaixo do corpo: legenda de card, nome do responsável, chip, hora. Muito usado no app." },
+      "label": { "displayName": "Label", "purpose": "Kicker dourado caixa-alta do herói vinho. Não existe sobre creme." }
+    },
+    "shadows": [
+      { "name": "soft", "value": "0 1px 2px rgba(43, 39, 36, 0.04), 0 8px 24px rgba(43, 39, 36, 0.06)", "purpose": "Repouso: todo card e todo botão cheio. Difusa e marrom, nunca preta." },
+      { "name": "lift", "value": "0 2px 4px rgba(43, 39, 36, 0.05), 0 14px 40px rgba(43, 39, 36, 0.10)", "purpose": "O que flutua ou reage: herói vinho, hover de botão, toast." },
+      { "name": "sheet", "value": "0 -12px 40px rgba(58, 42, 40, 0.2)", "purpose": "Exclusiva do bottom sheet — projetada para cima, porque o sheet sobe contra a luz." },
+      { "name": "glow-dourado", "value": "0 8px 20px rgba(231, 184, 78, 0.32)", "purpose": "A única sombra colorida do sistema. Só embaixo do botão Confirmar." }
+    ],
+    "motion": [
+      { "name": "ease-mola", "value": "cubic-bezier(0.32, 0.72, 0.24, 1)", "purpose": "A curva assinatura: sheet, pílula da nav, entrada de página, push lateral." },
+      { "name": "ease-overshoot", "value": "cubic-bezier(0.34, 1.56, 0.64, 1)", "purpose": "Mola com passada — celebração e entrada de conquista." },
+      { "name": "press", "value": "transform 130ms cubic-bezier(0.2, 0, 0.2, 1)", "purpose": "O alvo afunda para 0.975 no :active. Em telas sem hover, a opacidade também cai a 0.72." },
+      { "name": "fade-up", "value": "opacity/translateY(12px) 500ms ease both", "purpose": "Entrada de card e tile — sobe e aparece." },
+      { "name": "sheet", "value": "translateY(102% → 0) 340ms cubic-bezier(0.32, 0.72, 0.24, 1)", "purpose": "Bottom sheet subindo; o véu faz fade em 220ms." },
+      { "name": "glow", "value": "opacity 0.55 → 0.9 → 0.55, 5s ease-in-out infinite", "purpose": "A chama dourada respirando no canto do herói vinho." },
+      { "name": "pop", "value": "scale 1 → 1.045 → 1, 500ms", "purpose": "Confirmação: a coisa incha de leve e volta." },
+      { "name": "draw", "value": "stroke-dashoffset → 0, 450ms ease 50ms forwards", "purpose": "O check que se desenha no sim." },
+      { "name": "nav-pop", "value": "scale 1 → 1.28 → 1, 400ms ease", "purpose": "O ícone da aba que acabou de ficar ativa." },
+      { "name": "page-in", "value": "opacity 0 → 1, 340ms cubic-bezier(0.32, 0.72, 0.24, 1)", "purpose": "Entrada de página. Só opacidade: um translate criaria containing block e faria o cabeçalho fixo pular." },
+      { "name": "reduced-motion", "value": "@media (prefers-reduced-motion: reduce) → 0.01ms", "purpose": "Toda animação e transição do app é desligada por regra global. Invariante." }
+    ],
+    "breakpoints": [
+      { "name": "coluna", "value": "520px" },
+      { "name": "lg", "value": "1024px" },
+      { "name": "coluna-lg", "value": "720px" },
+      { "name": "container-2xl", "value": "1120px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Botão Primário",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Ação principal em vinho. Pílula de 44px com sombra macia que sobe e clareia no hover.",
+      "html": "<button class=\"ds-btn ds-btn-primary\">Escalar voluntário</button>",
+      "css": ".ds-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 44px; padding: 0 20px; border: none; border-radius: 999px; font-family: 'Alegreya Sans', system-ui, sans-serif; font-size: 14px; font-weight: 600; cursor: pointer; transition: transform 150ms ease-out, filter 150ms ease-out, background-color 150ms ease-out, box-shadow 150ms ease-out; } .ds-btn:active { transform: scale(0.97); } .ds-btn:focus-visible { outline: 2px solid hsl(var(--ring, 349 70% 32%)); outline-offset: 2px; } .ds-btn-primary { background: hsl(var(--primary, 349 70% 26%)); color: hsl(var(--primary-foreground, 36 78% 95%)); box-shadow: 0 1px 2px rgba(43,39,36,.04), 0 8px 24px rgba(43,39,36,.06); } .ds-btn-primary:hover { filter: brightness(1.1); box-shadow: 0 2px 4px rgba(43,39,36,.05), 0 14px 40px rgba(43,39,36,.10); }"
+    },
+    {
+      "name": "Botão do Sim (accent)",
+      "kind": "button",
+      "refersTo": "button-accent",
+      "description": "Reservado à confirmação. Dourado com marrom cacau, o check desenhado e a única sombra colorida do sistema.",
+      "html": "<button class=\"ds-btn ds-btn-accent\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" width=\"19\" height=\"19\" aria-hidden=\"true\"><path d=\"M20 6 9 17l-5-5\"/></svg>Confirmar</button>",
+      "css": ".ds-btn-accent { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 50px; padding: 0 22px; border: none; border-radius: 15px; background: hsl(var(--accent, 42 78% 60%)); color: hsl(var(--accent-foreground, 32 70% 16%)); font-family: 'Alegreya Sans', system-ui, sans-serif; font-size: 15.5px; font-weight: 800; cursor: pointer; box-shadow: 0 8px 20px rgba(231,184,78,.32); transition: transform 130ms cubic-bezier(.2,0,.2,1), filter 150ms ease; } .ds-btn-accent:hover { filter: brightness(1.05); } .ds-btn-accent:active { transform: scale(0.975); } .ds-btn-accent:focus-visible { outline: 2px solid hsl(var(--ring, 349 70% 32%)); outline-offset: 2px; } .ds-btn-accent svg path { stroke-dasharray: 26; stroke-dashoffset: 26; animation: ds-draw .45s .05s ease forwards; } @keyframes ds-draw { to { stroke-dashoffset: 0; } }"
+    },
+    {
+      "name": "Botão Contorno",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "Ação secundária: superfície creme com linha quente. No hover o fundo vira areia e a borda puxa vinho.",
+      "html": "<button class=\"ds-btn ds-btn-outline\">Não posso</button>",
+      "css": ".ds-btn-outline { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 44px; padding: 0 20px; border: 1px solid hsl(var(--border, 40 40% 85%)); border-radius: 999px; background: hsl(var(--card, 48 60% 98%)); color: hsl(var(--foreground, 8 20% 18%)); font-family: 'Alegreya Sans', system-ui, sans-serif; font-size: 14px; font-weight: 600; cursor: pointer; transition: background-color 150ms ease, border-color 150ms ease, transform 130ms cubic-bezier(.2,0,.2,1); } .ds-btn-outline:hover { background: hsl(var(--muted, 43 46% 89%)); border-color: hsl(var(--primary, 349 70% 26%) / 0.3); } .ds-btn-outline:active { transform: scale(0.97); } .ds-btn-outline:focus-visible { outline: 2px solid hsl(var(--ring, 349 70% 32%)); outline-offset: 2px; }"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "A superfície padrão: creme de carta sobre creme de parede, raio 16px, linha quente e sombra macia. Papel empilhado.",
+      "html": "<div class=\"ds-card\"><h3 class=\"ds-card-title\">Culto de Domingo</h3><p class=\"ds-card-sub\">domingo, 18h · Templo</p></div>",
+      "css": ".ds-card { border: 1px solid hsl(var(--border, 40 40% 85%)); border-radius: 16px; background: hsl(var(--card, 48 60% 98%)); color: hsl(var(--card-foreground, 8 20% 18%)); padding: 16px; box-shadow: 0 1px 2px rgba(43,39,36,.04), 0 8px 24px rgba(43,39,36,.06); } .ds-card-title { margin: 0; font-family: Alegreya, Georgia, serif; font-size: 17px; font-weight: 800; line-height: 1.15; letter-spacing: -0.01em; } .ds-card-sub { margin: 2px 0 0; font-family: 'Alegreya Sans', system-ui, sans-serif; font-size: 12.5px; color: hsl(var(--muted-foreground, 27 13% 40%)); }"
+    },
+    {
+      "name": "Campo de Texto",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Campo sem sombra — depressão, não elevação. Foco troca o outline nativo por um anel de vinho de 2px.",
+      "html": "<label class=\"ds-field\"><span class=\"ds-field-label\">Título do evento</span><input class=\"ds-input\" type=\"text\" placeholder=\"Ex.: Culto de Domingo\" /></label>",
+      "css": ".ds-field { display: flex; flex-direction: column; gap: 6px; font-family: 'Alegreya Sans', system-ui, sans-serif; } .ds-field-label { font-size: 12.5px; font-weight: 600; color: hsl(var(--muted-foreground, 27 13% 40%)); } .ds-input { width: 100%; padding: 12px 16px; border: 1px solid hsl(var(--input, 40 40% 85%)); border-radius: 16px; background: hsl(var(--card, 48 60% 98%)); color: hsl(var(--foreground, 8 20% 18%)); font-family: inherit; font-size: 14px; outline: none; } .ds-input::placeholder { color: hsl(var(--muted-foreground, 27 13% 40%) / 0.7); } .ds-input:focus-visible { outline: 2px solid hsl(var(--ring, 349 70% 32%)); outline-offset: 2px; }"
+    },
+    {
+      "name": "Chip de Cobertura",
+      "kind": "chip",
+      "refersTo": "badge-success",
+      "description": "Pílula de estado com ponto sólido e fração tabular. Fundo é a própria cor a 12–15% — nunca cor cheia.",
+      "html": "<span class=\"ds-chip ds-chip-full\"><i class=\"ds-dot\"></i>6/6</span> <span class=\"ds-chip ds-chip-partial\"><i class=\"ds-dot\"></i>3/6</span> <span class=\"ds-chip ds-chip-empty\"><i class=\"ds-dot\"></i>0/6</span>",
+      "css": ".ds-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; font-family: 'Alegreya Sans', system-ui, sans-serif; font-size: 12px; font-weight: 500; font-variant-numeric: tabular-nums; } .ds-dot { width: 8px; height: 8px; border-radius: 999px; background: currentColor; } .ds-chip-full { background: hsl(var(--success, 138 34% 37%) / 0.12); color: hsl(var(--success, 138 34% 37%)); } .ds-chip-partial { background: hsl(var(--warning, 36 62% 47%) / 0.15); color: hsl(var(--warning, 36 62% 47%)); } .ds-chip-empty { background: hsl(var(--destructive, 6 62% 46%) / 0.12); color: hsl(var(--destructive, 6 62% 46%)); }"
+    },
+    {
+      "name": "Anel de Cobertura",
+      "kind": "custom",
+      "description": "Assinatura. O estado da escala de uma equipe em três formas distinguíveis sem cor: bola cheia, anel cônico parcial, anel tracejado vazio.",
+      "html": "<div class=\"ds-pies\"><div class=\"ds-pie-wrap\"><div class=\"ds-pie ds-pie-full\">6/6</div><span class=\"ds-pie-label\">Louvor</span></div><div class=\"ds-pie-wrap\"><div class=\"ds-pie ds-pie-partial\"><span class=\"ds-pie-core\">3/6</span></div><span class=\"ds-pie-label\">Som</span></div><div class=\"ds-pie-wrap\"><div class=\"ds-pie ds-pie-empty\">0/2</div><span class=\"ds-pie-label\">Mídia</span></div></div>",
+      "css": ".ds-pies { display: flex; gap: 14px; font-family: 'Alegreya Sans', system-ui, sans-serif; } .ds-pie-wrap { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; } .ds-pie { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 999px; font-size: 11px; font-weight: 800; font-variant-numeric: tabular-nums; } .ds-pie-full { background: hsl(var(--success, 138 34% 37%)); color: #fff; } .ds-pie-partial { background: conic-gradient(hsl(var(--warning, 36 62% 47%)) 50%, hsl(var(--muted, 43 46% 89%)) 50% 100%); } .ds-pie-core { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 999px; background: hsl(var(--card, 48 60% 98%)); color: hsl(var(--warning, 36 62% 47%)); font-size: 11px; font-weight: 700; } .ds-pie-empty { border: 2px dashed hsl(var(--destructive, 6 62% 46%) / 0.6); color: hsl(var(--destructive, 6 62% 46%)); font-weight: 700; } .ds-pie-label { max-width: 56px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; font-weight: 500; color: hsl(var(--muted-foreground, 27 13% 40%)); }"
+    },
+    {
+      "name": "Herói Vinho",
+      "kind": "custom",
+      "refersTo": "hero-wine",
+      "description": "Assinatura. Um por tela: degradê vinho, chama dourada pulsando no canto, kicker caixa-alta, título serifa e a ação do sim.",
+      "html": "<div class=\"ds-hero\"><span class=\"ds-hero-glow\" aria-hidden=\"true\"></span><div class=\"ds-hero-body\"><p class=\"ds-hero-kicker\">Sua próxima escala</p><h2 class=\"ds-hero-title\">Culto de Domingo</h2><p class=\"ds-hero-when\">domingo, 27 de julho · 18h</p><div class=\"ds-hero-chips\"><span class=\"ds-hero-chip\"><i class=\"ds-hero-teamdot\"></i>Louvor</span><span class=\"ds-hero-chip\">Voz</span></div></div></div>",
+      "css": ".ds-hero { position: relative; overflow: hidden; border-radius: 26px; padding: 20px; background: linear-gradient(to bottom right, hsl(349 72% 28%), hsl(349 69% 15%)); color: hsl(var(--primary-foreground, 36 78% 95%)); box-shadow: 0 2px 4px rgba(43,39,36,.05), 0 14px 40px rgba(43,39,36,.10); font-family: 'Alegreya Sans', system-ui, sans-serif; } .ds-hero-glow { position: absolute; top: -44px; right: -44px; width: 176px; height: 176px; border-radius: 999px; background: radial-gradient(circle, hsl(var(--accent, 42 78% 60%) / 0.42), transparent 68%); animation: ds-glow 5s ease-in-out infinite; pointer-events: none; } @keyframes ds-glow { 0%, 100% { opacity: .55; } 50% { opacity: .9; } } .ds-hero-body { position: relative; } .ds-hero-kicker { margin: 0; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.14em; color: hsl(var(--accent, 42 78% 60%)); } .ds-hero-title { margin: 4px 0 0; font-family: Alegreya, Georgia, serif; font-size: 29px; font-weight: 800; line-height: 1.04; color: #fff; } .ds-hero-when { margin: 4px 0 0; font-size: 14px; color: hsl(var(--primary-foreground, 36 78% 95%) / 0.85); } .ds-hero-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; } .ds-hero-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: rgba(255,255,255,.13); font-size: 12.5px; font-weight: 500; } .ds-hero-teamdot { width: 8px; height: 8px; border-radius: 999px; background: hsl(var(--accent, 42 78% 60%)); }"
+    },
+    {
+      "name": "Navegação de Rodapé",
+      "kind": "nav",
+      "refersTo": "nav-pill",
+      "description": "Cinco abas fixas sobre creme translúcido com blur. A pílula dourada desliza para a aba ativa envolvendo ícone e rótulo.",
+      "html": "<nav class=\"ds-nav\"><span class=\"ds-nav-pill\" aria-hidden=\"true\"><span></span></span><a class=\"ds-nav-item ds-nav-active\" href=\"#\" aria-current=\"page\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.3\" stroke-linecap=\"round\" stroke-linejoin=\"round\" width=\"20\" height=\"20\" aria-hidden=\"true\"><path d=\"m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z\"/><path d=\"M9 22V12h6v10\"/></svg>Início</a><a class=\"ds-nav-item\" href=\"#\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" width=\"20\" height=\"20\" aria-hidden=\"true\"><path d=\"M8 2v4M16 2v4\"/><rect width=\"18\" height=\"18\" x=\"3\" y=\"4\" rx=\"2\"/><path d=\"M3 10h18\"/></svg>Escalas</a><a class=\"ds-nav-item\" href=\"#\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" width=\"20\" height=\"20\" aria-hidden=\"true\"><rect width=\"8\" height=\"4\" x=\"8\" y=\"2\" rx=\"1\"/><path d=\"M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2\"/><path d=\"M12 11h4M12 16h4M8 11h.01M8 16h.01\"/></svg>Roteiro</a><a class=\"ds-nav-item\" href=\"#\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" width=\"20\" height=\"20\" aria-hidden=\"true\"><path d=\"M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2\"/><circle cx=\"9\" cy=\"7\" r=\"4\"/><path d=\"M22 21v-2a4 4 0 0 0-3-3.87\"/><path d=\"M16 3.13a4 4 0 0 1 0 7.75\"/></svg>Equipes</a><a class=\"ds-nav-item\" href=\"#\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" width=\"20\" height=\"20\" aria-hidden=\"true\"><path d=\"M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2\"/><circle cx=\"12\" cy=\"7\" r=\"4\"/></svg>Perfil</a></nav>",
+      "css": ".ds-nav { position: relative; display: flex; align-items: stretch; padding: 6px 0; border-top: 1px solid hsl(var(--border, 40 40% 85%) / 0.8); background: hsl(var(--card, 48 60% 98%) / 0.85); backdrop-filter: blur(16px); font-family: 'Alegreya Sans', system-ui, sans-serif; } .ds-nav-pill { position: absolute; top: 4px; bottom: 4px; left: 0; width: 20%; display: flex; align-items: center; justify-content: center; pointer-events: none; transition: left 300ms cubic-bezier(.32,.72,.24,1); } .ds-nav-pill > span { width: 64px; height: 100%; border-radius: 20px; background: hsl(var(--accent, 42 78% 60%) / 0.4); } .ds-nav-item { position: relative; flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 4px 0; border-radius: 12px; font-size: 11px; font-weight: 600; text-decoration: none; color: hsl(var(--muted-foreground, 27 13% 40%)); transition: color 150ms ease; } .ds-nav-item:hover { color: hsl(var(--foreground, 8 20% 18%)); } .ds-nav-active { color: hsl(var(--primary, 349 70% 26%)); } .ds-nav-active svg { animation: ds-nav-pop .4s ease; } @keyframes ds-nav-pop { 0% { transform: scale(1); } 45% { transform: scale(1.28); } 100% { transform: scale(1); } } .ds-nav-item:focus-visible { outline: 2px solid hsl(var(--ring, 349 70% 32%)); outline-offset: 2px; }"
+    },
+    {
+      "name": "Estado Vazio",
+      "kind": "card",
+      "description": "Convite, não erro. Card de borda tracejada, ícone em disco vinho a 10% e texto equilibrado.",
+      "html": "<div class=\"ds-empty\"><span class=\"ds-empty-icon\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" width=\"24\" height=\"24\" aria-hidden=\"true\"><path d=\"M8 2v4M16 2v4\"/><rect width=\"18\" height=\"18\" x=\"3\" y=\"4\" rx=\"2\"/><path d=\"M3 10h18\"/></svg></span><h3 class=\"ds-empty-title\">Nenhuma escala ainda</h3><p class=\"ds-empty-text\">Quando o líder te escalar, o convite aparece aqui.</p></div>",
+      "css": ".ds-empty { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 48px 24px; border: 1px dashed hsl(var(--border, 40 40% 85%)); border-radius: 16px; background: hsl(var(--card, 48 60% 98%)); text-align: center; font-family: 'Alegreya Sans', system-ui, sans-serif; } .ds-empty-icon { display: inline-flex; align-items: center; justify-content: center; width: 56px; height: 56px; border-radius: 999px; background: hsl(var(--primary, 349 70% 26%) / 0.1); color: hsl(var(--primary, 349 70% 26%)); } .ds-empty-title { margin: 0; font-family: Alegreya, Georgia, serif; font-size: 18px; font-weight: 700; } .ds-empty-text { margin: 0; max-width: 20rem; font-size: 14px; text-wrap: balance; color: hsl(var(--muted-foreground, 27 13% 40%)); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "A Festa de Bastidor",
+    "overview": "Servir é trabalho invisível: alguém chegou às 7h pra ligar a mesa de som, alguém trocou o domingo de folga. Este sistema existe pra tornar esse bastidor visível e gostoso. O movimento central não é \"preencher a escala\", é ser convidado e dizer sim — e o sim é celebrado: o botão dourado incha de leve, o check se desenha, o confete voa. Nada aqui pode parecer um formulário que te cobra.\n\nA matéria é papel macio empilhado. Tudo é creme sobre creme, separado por sombras difusas e largas e uma linha quente quando precisa — nunca por contorno duro ou cinza neutro. Por cima desse papel, um único bloco por tela vira vinho profundo: é onde mora o que importa agora (a sua próxima escala, o seu perfil, a sua jornada). Nesse bloco, e só nele, uma chama dourada pulsa no canto. O resto da tela respira em creme.\n\nDensidade é uma decisão de produto, não de estética: o líder precisa de controle sem que o excesso de informação domine. Por isso cada card entrega o estado num relance — um anel, uma fração, uma pílula colorida — e guarda o detalhe atrás de um toque. Passos curtos: quase nada navega pra página nova, tudo abre em bottom sheet com alça. E gamificação existe (conquistas, sequência, meses servindo) sem competição: os números falam de pertencer, nunca de estar na frente de alguém.\n\nEsta é a instância Aliança: cor e tipografia vêm da identidade da igreja e são a camada trocável — outra igreja re-tinge e troca as fontes, e deve mesmo ficar diferente. O que não se mexe é o esqueleto: coluna única, cinco abas, papel empilhado, pílulas, sheet com alça, celebração no sim, vocabulário de escala.",
+    "keyCharacteristics": [
+      "Creme como estado natural; vinho como acontecimento; dourado como recompensa.",
+      "Serifa (Alegreya) nomeia coisas; sans (Alegreya Sans) explica coisas.",
+      "Coluna única de 520px, cinco abas fixas, ação sempre no alcance do polegar.",
+      "Zero quina viva: 8px no mínimo, 16px no padrão, pílula em tudo que se toca e é curto.",
+      "Movimento com mola, nunca com salto — e desligado inteiro em prefers-reduced-motion.",
+      "Estado sempre legível em um relance, antes de qualquer leitura.",
+      "Ícones Lucide em traço; a única exceção viva no código é /jornada."
+    ],
+    "rules": [
+      { "name": "A Regra do Vinho Raro", "body": "No máximo um bloco vinho por tela. O vinho não é fundo, é acontecimento: quando dois blocos disputam, nenhum é importante.", "section": "colors" },
+      { "name": "A Regra da Chama Pontual", "body": "O dourado marca só o que se toca ou se celebra. Se ele estiver cobrindo mais de uns 10% da tela, virou tinta e perdeu a função.", "section": "colors" },
+      { "name": "A Regra do Semáforo Fechado", "body": "Musgo, âmbar e telha são vocabulário de estado de escala (cheio / parcial / vazio) e de nada mais. Não os use como cor decorativa, nem para categorias que não sejam cobertura, presença ou risco.", "section": "colors" },
+      { "name": "A Regra da Borda Quente", "body": "Nenhum cinza neutro no sistema. Toda borda, divisor e campo sai da linha quente — creme escurecido com matiz. Cinza puro lê como planilha.", "section": "colors" },
+      { "name": "A Regra da Serifa que Nomeia", "body": "Alegreya só onde algo tem nome próprio: título, pessoa, dia, número que identifica. Informação corrida, rótulo e ajuda são sempre Alegreya Sans. Serifa em parágrafo é ruído; sans em nome de culto é frieza.", "section": "typography" },
+      { "name": "A Regra do Kicker Dourado", "body": "O rótulo 11px extrabold caixa-alta com tracking 0.14em em dourado é a assinatura do bloco vinho. Ele não existe sobre creme — fora do herói, rótulo é pedra em caixa normal.", "section": "typography" },
+      { "name": "A Regra do Número que Não Dança", "body": "Toda fração, contagem e hora usa tabular-nums. Um \"3/6\" que muda de largura ao atualizar destrói a sensação de coisa sólida.", "section": "typography" },
+      { "name": "A Regra do Relance", "body": "Todo card responde à pergunta \"está de pé ou não?\" antes de qualquer leitura — pelo anel, pela pílula, pela cor. Se for preciso ler uma frase pra saber o estado, o card falhou.", "section": "layout" },
+      { "name": "A Regra do Sheet em Vez de Página", "body": "Ação secundária abre em bottom sheet com alça, não em rota nova. Menos carregamento no 4G da igreja, e o contexto de onde a pessoa estava não se perde.", "section": "layout" },
+      { "name": "A Regra das Duas Sombras", "body": "soft em repouso, lift no que flutua. Uma terceira sombra inventada quebra o empilhamento — se algo precisa se destacar mais, mude de superfície ou de cor, não de sombra.", "section": "elevation" },
+      { "name": "A Regra da Sombra Marrom", "body": "Sombra preta sobre creme lê como sujeira. Toda sombra do sistema é marrom translúcido.", "section": "elevation" },
+      { "name": "A Regra do Filho Menor", "body": "O raio de um elemento aninhado é sempre menor que o do pai (16 → 12 → 8). Filho com raio igual ao pai faz a borda parecer errada.", "section": "shapes" },
+      { "name": "A Regra da Borda Tracejada = Ausência", "body": "Tracejado significa \"não tem nada aqui\": estado vazio, vaga aberta, anel sem ninguém. Nunca é decoração.", "section": "shapes" },
+      { "name": "A Regra do Sem Ranking", "body": "Conquistas, sequências e contadores falam de pertencer — \"3 meses servindo\", \"5 cultos\" — e nunca comparam pessoas. Nenhum placar, nenhuma posição relativa, nenhum \"melhor voluntário do mês\". Gamificação aqui é comunhão, não competição.", "section": "components" },
+      { "name": "A Regra do Retorno Visível", "body": "Nenhuma ação termina em silêncio. Toast, pop, check desenhado ou mudança de estado na hora — o que antes era um refresh mudo hoje é sempre algo que se vê.", "section": "components" }
+    ],
+    "dos": [
+      "Do manter um único bloco vinho por tela e deixar o resto em creme — o vinho é acontecimento, não fundo.",
+      "Do usar serifa (Alegreya) só onde algo tem nome próprio, e Alegreya Sans em todo texto corrido.",
+      "Do entregar o estado em forma antes de texto: anel, fração, pílula, ponto colorido.",
+      "Do abrir ação secundária em bottom sheet com alça em vez de navegar pra rota nova.",
+      "Do usar as duas sombras do sistema (soft em repouso, lift no que flutua), sempre em marrom translúcido.",
+      "Do dar ao elemento aninhado um raio menor que o do pai (16 → 12 → 8).",
+      "Do celebrar a confirmação — pop, check desenhado, confete no que merece.",
+      "Do respeitar pt-safe / pb-safe e prefers-reduced-motion (que já desliga toda a animação do app).",
+      "Do usar tabular-nums em fração, contagem e hora.",
+      "Do ícones Lucide em traço, tingidos por currentColor."
+    ],
+    "donts": [
+      "Don't trazer cinza neutro pra dentro do sistema — borda, divisor e campo saem da linha quente com matiz. Cinza lê como planilha.",
+      "Don't parecer dashboard de analytics: sem KPI em card cinza, sem gráfico decorativo, sem densidade de painel de controle. O líder quer o relance, não o relatório.",
+      "Don't parecer app de igreja com clip-art: sem pombinha, sem degradê celeste, sem fonte manuscrita decorativa, sem emoji pictográfico (a única exceção viva no código hoje é /jornada, que contraria a convenção do repositório).",
+      "Don't criar ranking, placar ou comparação entre voluntários.",
+      "Don't encher o dourado em área grande — ele é chama pontual, não tinta.",
+      "Don't usar musgo / âmbar / telha fora do vocabulário de cobertura, presença e risco.",
+      "Don't inventar uma terceira sombra, nem usar sombra preta.",
+      "Don't deixar quina viva: nada abaixo de 8px de raio, e pílula em tudo que se toca e é curto.",
+      "Don't remover o outline de foco sem repor o anel de 2px em vinho-foco.",
+      "Don't empilhar modal dentro de modal — painel inline dentro do card, como a linha de status da escala faz.",
+      "Don't tratar cor e tipografia como invariantes do produto: elas são a camada da igreja. O que não muda é o esqueleto (coluna única, cinco abas, papel empilhado, pílulas, sheet, celebração, vocabulário)."
+    ]
+  }
+}
