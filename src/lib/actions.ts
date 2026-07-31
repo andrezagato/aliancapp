@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getSession, canManageTeam, leadTeamIds, type Session } from "@/lib/auth";
 import {
   getEligibleMembers,
@@ -87,6 +88,49 @@ function distanceM(lat1: number, lng1: number, lat2: number, lng2: number): numb
 }
 
 // =============================================================================
+// =============================================================================
+// ONBOARDING: pode mandar link de acesso pra esse e-mail?
+// =============================================================================
+/**
+ * O botão "Receber link de acesso" usa `signInWithOtp`, e o default do Supabase é
+ * CRIAR a conta de qualquer e-mail digitado. Resultado: quem nunca foi convidado
+ * entrava pela janela e virava uma conta órfã — pendente, com `church_id` nulo,
+ * presa em /aguardando e destravável só à mão em Equipes.
+ *
+ * Por que não resolvemos com `shouldCreateUser: false`: o convite NÃO cria conta
+ * no auth. O e-mail de convite só diz "entre com este mesmo e-mail", e é o
+ * primeiro login que cria a conta e casa com o convite (trigger handle_new_user).
+ * Com a flag, todo convidado que usa magic link — justamente quem não tem Gmail —
+ * ficaria impedido de entrar. Então a porta continua aberta pra criar conta; o
+ * que mudou é que agora conferimos ANTES quem tem direito de bater nela.
+ *
+ * Roda com service-role de propósito: nada disso vira RPC pública, pra não criar
+ * uma consulta de "esse e-mail existe?" acessível com a chave anônima.
+ */
+export type EmailParaLink = "ok" | "aguardando" | "nao_encontrado";
+
+export async function verificarEmailParaLink(emailBruto: string): Promise<{ status: EmailParaLink }> {
+  const email = emailBruto.trim().toLowerCase();
+  if (!email.includes("@")) return { status: "nao_encontrado" };
+
+  const admin = createAdminClient();
+  // Sem service-role configurada, libera: travar o login de todo mundo por causa
+  // de uma env ausente seria pior que a conta órfã que estamos evitando.
+  if (!admin) return { status: "ok" };
+
+  const [{ data: perfis }, { data: convites }, { data: pedidos }] = await Promise.all([
+    admin.from("profiles").select("id").ilike("email", email).limit(1),
+    admin.from("invites").select("id").ilike("email", email).eq("status", "pendente").limit(1),
+    admin.from("join_requests").select("id").ilike("email", email).eq("status", "pendente").limit(1),
+  ]);
+
+  // Já tem conta (inclusive conta órfã antiga) ou tem convite esperando: entra.
+  if ((perfis?.length ?? 0) > 0 || (convites?.length ?? 0) > 0) return { status: "ok" };
+  // Pediu entrada e ninguém aprovou ainda: esperar é o certo, criar conta não.
+  if ((pedidos?.length ?? 0) > 0) return { status: "aguardando" };
+  return { status: "nao_encontrado" };
+}
+
 // ONBOARDING: solicitar entrada (auto-cadastro público — sem sessão)
 // Passa pelo server (mesma origem) em vez de fetch direto do navegador ao
 // Supabase — evita o "Load failed" do Safari e dá erro claro.

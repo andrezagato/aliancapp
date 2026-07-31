@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { MailCheck } from "lucide-react";
 import { createClient, supabaseConfigured } from "@/lib/supabase/client";
+import { verificarEmailParaLink } from "@/lib/actions";
 import { Button } from "@/components/ui/button";
 import { SirvoMark } from "@/components/brand/sirvo-mark";
 import { PrimeirosPassosLink } from "@/components/primeiros-passos-link";
@@ -20,6 +21,7 @@ export default function EntrarPage() {
   const [error, setError] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [magicSent, setMagicSent] = useState(false);
+  const [precisaPedir, setPrecisaPedir] = useState(false);
   const [devPassword, setDevPassword] = useState("");
 
   function ensureConfigured() {
@@ -56,6 +58,22 @@ export default function EntrarPage() {
     }
     setLoading("magic");
     setError(null);
+    setPrecisaPedir(false);
+
+    // Confere ANTES de mandar: sem convite/conta, `signInWithOtp` criaria uma
+    // conta órfã (pendente e sem igreja), que só se destrava à mão em Equipes.
+    const { status } = await verificarEmailParaLink(email);
+    if (status === "aguardando") {
+      setLoading(null);
+      setError("Seu pedido de entrada está em análise. Você recebe um e-mail assim que for aprovado.");
+      return;
+    }
+    if (status === "nao_encontrado") {
+      setLoading(null);
+      setPrecisaPedir(true);
+      return;
+    }
+
     const { error } = await createClient().auth.signInWithOtp({
       email: email.trim(),
       options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
@@ -154,6 +172,23 @@ export default function EntrarPage() {
 
         {error ? (
           <p className="rounded-xl bg-destructive/10 px-4 py-3 text-center text-sm text-destructive-ink">{error}</p>
+        ) : null}
+
+        {/* Sem convite não criamos conta — mas a pessoa não pode ficar sem saída:
+            o aviso já leva pro caminho certo, que é pedir entrada. */}
+        {precisaPedir ? (
+          <div className="rounded-xl border border-accent/40 bg-accent/10 px-4 py-3 text-center text-sm">
+            <p className="font-semibold">Ainda não temos um convite pra esse e-mail</p>
+            <p className="mt-1 text-muted-foreground">
+              Se você serve na igreja, peça entrada aqui e a liderança libera seu acesso.
+            </p>
+            <Link
+              href="/cadastro"
+              className="press-sm mt-3 inline-flex h-11 w-full items-center justify-center rounded-[14px] bg-primary text-[15px] font-bold text-primary-foreground"
+            >
+              Solicitar entrada
+            </Link>
+          </div>
         ) : null}
       </div>
 
