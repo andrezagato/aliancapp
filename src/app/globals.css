@@ -26,14 +26,22 @@
     --muted: 43 46% 89%;
     --muted-foreground: 27 13% 40%;
 
+    /* Cada cor de estado tem DUAS faces (ver DESIGN.md § Colors):
+       a cor cheia (bola, fatia do anel, tinte de fundo) e a "tinta" — a versão
+       escurecida que o TEXTO usa. O tinte a 12-15% escurece o creme e come o
+       contraste: sem a tinta, chip de estado reprova AA (musgo 3,86 / âmbar 2,48
+       / telha 4,23 : 1). A tinta devolve ≥4,5:1 sem mexer no preenchimento. */
     --success: 138 34% 37%;
     --success-foreground: 0 0% 100%;
+    --success-ink: 138 34% 33%;
 
     --warning: 36 62% 47%;
     --warning-foreground: 0 0% 100%;
+    --warning-ink: 36 62% 33%;
 
     --destructive: 6 62% 46%;
     --destructive-foreground: 0 0% 100%;
+    --destructive-ink: 6 62% 44%;
 
     /* azul suave — apoio */
     --info: 217 54% 63%;
@@ -59,6 +67,11 @@
     --border: 350 12% 22%;
     --input: 350 12% 22%;
     --ring: 42 72% 58%;
+    /* No escuro a tinta inverte o sentido: precisa CLAREAR pra ler sobre o fundo
+       vinho-quase-preto. Paleta reservada — nada no app aplica .dark ainda. */
+    --success-ink: 138 40% 62%;
+    --warning-ink: 36 70% 62%;
+    --destructive-ink: 6 70% 64%;
   }
 
   * {

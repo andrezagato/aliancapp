@@ -18,6 +18,7 @@ import {
   type PersonObservation,
 } from "@/lib/data";
 import { BADGE_BY_CODE, type UnlockedBadge } from "@/lib/achievements";
+import { nextCategoryColor } from "@/lib/palette";
 import { logActivity } from "@/lib/activity";
 import { notify, notifyMany, teamLeaderIds } from "@/lib/notify";
 import { sendPushToSubs } from "@/lib/push";
@@ -1342,17 +1343,17 @@ export async function adicionarTipoBloco(label: string, color: string): Promise<
   const l = label.trim();
   if (!l) return fail("Dê um nome ao tipo.");
   const supabase = await createClient();
-  const { data: last } = await supabase
+  const { data: irmaos } = await supabase
     .from("rundown_kinds")
-    .select("sort_order")
+    .select("color, sort_order")
     .eq("church_id", session.profile.church_id)
-    .order("sort_order", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .order("sort_order", { ascending: false });
+  const last = irmaos?.[0];
   const { error } = await supabase.from("rundown_kinds").insert({
     church_id: session.profile.church_id,
     label: l,
-    color: color || "#6b7280",
+    // idem equipes: tipo novo sem cor pega o próximo tom livre da paleta
+    color: color || nextCategoryColor((irmaos ?? []).map((k) => k.color ?? "")),
     sort_order: (last?.sort_order ?? -1) + 1,
   });
   if (error) return fail(error.message);
@@ -1918,18 +1919,19 @@ export async function criarEquipe(name: string, color?: string): Promise<ActionR
   if (!nome) return fail("Dê um nome à equipe.");
 
   const supabase = await createClient();
-  const { data: last } = await supabase
+  // Sem cor escolhida, a equipe nova ganha o próximo tom LIVRE da paleta — não um
+  // default fixo (era assim que várias equipes terminavam com o mesmo pontinho).
+  const { data: irmas } = await supabase
     .from("teams")
-    .select("sort_order")
+    .select("color, sort_order")
     .eq("church_id", session.profile.church_id)
-    .order("sort_order", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .order("sort_order", { ascending: false });
+  const last = irmas?.[0];
 
   const { error } = await supabase.from("teams").insert({
     church_id: session.profile.church_id,
     name: nome,
-    color: color?.trim() || "#5B6B4E",
+    color: color?.trim() || nextCategoryColor((irmas ?? []).map((t) => t.color ?? "")),
     sort_order: (last?.sort_order ?? 0) + 1,
   });
   if (error) return fail(error.message);

@@ -93,7 +93,7 @@ export function AdminMonthOverview({
                 {ev.responsibleName ? (
                   <span className="text-muted-foreground">Responsável: {ev.responsibleName}</span>
                 ) : (
-                  <span className="font-medium text-warning">Sem responsável ainda</span>
+                  <span className="font-medium text-warning-ink">Sem responsável ainda</span>
                 )}
               </p>
               {ev.teams.length > 0 ? (

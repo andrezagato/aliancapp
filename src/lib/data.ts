@@ -10,6 +10,7 @@ import {
   type AssignRow,
 } from "@/lib/coverage";
 import { BADGES, earnedCodes, type JourneyMetrics } from "@/lib/achievements";
+import { CATEGORY_PALETTE } from "@/lib/palette";
 import {
   type Session,
   memberTeamIds,
@@ -1572,7 +1573,7 @@ export async function getMyUpcomingAssignments(session: Session): Promise<MyAssi
       positionName: r.positions?.name || "Posição",
       teamId: r.team_id,
       teamName: r.teams?.name || "Equipe",
-      teamColor: r.teams?.color || "#C4633E",
+      teamColor: r.teams?.color || CATEGORY_PALETTE[0].hex,
       checkedIn: checkedIn.has(r.id),
     }))
     .sort((a, b) => a.startsAt.localeCompare(b.startsAt));
@@ -2171,7 +2172,7 @@ export async function listRecentHistory(): Promise<HistoryEvent[]> {
       name: r.full_name,
       positionName: r.position_name || "Posição",
       teamName: meta?.name || "Equipe",
-      teamColor: meta?.color || "#C4633E",
+      teamColor: meta?.color || CATEGORY_PALETTE[0].hex,
       status: r.status!,
     });
   }

@@ -48,7 +48,7 @@ export default async function HistoricoPage() {
                         </p>
                       </div>
                       {p.status === "presente" ? (
-                        <span className="inline-flex items-center gap-1 text-xs font-medium text-success">
+                        <span className="inline-flex items-center gap-1 text-xs font-medium text-success-ink">
                           <BadgeCheck className="size-3.5" /> presente
                         </span>
                       ) : null}

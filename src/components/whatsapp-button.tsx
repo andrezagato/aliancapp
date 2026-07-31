@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { waLink } from "@/lib/whatsapp";
 
 const base =
-  "press-sm inline-flex h-9 items-center justify-center gap-1.5 rounded-full border border-success/40 bg-success/10 px-3 text-sm font-bold text-success";
+  "press-sm inline-flex h-9 items-center justify-center gap-1.5 rounded-full border border-success/40 bg-success/10 px-3 text-sm font-bold text-success-ink";
 
 /** Botão que abre o WhatsApp da pessoa (some sozinho se o telefone for inválido). */
 export function WhatsAppButton({

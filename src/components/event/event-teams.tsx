@@ -18,8 +18,8 @@ import type { DetailTeam, DetailPosition, SlotPerson } from "@/lib/data";
 
 /** Estados de status que o gestor alterna, em símbolos (uma linha só). */
 const STATUS_SEGS = [
-  { key: "convidado", Icon: Clock, title: "Aguardando", active: "bg-warning/20 text-warning" },
-  { key: "confirmado", Icon: Check, title: "Confirmado", active: "bg-success/20 text-success" },
+  { key: "convidado", Icon: Clock, title: "Aguardando", active: "bg-warning/20 text-warning-ink" },
+  { key: "confirmado", Icon: Check, title: "Confirmado", active: "bg-success/20 text-success-ink" },
   { key: "presente", Icon: UserCheck, title: "Presente", active: "bg-success text-white" },
 ] as const;
 
@@ -37,21 +37,21 @@ function StatusIcon({ status, checkedIn }: { status: SlotPerson["status"]; check
   }
   if (status === "confirmado") {
     return (
-      <span className="grid size-6 shrink-0 place-items-center rounded-full bg-success/15 text-success" title="Confirmado" aria-label="Confirmado">
+      <span className="grid size-6 shrink-0 place-items-center rounded-full bg-success/15 text-success-ink" title="Confirmado" aria-label="Confirmado">
         <Check className="size-4" strokeWidth={3} />
       </span>
     );
   }
   if (status === "recusado") {
     return (
-      <span className="grid size-6 shrink-0 place-items-center rounded-full bg-destructive/15 text-destructive" title="Recusou" aria-label="Recusou">
+      <span className="grid size-6 shrink-0 place-items-center rounded-full bg-destructive/15 text-destructive-ink" title="Recusou" aria-label="Recusou">
         <X className="size-4" strokeWidth={3} />
       </span>
     );
   }
   // convidado / aguardando
   return (
-    <span className="grid size-6 shrink-0 place-items-center rounded-full bg-warning/15 text-warning" title="Aguardando" aria-label="Aguardando">
+    <span className="grid size-6 shrink-0 place-items-center rounded-full bg-warning/15 text-warning-ink" title="Aguardando" aria-label="Aguardando">
       <Clock className="size-4" />
     </span>
   );
@@ -134,7 +134,7 @@ export function EventTeams({
                 {needsAction ? (
                   <span
                     title="Precisa de atenção"
-                    className="grid size-[18px] shrink-0 place-items-center rounded-full bg-warning/20 text-[11px] font-extrabold text-warning"
+                    className="grid size-[18px] shrink-0 place-items-center rounded-full bg-warning/20 text-[11px] font-extrabold text-warning-ink"
                   >
                     !
                   </span>
@@ -382,7 +382,7 @@ function PersonRow({
               onClick={remover}
               disabled={pending}
               aria-label="Remover da escala"
-              className="press-sm grid size-8 place-items-center rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
+              className="press-sm grid size-8 place-items-center rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive-ink disabled:opacity-50"
             >
               <Trash2 className="size-4" />
             </button>

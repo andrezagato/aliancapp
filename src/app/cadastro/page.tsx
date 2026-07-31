@@ -50,7 +50,7 @@ export default function CadastroPage() {
       <main className="mx-auto flex min-h-dvh max-w-[480px] flex-col justify-center px-6">
         <Card className="animate-fade-in">
           <CardContent className="flex flex-col items-center gap-3 p-8 text-center">
-            <CheckCircle2 className="size-14 text-success" />
+            <CheckCircle2 className="size-14 text-success-ink" />
             <h1 className="text-2xl font-semibold">Solicitação enviada!</h1>
             <p className="text-balance text-muted-foreground">
               Um líder vai revisar e liberar seu acesso. Você será avisado assim que aprovado.
@@ -126,7 +126,7 @@ export default function CadastroPage() {
           </div>
 
           {error ? (
-            <p className="rounded-xl bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</p>
+            <p className="rounded-xl bg-destructive/10 px-4 py-3 text-sm text-destructive-ink">{error}</p>
           ) : null}
 
           <Button type="submit" size="lg" className="w-full" disabled={loading}>

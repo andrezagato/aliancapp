@@ -113,7 +113,7 @@ export function InteresseButton({ teams }: { teams: TeamWithPositions[] }) {
                 className="w-full rounded-2xl border border-input bg-background px-4 py-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
               />
             </div>
-            {error ? <p className="text-sm text-destructive">{error}</p> : null}
+            {error ? <p className="text-sm text-destructive-ink">{error}</p> : null}
           </div>
           <div className="flex gap-2 border-t border-border p-3">
             <Button variant="ghost" className="flex-1" onClick={() => setOpen(false)} disabled={pending}>
@@ -188,7 +188,7 @@ export function InteresseResolveButton({
           <button
             onClick={() => respond(false)}
             disabled={pending}
-            className="press h-[50px] flex-1 rounded-[14px] border border-destructive/30 bg-card text-[15px] font-bold text-destructive"
+            className="press h-[50px] flex-1 rounded-[14px] border border-destructive/30 bg-card text-[15px] font-bold text-destructive-ink"
           >
             Recusar
           </button>

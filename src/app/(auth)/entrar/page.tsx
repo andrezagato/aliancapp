@@ -87,7 +87,7 @@ export default function EntrarPage() {
     return (
       <main className="mx-auto flex min-h-dvh max-w-[460px] flex-col justify-center px-6 py-10">
         <div className="animate-fade-in flex flex-col items-center gap-4 text-center">
-          <span className="inline-flex size-16 items-center justify-center rounded-full bg-success/12 text-success">
+          <span className="inline-flex size-16 items-center justify-center rounded-full bg-success/12 text-success-ink">
             <MailCheck className="size-8" />
           </span>
           <h1 className="text-3xl">Confira seu email</h1>
@@ -153,7 +153,7 @@ export default function EntrarPage() {
         </form>
 
         {error ? (
-          <p className="rounded-xl bg-destructive/10 px-4 py-3 text-center text-sm text-destructive">{error}</p>
+          <p className="rounded-xl bg-destructive/10 px-4 py-3 text-center text-sm text-destructive-ink">{error}</p>
         ) : null}
       </div>
 

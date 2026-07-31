@@ -91,7 +91,7 @@ export function EscalarDialog({
       >
         <Plus className="size-4" />
         <span className="text-[13px] font-bold">Escalar</span>
-        <span className="text-[12px] font-bold text-destructive">
+        <span className="text-[12px] font-bold text-destructive-ink">
           · {openCount} vaga{openCount > 1 ? "s" : ""}
         </span>
       </button>
@@ -121,7 +121,7 @@ export function EscalarDialog({
                       {displayName(m.nickname, m.name)}
                       {m.nickname ? <span className="font-normal text-muted-foreground"> · {m.name}</span> : null}
                     </p>
-                    <p className={cn("truncate text-[12.5px]", m.unavailable ? "text-destructive" : "text-muted-foreground")}>
+                    <p className={cn("truncate text-[12.5px]", m.unavailable ? "text-destructive-ink" : "text-muted-foreground")}>
                       {m.unavailable
                         ? "Indisponível nesse dia"
                         : m.lastServedISO
@@ -134,11 +134,11 @@ export function EscalarDialog({
                       <Ban className="size-3.5" /> Em outra equipe
                     </span>
                   ) : m.unavailable ? (
-                    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-destructive/10 px-2.5 py-1 text-[11.5px] font-extrabold text-destructive">
+                    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-destructive/10 px-2.5 py-1 text-[11.5px] font-extrabold text-destructive-ink">
                       <CalendarOff className="size-3.5" /> Indisponível
                     </span>
                   ) : m.alreadyInTeam ? (
-                    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-warning/10 px-2.5 py-1 text-[11.5px] font-extrabold text-warning">
+                    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-warning/10 px-2.5 py-1 text-[11.5px] font-extrabold text-warning-ink">
                       <Repeat className="size-3.5" /> 2ª função
                     </span>
                   ) : (
@@ -149,7 +149,7 @@ export function EscalarDialog({
                 </button>
                 {confirmId === m.profileId ? (
                   <div className="mx-1 mt-1 rounded-[14px] bg-warning/10 p-3">
-                    <p className="mb-2 text-xs font-semibold text-warning">
+                    <p className="mb-2 text-xs font-semibold text-warning-ink">
                       {m.unavailable && m.alreadyInTeam
                         ? `${m.name} marcou indisponível e já está em outra função da equipe hoje. Escalar mesmo assim?`
                         : m.unavailable
@@ -174,7 +174,7 @@ export function EscalarDialog({
             </p>
           )}
         </div>
-        {error ? <p className="mt-2 text-sm text-destructive">{error}</p> : null}
+        {error ? <p className="mt-2 text-sm text-destructive-ink">{error}</p> : null}
         <button
           onClick={() => setOpen(false)}
           disabled={pending}
@@ -229,7 +229,7 @@ export function AdicionarEquipe({
           </button>
         ))}
       </div>
-      {error ? <p className="mt-2 text-sm text-destructive">{error}</p> : null}
+      {error ? <p className="mt-2 text-sm text-destructive-ink">{error}</p> : null}
     </div>
   );
 }
@@ -267,7 +267,7 @@ export function RemoverEquipeButton({
       onClick={remove}
       disabled={pending}
       aria-label={`Remover ${teamName} do evento`}
-      className="press-sm grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
+      className="press-sm grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive-ink disabled:opacity-50"
     >
       <Trash2 className="size-4" />
     </button>
@@ -369,7 +369,7 @@ export function RemoveAssignmentButton({
       type="button"
       onClick={() => setConfirming(true)}
       aria-label="Remover da escala"
-      className="inline-flex size-8 items-center justify-center rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+      className="inline-flex size-8 items-center justify-center rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive-ink"
     >
       <Trash2 className="size-4" />
     </button>

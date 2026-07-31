@@ -194,7 +194,7 @@ export function NovoEventoForm({
         </CardContent>
       </Card>
 
-      {error ? <p className="rounded-xl bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</p> : null}
+      {error ? <p className="rounded-xl bg-destructive/10 px-4 py-3 text-sm text-destructive-ink">{error}</p> : null}
 
       <Button size="lg" className="w-full" onClick={submit} disabled={pending || !title.trim() || selected.size === 0}>
         {pending ? "Criando…" : "Criar evento"}

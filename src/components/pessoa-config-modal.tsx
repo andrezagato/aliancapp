@@ -213,7 +213,7 @@ export function PessoaConfigModal({
                   disabled={pending}
                   onClick={() => run(() => removerMembro(t.membershipId, t.teamId))}
                   aria-label={`Remover de ${t.name}`}
-                  className="inline-flex size-7 items-center justify-center rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                  className="inline-flex size-7 items-center justify-center rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive-ink"
                 >
                   <X className="size-4" />
                 </button>
@@ -244,7 +244,7 @@ export function PessoaConfigModal({
           <p className="text-sm text-muted-foreground">Nenhuma equipe pra gerenciar aqui.</p>
         ) : null}
 
-        {err ? <p className="text-sm font-medium text-destructive">{err}</p> : null}
+        {err ? <p className="text-sm font-medium text-destructive-ink">{err}</p> : null}
 
         {isAdmin && obs && obs.length > 0 ? (
           <div className="space-y-1.5 border-t border-border/60 pt-3">
@@ -291,7 +291,7 @@ export function PessoaConfigModal({
               <button
                 disabled={pending}
                 onClick={() => setConfirmDelete(true)}
-                className="inline-flex items-center gap-1.5 text-xs font-semibold text-destructive hover:underline disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-destructive-ink hover:underline disabled:opacity-50"
               >
                 <Trash2 className="size-3.5" /> Excluir pessoa
               </button>

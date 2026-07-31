@@ -79,6 +79,20 @@ function esc(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
+// E-mail não lê CSS var: a casa vira hexadecimal aqui. Mesmos tons do
+// frontmatter do DESIGN.md — creme de parede, creme de carta, linha quente,
+// grafite quente, pedra, vinho. O template antigo era cinza-azulado de
+// biblioteca: o convite é o PRIMEIRO contato com o app e não parecia com ele.
+const C = {
+  creme: "#FAF6EA",
+  cremeCarta: "#FDFCF7",
+  cremeClaro: "#FCF4E8",
+  linha: "#E8DEC9",
+  grafite: "#372725",
+  pedra: "#736459",
+  vinho: "#701425",
+} as const;
+
 function layout(opts: {
   title: string;
   intro: string;
@@ -89,31 +103,31 @@ function layout(opts: {
 }): string {
   const { title, intro, cta, secondary, footer } = opts;
   return `
-  <div style="margin:0;padding:24px 0;background:#f6f7f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
-    <div style="max-width:480px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #eceef1;">
-      <div style="padding:20px 28px;border-bottom:1px solid #f0f1f3;">
-        <span style="font-size:18px;font-weight:700;color:#111827;letter-spacing:-0.01em;">${BRAND}</span>
+  <div style="margin:0;padding:24px 0;background:${C.creme};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+    <div style="max-width:480px;margin:0 auto;background:${C.cremeCarta};border-radius:16px;overflow:hidden;border:1px solid ${C.linha};">
+      <div style="padding:20px 28px;border-bottom:1px solid ${C.linha};">
+        <span style="font-size:18px;font-weight:700;color:${C.vinho};letter-spacing:-0.01em;">${BRAND}</span>
       </div>
       <div style="padding:28px;">
-        <h1 style="margin:0 0 12px;font-size:20px;line-height:1.3;color:#111827;">${title}</h1>
-        <p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#374151;">${intro}</p>
+        <h1 style="margin:0 0 12px;font-size:20px;line-height:1.3;color:${C.grafite};font-family:Alegreya,Georgia,serif;">${title}</h1>
+        <p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:${C.grafite};">${intro}</p>
         ${
           cta
-            ? `<a href="${cta.href}" style="display:inline-block;background:#111827;color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:12px 22px;border-radius:10px;">${esc(cta.label)}</a>`
+            ? `<a href="${cta.href}" style="display:inline-block;background:${C.vinho};color:${C.cremeClaro};text-decoration:none;font-size:15px;font-weight:600;padding:12px 22px;border-radius:10px;">${esc(cta.label)}</a>`
             : ""
         }
         ${
           secondary
-            ? `<p style="margin:18px 0 0;font-size:14px;line-height:1.6;color:#6b7280;">
-                 <a href="${secondary.href}" style="color:#111827;font-weight:600;text-decoration:underline;">${esc(secondary.label)}</a>${
+            ? `<p style="margin:18px 0 0;font-size:14px;line-height:1.6;color:${C.pedra};">
+                 <a href="${secondary.href}" style="color:${C.vinho};font-weight:600;text-decoration:underline;">${esc(secondary.label)}</a>${
                    secondary.note ? ` — ${esc(secondary.note)}` : ""
                  }
                </p>`
             : ""
         }
       </div>
-      <div style="padding:16px 28px;border-top:1px solid #f0f1f3;">
-        <p style="margin:0;font-size:12px;line-height:1.5;color:#9ca3af;">${
+      <div style="padding:16px 28px;border-top:1px solid ${C.linha};">
+        <p style="margin:0;font-size:12px;line-height:1.5;color:${C.pedra};">${
           footer ?? `Você recebeu este e-mail porque faz parte de uma equipe no ${BRAND}.`
         }</p>
       </div>

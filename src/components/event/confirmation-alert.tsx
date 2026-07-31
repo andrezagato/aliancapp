@@ -67,8 +67,8 @@ export function ConfirmationAlert({
       className={cn(
         "flex items-center gap-3 rounded-[16px] border p-3.5",
         urgent
-          ? "border-destructive/40 bg-destructive/10 text-destructive"
-          : "border-warning/45 bg-warning/12 text-warning",
+          ? "border-destructive/40 bg-destructive/10 text-destructive-ink"
+          : "border-warning/45 bg-warning/12 text-warning-ink",
         className,
       )}
     >

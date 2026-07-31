@@ -55,7 +55,7 @@ export function CheckinButton({
     if (prominent) {
       return (
         <div className="flex items-center justify-between rounded-xl bg-success/10 px-4 py-2.5">
-          <span className="inline-flex items-center gap-1.5 font-medium text-success">
+          <span className="inline-flex items-center gap-1.5 font-medium text-success-ink">
             <BadgeCheck className="size-5" /> Presença confirmada
           </span>
           {canMark ? (
@@ -73,7 +73,7 @@ export function CheckinButton({
     }
     return (
       <div className="inline-flex items-center gap-1.5">
-        <span className="inline-flex h-8 items-center gap-1 rounded-full bg-success/12 px-2.5 text-[12px] font-bold text-success">
+        <span className="inline-flex h-8 items-center gap-1 rounded-full bg-success/12 px-2.5 text-[12px] font-bold text-success-ink">
           <BadgeCheck className="size-4" /> Presente
         </span>
         {canMark ? (
@@ -106,7 +106,7 @@ export function CheckinButton({
       disabled={pending}
       className="press-sm inline-flex h-8 items-center gap-1.5 rounded-full border border-border bg-card px-3 text-[13px] font-bold text-foreground disabled:opacity-60"
     >
-      <Check className="size-4 text-success" /> {pending ? "…" : "Marcar presença"}
+      <Check className="size-4 text-success-ink" /> {pending ? "…" : "Marcar presença"}
     </button>
   );
 }
@@ -143,7 +143,7 @@ export function SwapPending({
 
   return (
     <div className="rounded-xl bg-warning/10 p-2.5">
-      <p className="flex items-center gap-1.5 text-xs font-medium text-warning">
+      <p className="flex items-center gap-1.5 text-xs font-medium text-warning-ink">
         <ArrowLeftRight className="size-3.5" /> Troca solicitada
       </p>
       {reason ? <p className="mt-0.5 text-xs text-muted-foreground">Motivo: {reason}</p> : null}

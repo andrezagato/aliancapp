@@ -68,7 +68,7 @@ export function PushSetup() {
 
   if (status === "granted") {
     return (
-      <p className="inline-flex items-center gap-1.5 text-sm font-semibold text-success">
+      <p className="inline-flex items-center gap-1.5 text-sm font-semibold text-success-ink">
         <Check className="size-4" /> Notificações ativadas neste aparelho
       </p>
     );

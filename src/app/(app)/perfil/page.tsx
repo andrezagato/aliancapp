@@ -137,7 +137,7 @@ export default async function PerfilPage() {
           <li>
             <SignOutButton
               variant="ghost"
-              className="h-auto w-full justify-start gap-3 rounded-none px-4 py-3.5 text-[15px] font-semibold text-destructive hover:bg-destructive/5"
+              className="h-auto w-full justify-start gap-3 rounded-none px-4 py-3.5 text-[15px] font-semibold text-destructive-ink hover:bg-destructive/5"
             />
           </li>
         </ul>
@@ -166,7 +166,7 @@ function ProfileRow({
       ? "bg-primary/10 text-primary"
       : tone === "accent"
         ? "bg-accent/15 text-accent"
-        : "bg-success/12 text-success";
+        : "bg-success/12 text-success-ink";
   return (
     <li>
       <Link href={href} className="press-sm flex items-center gap-3 px-4 py-3.5">

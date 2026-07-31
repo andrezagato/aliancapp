@@ -216,7 +216,7 @@ export function GerenciarEventoSheet({
           <button
             onClick={() => window.confirm("Excluir o evento de vez? Não dá pra desfazer.") && del()}
             disabled={busy}
-            className="press-sm inline-flex flex-1 items-center justify-center gap-1.5 rounded-[13px] border border-destructive/30 py-2.5 text-sm font-semibold text-destructive disabled:opacity-60"
+            className="press-sm inline-flex flex-1 items-center justify-center gap-1.5 rounded-[13px] border border-destructive/30 py-2.5 text-sm font-semibold text-destructive-ink disabled:opacity-60"
           >
             <Trash2 className="size-4" /> Excluir
           </button>

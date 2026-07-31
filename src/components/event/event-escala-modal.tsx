@@ -74,7 +74,7 @@ export function EventEscalaModal({
           {loading || !detail ? (
             <p className="py-8 text-center text-sm text-muted-foreground">Carregando…</p>
           ) : !detail.ok || !detail.teams ? (
-            <p className="py-8 text-center text-sm text-destructive">{detail.error ?? "Não foi possível carregar."}</p>
+            <p className="py-8 text-center text-sm text-destructive-ink">{detail.error ?? "Não foi possível carregar."}</p>
           ) : detail.teams.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">Nenhuma equipe da sua visão neste evento.</p>
           ) : (

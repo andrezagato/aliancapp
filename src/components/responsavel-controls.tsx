@@ -57,11 +57,11 @@ export function ResponsavelControls({
           <span className="text-muted-foreground">Responsável:</span>
           <span className="font-medium">{responsibleName}</span>
           {confirmedAt ? (
-            <span className="inline-flex items-center gap-1 text-success">
+            <span className="inline-flex items-center gap-1 text-success-ink">
               <BadgeCheck className="size-4" /> confirmou
             </span>
           ) : (
-            <span className="inline-flex items-center gap-1 text-warning">
+            <span className="inline-flex items-center gap-1 text-warning-ink">
               <Clock className="size-4" /> a confirmar
             </span>
           )}
@@ -70,7 +70,7 @@ export function ResponsavelControls({
               onClick={() => run(() => definirResponsavel(eventId, null))}
               disabled={pending}
               aria-label="Remover responsável"
-              className="press-sm ml-auto grid size-7 place-items-center rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
+              className="press-sm ml-auto grid size-7 place-items-center rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive-ink disabled:opacity-50"
             >
               <X className="size-4" />
             </button>
