@@ -167,20 +167,26 @@ export async function atualizarNome(fullName: string): Promise<ActionResult> {
 }
 
 // Telefone (WhatsApp): a própria pessoa edita o próprio.
-export async function atualizarTelefone(phone: string): Promise<ActionResult> {
+export async function atualizarTelefone(
+  phone: string,
+): Promise<ActionResult & { unlocked?: UnlockedBadge[] }> {
   const session = await getSession();
   if (!session) return fail("Sessão expirada.");
   const value = phone.trim();
   const supabase = await createClient();
   const { error } = await supabase.from("profiles").update({ phone: value || null }).eq("id", session.userId);
   if (error) return fail(error.message);
+  // pode ter sido o último campo que faltava pro "Perfil completo"
+  const unlocked = value ? await notificarConquistas({ ...session, profile: { ...session.profile, phone: value } }) : [];
   revalidatePath("/perfil");
   revalidatePath("/equipes");
-  return ok;
+  return { ok: true, unlocked };
 }
 
 // Aniversário: a própria pessoa define o próprio (aceita vazio pra limpar).
-export async function atualizarAniversario(birth: string): Promise<ActionResult> {
+export async function atualizarAniversario(
+  birth: string,
+): Promise<ActionResult & { unlocked?: UnlockedBadge[] }> {
   const session = await getSession();
   if (!session) return fail("Sessão expirada.");
   const value = birth.trim();
@@ -188,9 +194,86 @@ export async function atualizarAniversario(birth: string): Promise<ActionResult>
   const supabase = await createClient();
   const { error } = await supabase.from("profiles").update({ birth_date: value || null }).eq("id", session.userId);
   if (error) return fail(error.message);
+  const unlocked = value
+    ? await notificarConquistas({ ...session, profile: { ...session.profile, birth_date: value } })
+    : [];
   revalidatePath("/perfil");
   revalidatePath("/equipes");
   revalidatePath("/inicio");
+  return { ok: true, unlocked };
+}
+
+// =============================================================================
+// FOTO DE PERFIL (bucket `avatars`, migration 0043)
+// =============================================================================
+// O navegador já corta e comprime a imagem (avatar-upload.tsx) — aqui chega um
+// JPEG pequeno. O caminho é avatars/<user_id>/<timestamp>.jpg: a pasta com o id
+// é o que a RLS do storage checa, e o timestamp no nome mata o cache do CDN
+// quando a pessoa troca a foto.
+const AVATAR_MAX_BYTES = 1_500_000;
+const AVATAR_BUCKET = "avatars";
+
+/** Caminho dentro do bucket, se a URL for de um avatar NOSSO (ignora a do Google). */
+function avatarPathFromUrl(url: string | null): string | null {
+  if (!url) return null;
+  const marker = `/storage/v1/object/public/${AVATAR_BUCKET}/`;
+  const i = url.indexOf(marker);
+  if (i === -1) return null;
+  return decodeURIComponent(url.slice(i + marker.length).split("?")[0]) || null;
+}
+
+export async function atualizarFotoPerfil(
+  form: FormData,
+): Promise<ActionResult & { unlocked?: UnlockedBadge[] }> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  const file = form.get("foto");
+  if (!(file instanceof File) || file.size === 0) return fail("Escolha uma imagem.");
+  if (file.size > AVATAR_MAX_BYTES) return fail("Imagem muito grande. Tente outra foto.");
+  if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+    return fail("Formato não aceito. Use JPG, PNG ou WEBP.");
+  }
+
+  const supabase = await createClient();
+  const ext = file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
+  const path = `${session.userId}/${Date.now()}.${ext}`;
+
+  const { error: upErr } = await supabase.storage
+    .from(AVATAR_BUCKET)
+    .upload(path, file, { contentType: file.type, cacheControl: "31536000", upsert: false });
+  if (upErr) return fail(upErr.message);
+
+  const { data: pub } = supabase.storage.from(AVATAR_BUCKET).getPublicUrl(path);
+  const publicUrl = pub.publicUrl;
+
+  const anterior = avatarPathFromUrl(session.profile.avatar_url);
+  const { error } = await supabase.from("profiles").update({ avatar_url: publicUrl }).eq("id", session.userId);
+  if (error) {
+    // não deixa arquivo órfão se o update falhou
+    await supabase.storage.from(AVATAR_BUCKET).remove([path]);
+    return fail(error.message);
+  }
+  // só depois de gravar a nova: se a limpeza falhar, ninguém perde a foto
+  if (anterior && anterior !== path) await supabase.storage.from(AVATAR_BUCKET).remove([anterior]);
+
+  const unlocked = await notificarConquistas(session);
+  revalidatePath("/perfil");
+  revalidatePath("/inicio");
+  revalidatePath("/equipes");
+  return { ok: true, unlocked };
+}
+
+export async function removerFotoPerfil(): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  const supabase = await createClient();
+  const atual = avatarPathFromUrl(session.profile.avatar_url);
+  const { error } = await supabase.from("profiles").update({ avatar_url: null }).eq("id", session.userId);
+  if (error) return fail(error.message);
+  if (atual) await supabase.storage.from(AVATAR_BUCKET).remove([atual]);
+  revalidatePath("/perfil");
+  revalidatePath("/inicio");
+  revalidatePath("/equipes");
   return ok;
 }
 

@@ -48,11 +48,21 @@ typography:
     fontWeight: 800
     lineHeight: 1.05
     letterSpacing: "-0.02em"
+  sheet-title:
+    fontFamily: "Alegreya, Georgia, serif"
+    fontSize: "22px"
+    fontWeight: 800
+    lineHeight: 1.1
   title:
     fontFamily: "Alegreya, Georgia, serif"
     fontSize: "17px"
     fontWeight: 800
     lineHeight: 1.15
+  action:
+    fontFamily: "Alegreya Sans, system-ui, sans-serif"
+    fontSize: "15px"
+    fontWeight: 700
+    lineHeight: 1.2
   body:
     fontFamily: "Alegreya Sans, system-ui, sans-serif"
     fontSize: "14px"
@@ -330,6 +340,10 @@ quente, ela celebra sem ficar cerimoniosa. O corpo roda com `font-feature-settin
 - **Title** (700–800, 17px, 1.15): nome de evento no card, título do sheet (22px),
   cabeçalho de seção. Sempre serifa. O `CardTitle` genérico usava `text-lg` (18px) por
   acidente e convergiu pro passo do sistema.
+- **Action** (700, 15px, 1.2): o rótulo de botão e de item tocável — sans, meio degrau acima
+  do corpo porque alvo de toque pede texto um pouco maior. Estava em 34 lugares antes de
+  entrar aqui: era degrau de fato, só não estava escrito. Os 13 casos de `15.5px` são drift
+  dele e devem convergir.
 - **Body** (400, 14px, 1.5): todo texto corrido, sans.
 - **Micro** (500, 12.5px, 1.4): o passo abaixo do corpo — legenda de card, nome do
   responsável, chip, hora. É um degrau real e muito usado, não um arredondamento.

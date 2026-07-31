@@ -505,6 +505,7 @@ async function computeJourneyMetrics(
   userId: string,
   active: boolean,
   isLeader: boolean,
+  perfilCompleto: boolean,
 ): Promise<JourneyMetrics> {
   const nowIso = new Date().toISOString();
 
@@ -619,6 +620,7 @@ async function computeJourneyMetrics(
     feedbacks,
     no_local: noLocal,
     primeiro_local: primeiroLocal,
+    perfil: perfilCompleto ? 1 : 0,
   };
 }
 
@@ -649,7 +651,10 @@ export async function syncAchievements(
   const supabase = await createClient();
   const active = session.profile.status === "ativo";
   const isLeader = session.profile.teams.some((t) => t.role === "leader");
-  const metrics = await computeJourneyMetrics(supabase, session.userId, active, isLeader);
+  // mesmos 3 campos que o card "Complete seu perfil" cobra na home
+  const p = session.profile;
+  const perfilCompleto = !!(p.avatar_url && p.phone && p.birth_date);
+  const metrics = await computeJourneyMetrics(supabase, session.userId, active, isLeader, perfilCompleto);
   const earned = earnedCodes(metrics);
 
   const { data: existingRows } = await supabase

@@ -4,6 +4,9 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Pencil, Check, X } from "lucide-react";
 import { useToast } from "@/components/ui/toast";
+import { AchievementCelebration } from "@/components/achievement-celebration";
+import { markSeen } from "@/lib/achievements-seen";
+import { splitCelebrations, type UnlockedBadge } from "@/lib/achievements";
 import type { ActionResult } from "@/lib/types";
 
 /**
@@ -27,12 +30,15 @@ export function ProfileEditableField({
   required?: boolean;
   type?: "text" | "date";
   displayValue?: string;
-  action: (value: string) => Promise<ActionResult>;
+  action: (
+    value: string,
+  ) => Promise<ActionResult & { unlocked?: UnlockedBadge[] }>;
 }) {
   const router = useRouter();
   const { showToast } = useToast();
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(current ?? "");
+  const [celebrate, setCelebrate] = useState<UnlockedBadge[]>([]);
   const [pending, start] = useTransition();
 
   function save() {
@@ -47,7 +53,18 @@ export function ProfileEditableField({
         return;
       }
       setEditing(false);
-      showToast(`${label} salvo.`);
+      // preencher o último campo que faltava pode fechar "Perfil completo"
+      if (r.unlocked && r.unlocked.length > 0) {
+        markSeen(r.unlocked.map((b) => b.code));
+        const { full, toasts } = splitCelebrations(r.unlocked);
+        if (full.length > 0) setCelebrate(full);
+        for (const b of toasts)
+          showToast(`${b.emoji} ${b.title} — a equipe te reconhece 💛`);
+        if (full.length === 0 && toasts.length === 0)
+          showToast(`${label} salvo.`);
+      } else {
+        showToast(`${label} salvo.`);
+      }
       router.refresh();
     });
   }
@@ -88,23 +105,31 @@ export function ProfileEditableField({
   }
 
   return (
-    <button
-      onClick={() => {
-        setValue(current ?? "");
-        setEditing(true);
-      }}
-      className="press-sm flex w-full items-center gap-3 px-4 py-3.5 text-left"
-    >
-      <span className="grid size-9 shrink-0 place-items-center rounded-[11px] bg-accent/15 text-accent">
-        <Pencil className="size-[18px]" />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block text-[15px] font-semibold">{label}</span>
-        <span className="block truncate text-sm text-muted-foreground">
-          {current?.trim() ? (displayValue ?? current) : emptyHint}
+    <>
+      <button
+        onClick={() => {
+          setValue(current ?? "");
+          setEditing(true);
+        }}
+        className="press-sm flex w-full items-center gap-3 px-4 py-3.5 text-left"
+      >
+        <span className="grid size-9 shrink-0 place-items-center rounded-[11px] bg-accent/15 text-accent">
+          <Pencil className="size-[18px]" />
         </span>
-      </span>
-      <span className="shrink-0 text-[13px] font-bold text-primary">{current?.trim() ? "Editar" : "Adicionar"}</span>
-    </button>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[15px] font-semibold">{label}</span>
+          <span className="block truncate text-sm text-muted-foreground">
+            {current?.trim() ? (displayValue ?? current) : emptyHint}
+          </span>
+        </span>
+        <span className="shrink-0 text-[13px] font-bold text-primary">
+          {current?.trim() ? "Editar" : "Adicionar"}
+        </span>
+      </button>
+      <AchievementCelebration
+        badges={celebrate}
+        onDone={() => setCelebrate([])}
+      />
+    </>
   );
 }

@@ -1,6 +1,6 @@
 import { getSession } from "@/lib/auth";
 import { getMyJourney, type JourneyBadge } from "@/lib/data";
-import { BADGES } from "@/lib/achievements";
+import { BADGES, BADGE_BY_CODE } from "@/lib/achievements";
 import { cn } from "@/lib/utils";
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
@@ -11,6 +11,8 @@ export default async function JornadaPage() {
   const journey = await getMyJourney(session);
   const first = session.profile.full_name?.split(/\s+/)[0] || "Você";
   const m = journey.metrics;
+  const passos = journey.badges.filter((b) => BADGE_BY_CODE[b.code]?.group === "passos");
+  const jornada = journey.badges.filter((b) => BADGE_BY_CODE[b.code]?.group !== "passos");
 
   return (
     <div className="space-y-3 pb-6 pt-safe">
@@ -40,11 +42,24 @@ export default async function JornadaPage() {
         <Stat emoji="🔥" value={m.streak} label="na sequência" />
       </div>
 
+      {/* Primeiros passos — conquistas de onboarding, separadas de propósito:
+          medalha de 30 segundos não disputa espaço com "100 cultos servidos". */}
+      {passos.length > 0 ? (
+        <section>
+          <h3 className="mb-2 px-1 font-display text-lg font-bold">Primeiros passos</h3>
+          <div className="grid grid-cols-2 gap-3">
+            {passos.map((b) => (
+              <BadgeCard key={b.code} b={b} />
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       {/* Conquistas */}
       <section>
-        <h3 className="mb-2 px-1 font-display text-lg font-bold">Conquistas</h3>
+        <h3 className="mb-2 px-1 font-display text-lg font-bold">Minha jornada</h3>
         <div className="grid grid-cols-2 gap-3">
-          {journey.badges.map((b) => (
+          {jornada.map((b) => (
             <BadgeCard key={b.code} b={b} />
           ))}
         </div>

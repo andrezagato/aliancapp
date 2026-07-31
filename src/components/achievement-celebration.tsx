@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import type { UnlockedBadge } from "@/lib/achievements";
+import Link from "next/link";
+import { BADGE_BY_CODE, type UnlockedBadge } from "@/lib/achievements";
 
 const SPARKS = ["🎉", "✨", "⭐", "🎊", "💛", "🔥", "🙌"];
 
@@ -28,6 +29,7 @@ export function AchievementCelebration({ badges, onDone }: { badges: UnlockedBad
 
   if (badges.length === 0) return null;
   const b = badges[i];
+  const cta = BADGE_BY_CODE[b.code]?.cta ?? null;
   const advance = () => (i + 1 < badges.length ? setI(i + 1) : onDone());
 
   return (
@@ -63,14 +65,33 @@ export function AchievementCelebration({ badges, onDone }: { badges: UnlockedBad
         </p>
         <h2 className="mt-1 font-display text-2xl font-extrabold leading-tight text-foreground">{b.title}</h2>
         <p className="mt-1 text-sm text-muted-foreground">{b.desc}</p>
+        {cta ? (
+          // A comemoração é o único instante em que a pessoa está 100% olhando pro
+          // app — se existe um próximo passo óbvio (o perfil vazio), o convite
+          // mora aqui, não num card que ela vai dispensar depois.
+          <Link
+            href={cta.href}
+            onClick={(e) => {
+              e.stopPropagation();
+              onDone();
+            }}
+            className="press mt-5 flex h-12 w-full items-center justify-center rounded-[15px] bg-primary text-[15px] font-extrabold text-primary-foreground"
+          >
+            {cta.label}
+          </Link>
+        ) : null}
         <button
           onClick={(e) => {
             e.stopPropagation();
             advance();
           }}
-          className="press mt-5 h-12 w-full rounded-[15px] bg-primary text-[15.5px] font-extrabold text-primary-foreground"
+          className={
+            cta
+              ? "press-sm mt-2 h-11 w-full rounded-[15px] text-[15px] font-semibold text-muted-foreground"
+              : "press mt-5 h-12 w-full rounded-[15px] bg-primary text-[15px] font-extrabold text-primary-foreground"
+          }
         >
-          {i + 1 < badges.length ? `Próxima (${i + 1}/${badges.length})` : "Boa! 🎉"}
+          {i + 1 < badges.length ? `Próxima (${i + 1}/${badges.length})` : cta ? "Depois" : "Boa! 🎉"}
         </button>
       </div>
     </div>

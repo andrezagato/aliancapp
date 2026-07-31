@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Mail, Phone, Cake, History, Bell, CalendarOff, ChevronRight, Trophy } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Avatar } from "@/components/ui/avatar";
+import { AvatarUpload } from "@/components/avatar-upload";
 import { SignOutButton } from "@/components/sign-out-button";
 import { ProfileEditableField } from "@/components/profile-field";
 import { ChurchLocationCard } from "@/components/church-location-card";
@@ -32,7 +32,7 @@ export default async function PerfilPage() {
           aria-hidden
         />
         <div className="relative flex flex-col items-center">
-          <Avatar
+          <AvatarUpload
             name={p.full_name || "?"}
             src={p.avatar_url}
             className="size-20 border-[3px] border-white/25 bg-accent text-2xl text-primary"
