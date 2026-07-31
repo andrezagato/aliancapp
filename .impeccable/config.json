@@ -2,6 +2,19 @@
   "detector": {
     "ignoreRules": [],
     "ignoreFiles": [],
-    "ignoreValues": []
+    "ignoreValues": [
+      {
+        "rule": "bounce-easing",
+        "value": "spring-in",
+        "createdAt": "2026-07-31T12:11:59.021Z",
+        "reason": "Mola da celebração de conquista — DESIGN.md § Motion documenta 'movimento com mola, nunca com salto' e 'entrada de conquista usa spring-in (overshoot 1,07)'. É escolha do sistema, não drift. Confirmado pelo André 31/jul."
+      },
+      {
+        "rule": "bounce-easing",
+        "value": "cubic-bezier(.34, 1.56, .64, 1)",
+        "createdAt": "2026-07-31T12:12:07.789Z",
+        "reason": "Curva do emoji-pop, a mola da mesma celebração (anim-emoji). Mesmo caso do spring-in: DESIGN.md § Motion define mola com overshoot como linguagem do app. Confirmado pelo André 31/jul."
+      }
+    ]
   }
 }
