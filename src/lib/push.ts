@@ -10,21 +10,7 @@ import type { createAdminClient } from "@/lib/supabase/admin";
  * via RPC SECURITY DEFINER get_push_subs (a RLS não deixaria ver as de outro).
  */
 
-export type PushPayload = {
-  title: string;
-  body?: string;
-  url?: string;
-  tag?: string;
-  /**
-   * Botões dentro da notificação (o service worker resolve sem abrir o app).
-   * Hoje só a cobrança de escala usa: "Confirmo" resolve em 1 toque; "Não posso"
-   * abre o app, porque recusar exige um motivo de 3+ letras (é o que deixa o
-   * líder remanejar) e isso não caberia num botão.
-   */
-  actions?: { action: string; title: string }[];
-  /** Vai junto no `data` da notificação (ex.: assignmentId pra ação de 1 toque). */
-  meta?: Record<string, string>;
-};
+export type PushPayload = { title: string; body?: string; url?: string; tag?: string };
 
 type PushSub = { endpoint: string; p256dh: string; auth: string };
 

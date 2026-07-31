@@ -219,13 +219,10 @@ export async function rodarCobranca({ dry = false }: { dry?: boolean } = {}): Pr
           title: texto.title,
           body: texto.body,
           url: link,
+          // o toque abre a ESCALA do culto: a pessoa vê com quem vai servir e em
+          // que posição antes de aceitar — decidido assim com o André, e o botão
+          // dentro da notificação não existiria no iPhone de qualquer jeito
           tag: `escala-${a.id}`,
-          // 1 toque pra confirmar; recusar abre o app (precisa do motivo)
-          actions: [
-            { action: "confirmar", title: "✓ Confirmo" },
-            { action: "recusar", title: "Não posso" },
-          ],
-          meta: { assignmentId: a.id, eventId: ev.id },
         });
       }
       // E-mail só na véspera: é o degrau em que ainda dá pra remanejar, e evita
