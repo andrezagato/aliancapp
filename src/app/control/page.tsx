@@ -2,7 +2,7 @@ import Link from "next/link";
 import { CalendarDays } from "lucide-react";
 import { ControlRoom } from "@/components/control/control-room";
 import { RundownGrid } from "@/components/rundown-grid";
-import { Conversation, canPostNoCanal } from "@/components/chat/chat-modal";
+import { ControlChat } from "@/components/control/control-chat";
 import { getSession } from "@/lib/auth";
 import {
   listUpcomingEvents,
@@ -90,13 +90,7 @@ export default async function ControlPage({ searchParams }: { searchParams: Prom
       }
       chatSlot={
         canal ? (
-          <Conversation
-            channel={canal}
-            meId={session.userId}
-            canPost={canPostNoCanal(canal.type, session.role)}
-            canDelete={session.role === "admin"}
-            onMuteChange={() => {}}
-          />
+          <ControlChat canal={canal} meId={session.userId} role={session.role} />
         ) : (
           <p className="grid flex-1 place-items-center px-6 text-center text-sm text-muted-foreground">
             Nenhum canal de chat disponível pra este culto.

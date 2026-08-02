@@ -28,12 +28,18 @@ import { cn } from "@/lib/utils";
  */
 const CHAVE_URL = "sirvo:control:stream";
 
-type Modo = "iframe" | "video" | "srt" | "vazio";
+type Modo = "iframe" | "video" | "srt" | "inseguro" | "vazio";
 
 function detectar(url: string): Modo {
   const u = url.trim();
   if (!u) return "vazio";
   if (/^srt:\/\//i.test(u)) return "srt";
+  // O app roda em HTTPS; um endereço http:// (o típico relay da rede local) é
+  // BLOQUEADO pelo navegador como conteúdo misto — e sem aviso nenhum, só fica
+  // preto. Melhor dizer isso do que deixar a régia adivinhando.
+  if (typeof window !== "undefined" && window.location.protocol === "https:" && /^http:\/\//i.test(u)) {
+    return "inseguro";
+  }
   if (/\.(mp4|webm|ogg|m3u8|mov)(\?|$)/i.test(u)) return "video";
   return "iframe";
 }
@@ -90,10 +96,13 @@ export function ControlRoom({
             // eslint-disable-next-line jsx-a11y/media-has-caption
             <video src={url} autoPlay muted controls playsInline className="h-full w-full bg-black object-contain" />
           ) : modo === "iframe" ? (
+            /* VDO.Ninja e players WebRTC precisam da permissão explícita do pai;
+               sem `autoplay` o vídeo entra pausado e ninguém entende por quê. */
             <iframe
               src={url}
               title="Transmissão do culto"
-              allow="autoplay; fullscreen; picture-in-picture"
+              allow="autoplay; fullscreen; picture-in-picture; camera; microphone; display-capture; speaker-selection"
+              allowFullScreen
               className="h-full w-full border-0 bg-black"
             />
           ) : (
@@ -103,7 +112,11 @@ export function ControlRoom({
                   <MonitorPlay className="size-7" />
                 </span>
                 <p className="mt-3 font-display text-xl font-extrabold text-white">
-                  {modo === "srt" ? "SRT não toca no navegador" : "Sem transmissão configurada"}
+                  {modo === "srt"
+                    ? "SRT não toca no navegador"
+                    : modo === "inseguro"
+                      ? "Endereço http:// é bloqueado aqui"
+                      : "Sem transmissão configurada"}
                 </p>
                 <p className="mt-1 text-sm leading-snug text-white/70">
                   {modo === "srt" ? (
@@ -112,9 +125,16 @@ export function ControlRoom({
                       local) pro seu SRT e cole aqui a URL que ele publica: a página do player WebRTC (latência
                       abaixo de 1s) ou um <code>.m3u8</code> de HLS.
                     </>
+                  ) : modo === "inseguro" ? (
+                    <>
+                      Esta página é HTTPS, então o navegador recusa carregar conteúdo <code>http://</code> —
+                      inclusive o relay da rede local. Use uma URL <code>https://</code> (o VDO.Ninja já é) ou
+                      exponha o relay com certificado.
+                    </>
                   ) : (
                     <>
-                      Cole a URL do player da régia — a página WebRTC do seu relay, um <code>.m3u8</code>, ou
+                      Cole a URL do player — o link de visualização do <strong>VDO.Ninja</strong>{" "}
+                      (<code>vdo.ninja/?view=…</code>), a página WebRTC de um relay, um <code>.m3u8</code>, ou
                       qualquer página que já mostre o vídeo.
                     </>
                   )}
@@ -159,7 +179,7 @@ export function ControlRoom({
                   if (e.key === "Enter") salvarUrl(rascunho);
                   if (e.key === "Escape") setEditandoUrl(false);
                 }}
-                placeholder="http://192.168.0.10:8889/culto  ·  http://.../stream.m3u8"
+                placeholder="https://vdo.ninja/?view=SEUCODIGO&cleanoutput  ·  https://.../stream.m3u8"
                 className="min-w-0 flex-1 rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-sm text-white outline-none placeholder:text-white/40"
               />
               <button
