@@ -16,7 +16,7 @@ type Role = "admin" | "leader" | "volunteer";
 type Tab = "geral" | "eventos" | "equipes";
 
 /** Só admin posta em Avisos; nos demais canais quem enxerga o canal posta. */
-function canPost(type: string, role: Role): boolean {
+export function canPostNoCanal(type: string, role: Role): boolean {
   if (type === "avisos") return role === "admin";
   return true;
 }
@@ -134,7 +134,7 @@ export function ChatModal({
               key={`${active.type}:${active.ref}`}
               channel={active}
               meId={meId}
-              canPost={canPost(active.type, role)}
+              canPost={canPostNoCanal(active.type, role)}
               canDelete={role === "admin"}
               onMuteChange={onMuteChange}
             />
@@ -231,7 +231,8 @@ function EmptyTab({ tab }: { tab: Tab }) {
   return <p className="grid flex-1 place-items-center px-6 text-center text-sm text-muted-foreground">{msg}</p>;
 }
 
-function Conversation({
+/** Painel de uma conversa. Exportado: a sala de controle (/control) reusa. */
+export function Conversation({
   channel,
   meId,
   canPost,

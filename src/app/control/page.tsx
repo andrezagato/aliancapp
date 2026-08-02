@@ -1,0 +1,108 @@
+import Link from "next/link";
+import { CalendarDays } from "lucide-react";
+import { ControlRoom } from "@/components/control/control-room";
+import { RundownGrid } from "@/components/rundown-grid";
+import { Conversation, canPostNoCanal } from "@/components/chat/chat-modal";
+import { getSession } from "@/lib/auth";
+import {
+  listUpcomingEvents,
+  listLiveRundownEvents,
+  getEventRundown,
+  listRundownKinds,
+  listRundownTemplates,
+  getRundownState,
+  estouEscaladoNoEvento,
+} from "@/lib/data";
+import { listarCanais } from "@/lib/chat";
+import { fmtEventWhen } from "@/lib/format";
+
+/**
+ * /control — a régia. Endereço digitado à mão, de propósito fora do menu.
+ *
+ * Escolhe o culto igual à aba Roteiro: ao vivo primeiro, senão o próximo com
+ * roteiro aberto; `?ev=<id>` força um específico. O roteiro aqui é o MESMO
+ * componente do celular (com o realtime da 0047), então marcar um bloco na régia
+ * aparece na mão de todo mundo e vice-versa.
+ */
+export default async function ControlPage({ searchParams }: { searchParams: Promise<{ ev?: string }> }) {
+  const session = await getSession();
+  if (!session) return null;
+  const { ev: evParam } = await searchParams;
+
+  const [live, futuros] = await Promise.all([listLiveRundownEvents(session), listUpcomingEvents(session, 8)]);
+  const seen = new Set<string>();
+  const candidatos = [...live, ...futuros].filter((e) => (seen.has(e.id) ? false : seen.add(e.id)));
+  const states = await Promise.all(candidatos.map((e) => getRundownState(e.id)));
+  const primeiroAberto = candidatos.findIndex((_, i) => !states[i].endedAt);
+  const escolhido = evParam ? candidatos.findIndex((e) => e.id === evParam) : -1;
+  const idx = escolhido >= 0 ? escolhido : primeiroAberto;
+  const ev = idx >= 0 ? candidatos[idx] : null;
+  const state = idx >= 0 ? states[idx] : null;
+
+  if (!ev || !state) {
+    return (
+      <main className="grid h-dvh place-items-center p-8 text-center">
+        <div className="max-w-sm">
+          <span className="mx-auto grid size-14 place-items-center rounded-full bg-primary/10 text-primary">
+            <CalendarDays className="size-7" />
+          </span>
+          <h1 className="mt-3 font-display text-2xl font-extrabold">Nenhum culto com roteiro aberto</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            A régia abre sozinha quando houver um culto com roteiro. Enquanto isso, monte a ordem pelo app.
+          </p>
+          <Link href="/cronograma" className="press mt-4 inline-flex h-11 items-center rounded-[14px] bg-primary px-4 text-[15px] font-bold text-primary-foreground">
+            Ir para o Roteiro
+          </Link>
+        </div>
+      </main>
+    );
+  }
+
+  const [rundown, kinds, templates, canContribute, canais] = await Promise.all([
+    getEventRundown(ev.id),
+    listRundownKinds(),
+    listRundownTemplates(),
+    estouEscaladoNoEvento(session, ev.id),
+    listarCanais(session),
+  ]);
+  const canEdit = session.role === "admin" || session.profile.teams.some((t) => t.manages_rundown);
+
+  // Chat do CULTO (é a conversa da operação). Sem canal do evento — voluntário
+  // que não está escalado não enxerga —, cai no primeiro canal disponível.
+  const canal = canais.find((c) => c.type === "evento" && c.ref === ev.id) ?? canais[0] ?? null;
+
+  return (
+    <ControlRoom
+      eventoTitulo={ev.title}
+      quando={fmtEventWhen(ev.starts_at)}
+      rundownSlot={
+        <RundownGrid
+          eventId={ev.id}
+          startsAt={ev.starts_at}
+          startedAt={state.startedAt}
+          endedAt={state.endedAt}
+          items={rundown}
+          kinds={kinds}
+          templates={templates}
+          canEdit={canEdit}
+          canContribute={canContribute}
+        />
+      }
+      chatSlot={
+        canal ? (
+          <Conversation
+            channel={canal}
+            meId={session.userId}
+            canPost={canPostNoCanal(canal.type, session.role)}
+            canDelete={session.role === "admin"}
+            onMuteChange={() => {}}
+          />
+        ) : (
+          <p className="grid flex-1 place-items-center px-6 text-center text-sm text-muted-foreground">
+            Nenhum canal de chat disponível pra este culto.
+          </p>
+        )
+      }
+    />
+  );
+}
