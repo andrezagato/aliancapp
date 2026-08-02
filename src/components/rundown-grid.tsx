@@ -9,7 +9,7 @@ import {
   Check,
   Play,
   RotateCcw,
-  Flag,
+  Square,
   ExternalLink,
   Settings2,
   LayoutTemplate,
@@ -36,6 +36,7 @@ import {
   contribuirNoBloco,
 } from "@/lib/actions";
 import { warm } from "@/lib/toasts";
+import { createClient } from "@/lib/supabase/client";
 import type { RundownItem, RundownKind, RundownTemplate } from "@/lib/data";
 import { CATEGORY_HEXES, CATEGORY_NEUTRAL } from "@/lib/palette";
 
@@ -164,6 +165,63 @@ export function RundownGrid({
   useEffect(() => setList(items), [items]);
   useEffect(() => setStarted(startedAt), [startedAt]);
   useEffect(() => setEnded(endedAt), [endedAt]);
+
+  // ---------------------------------------------------------------------------
+  // AO VIVO PRA TODO MUNDO (migration 0047)
+  // Antes, quem marcava um bloco via a mudança na hora e o resto da equipe só
+  // depois de puxar a tela — no meio do culto, quando ninguém tem mão livre.
+  // Agora o app escuta as mudanças do roteiro deste evento e se atualiza.
+  //
+  // O cuidado: o grid espelha `items` em estado local, então um refresh no meio
+  // de um arraste ou com um modal aberto atropelaria o que a pessoa está
+  // fazendo. Enquanto ela estiver ocupada, a atualização espera a mão sair.
+  // ---------------------------------------------------------------------------
+  const ocupado = drag !== null || editing !== null || contributing !== null || manageKinds || manageTpl;
+  const ocupadoRef = useRef(ocupado);
+  ocupadoRef.current = ocupado;
+  const atualizacaoPendente = useRef(false);
+
+  useEffect(() => {
+    const supabase = createClient();
+    let timer: number | null = null;
+    const aplicar = () => {
+      if (ocupadoRef.current) {
+        atualizacaoPendente.current = true; // guarda pra quando a mão sair
+        return;
+      }
+      // junta rajadas (reordenar mexe em vários blocos de uma vez)
+      if (timer) window.clearTimeout(timer);
+      timer = window.setTimeout(() => router.refresh(), 250);
+    };
+
+    const canal = supabase
+      .channel(`roteiro:${eventId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "event_rundown", filter: `event_id=eq.${eventId}` },
+        aplicar,
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "events", filter: `id=eq.${eventId}` },
+        aplicar,
+      )
+      .subscribe();
+
+    return () => {
+      if (timer) window.clearTimeout(timer);
+      supabase.removeChannel(canal);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventId]);
+
+  // A mão saiu (soltou o bloco, fechou o modal) e tinha mudança esperando.
+  useEffect(() => {
+    if (ocupado || !atualizacaoPendente.current) return;
+    atualizacaoPendente.current = false;
+    router.refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ocupado]);
 
   // Relógio ao vivo (só depois de montar, pra não quebrar a hidratação).
   useEffect(() => {
@@ -367,26 +425,30 @@ export function RundownGrid({
             </p>
           ) : null}
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        {/* wrap continua ligado de propósito: em tela estreita o grupo "ao vivo"
+            desce inteiro (ele é um flex próprio) em vez de vazar pra fora */}
+        <div className="flex flex-wrap items-center justify-end gap-2">
           {actions}
           {list.length > 0 ? (
             started ? (
               <div className="flex items-center gap-1.5">
-                <div className={cn("flex items-center gap-2 rounded-full px-3.5 py-2", ended ? "bg-success/12" : "bg-destructive/10")}>
+                <div className={cn("flex items-center gap-1.5 rounded-full px-3 py-1.5", ended ? "bg-success/12" : "bg-destructive/10")}>
                   {ended ? null : <span className="size-2.5 animate-pulse rounded-full bg-destructive" />}
                   <span className={cn("text-[11px] font-extrabold uppercase tracking-wide", ended ? "text-success-ink" : "text-destructive-ink")}>
                     {ended ? "Encerrado" : "Ao vivo"}
                   </span>
-                  <span className={cn("text-3xl font-extrabold tabular-nums leading-none", ended ? "text-success-ink" : "text-destructive-ink")}>
+                  <span className={cn("text-2xl font-extrabold tabular-nums leading-none", ended ? "text-success-ink" : "text-destructive-ink")}>
                     {clock((liveNow ?? startedMs ?? 0) - (startedMs ?? 0))}
                   </span>
                 </div>
                 {canEdit && !ended ? (
                   <button
                     onClick={() => window.confirm("Encerrar o culto agora? O relógio para.") && encerrar()}
-                    className="press-sm inline-flex items-center gap-1 rounded-full border border-destructive/40 bg-destructive/10 px-2.5 py-1.5 text-[12px] font-bold text-destructive-ink"
+                    aria-label="Encerrar culto"
+                    title="Encerrar culto"
+                    className="press-sm grid size-9 place-items-center rounded-full border border-destructive/40 bg-destructive/10 text-destructive-ink"
                   >
-                    <Flag className="size-3.5" /> Encerrar
+                    <Square className="size-3.5 fill-current" />
                   </button>
                 ) : null}
                 {canEdit ? (

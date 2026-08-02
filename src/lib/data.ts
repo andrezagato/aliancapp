@@ -364,6 +364,31 @@ export async function listLiveRundownEvents(session: Session): Promise<EventList
   return assembleEventList(session, (events ?? []) as EventRowLite[]);
 }
 
+/**
+ * O culto que está acontecendo AGORA (roteiro iniciado e não encerrado), pro
+ * card da Home. Diferente de `listLiveRundownEvents`, que só pega o que já saiu
+ * da janela de "próximos" — aqui o que importa é estar rolando, mesmo que tenha
+ * começado há 5 minutos.
+ */
+export async function getCultoAoVivo(
+  session: Session,
+): Promise<{ eventId: string; title: string; startedAt: string } | null> {
+  if (!session.profile.church_id) return null;
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("events")
+    .select("id, title, rundown_started_at")
+    .eq("church_id", session.profile.church_id)
+    .is("archived_at", null)
+    .not("rundown_started_at", "is", null)
+    .is("rundown_ended_at", null)
+    .order("rundown_started_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!data?.rundown_started_at) return null;
+  return { eventId: data.id, title: data.title || "Culto", startedAt: data.rundown_started_at };
+}
+
 /** Cultos JÁ ENCERRADos (roteiro encerrado) dos últimos 60 dias — pra seção
  * "Finalizados" da aba Escalas (histórico recente + avaliação da equipe). */
 export async function listEndedEvents(session: Session, limit = 20): Promise<EventListItem[]> {

@@ -32,6 +32,7 @@ import {
   getMyOpenInterests,
   getMyNextResponsibleEvent,
   getPendingFeedback,
+  getCultoAoVivo,
   getPendingTeamReviews,
   getMyEventRequests,
   getTeamCare,
@@ -55,6 +56,7 @@ import { InteresseButton, InteresseResolveButton } from "@/components/interesse-
 import { VolunteerHome } from "@/components/home/volunteer-home";
 import { FeedbackPrompt } from "@/components/feedback-prompt";
 import { ProfilePrompt } from "@/components/home/profile-prompt";
+import { CultoAoVivo } from "@/components/home/culto-ao-vivo";
 import { TeamReviewPrompt } from "@/components/team-review";
 import { NextEventHero } from "@/components/home/next-event-hero";
 import { AdminMonthOverview } from "@/components/home/admin-month-overview";
@@ -95,6 +97,11 @@ export default async function InicioPage({
         : session.profile.teams.map((t) => t.name).join(", ") || "Voluntário";
 
   const userName = session.profile.full_name || "?";
+  // Vale pros três ramos (voluntário, líder, admin): o culto é da igreja toda.
+  const aoVivo = await getCultoAoVivo(session);
+  const cardAoVivo = aoVivo ? (
+    <CultoAoVivo eventId={aoVivo.eventId} title={aoVivo.title} startedAt={aoVivo.startedAt} />
+  ) : null;
   const respHero = myResponsibleEvent ? (
     <NextEventHero ev={myResponsibleEvent} kicker="Você é o responsável" caption="confirmados" />
   ) : null;
@@ -114,6 +121,7 @@ export default async function InicioPage({
     ].filter((x): x is string => x !== null);
     return (
       <VolunteerHome title={`${greeting()}, ${first}`} subtitle={roleLabel} userName={userName} assignments={mine}>
+        {cardAoVivo}
         <ProfilePrompt meId={session.userId} missing={missingProfile} />
         {respHero}
         <SwapInbox items={swaps} />
@@ -133,6 +141,7 @@ export default async function InicioPage({
     const pendingReviews = await getPendingTeamReviews(session);
     return (
       <HomeShell title={`${greeting()}, ${first}`} subtitle={roleLabel} userName={userName}>
+        {cardAoVivo}
         {respHero}
         <TeamReviewPrompt pending={pendingReviews} />
         <AdminSection swaps={swaps} respEvents={respEvents} mes={sp.m} />
@@ -145,6 +154,7 @@ export default async function InicioPage({
   const pendingReviews = await getPendingTeamReviews(session);
   return (
     <HomeShell title={`${greeting()}, ${first}`} subtitle={roleLabel} userName={userName}>
+      {cardAoVivo}
       {respHero}
       <TeamReviewPrompt pending={pendingReviews} />
       <SwapInbox items={swaps} />
