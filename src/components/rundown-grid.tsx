@@ -431,6 +431,17 @@ export function RundownGrid({
   // concluído — encerrar culto" abaixo, que o líder toca quando quiser. Evita
   // encerrar por acidente enquanto se monta/testa a ordem.
 
+  // Bloco em andamento sempre à vista: a régia (e o celular no bolso) precisa ver
+  // ONDE o culto está sem procurar. Centraliza quando o bloco TROCA — não a cada
+  // segundo, o que brigaria com quem rolou a tela pra conferir outra parte — e
+  // nunca com a mão na massa (arraste/modal aberto). Reusa o mapa de refs que o
+  // arraste já mantém.
+  const blocoAtivoId = rows.find((r) => r.status === "live")?.it.id ?? null;
+  useEffect(() => {
+    if (!blocoAtivoId || !started || ended || ocupadoRef.current) return;
+    itemRefs.current.get(blocoAtivoId)?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [blocoAtivoId, started, ended]);
+
   const remove = (id: string) =>
     startTx(async () => {
       const r = await removerBlocoCronograma(id, eventId);

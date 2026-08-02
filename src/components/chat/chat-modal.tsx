@@ -374,6 +374,16 @@ export function Conversation({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channel.type, channel.ref]);
 
+  // Âncora no fim: toda mudança na lista termina mostrando a última mensagem.
+  // (As chamadas pontuais não bastavam — em painel flex a altura assenta depois
+  // do primeiro quadro e a rolagem parava no meio da conversa.)
+  useEffect(() => {
+    scrollToEnd();
+    const t = window.setTimeout(scrollToEnd, 120); // 2ª passada: imagens/altura
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [msgs.length, loading]);
+
   const send = async () => {
     const body = text.trim();
     if (!body || sending) return;

@@ -67,9 +67,9 @@ export default async function ControlPage({ searchParams }: { searchParams: Prom
   ]);
   const canEdit = session.role === "admin" || session.profile.teams.some((t) => t.manages_rundown);
 
-  // Chat do CULTO (é a conversa da operação). Sem canal do evento — voluntário
-  // que não está escalado não enxerga —, cai no primeiro canal disponível.
-  const canal = canais.find((c) => c.type === "evento" && c.ref === ev.id) ?? canais[0] ?? null;
+  // Todos os canais que a pessoa enxerga vão pra régia: o operador pula de
+  // "Produção" pro culto e pro "Avisos" sem sair da tela. Quem escolhe o inicial
+  // é o ControlChat (o do culto, que é a conversa da operação).
 
   return (
     <ControlRoom
@@ -89,8 +89,8 @@ export default async function ControlPage({ searchParams }: { searchParams: Prom
         />
       }
       chatSlot={
-        canal ? (
-          <ControlChat canal={canal} meId={session.userId} role={session.role} />
+        canais.length > 0 ? (
+          <ControlChat canais={canais} eventoId={ev.id} meId={session.userId} role={session.role} />
         ) : (
           <p className="grid flex-1 place-items-center px-6 text-center text-sm text-muted-foreground">
             Nenhum canal de chat disponível pra este culto.
