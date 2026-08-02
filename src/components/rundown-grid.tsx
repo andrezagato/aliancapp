@@ -184,6 +184,9 @@ export function RundownGrid({
   useEffect(() => {
     const supabase = createClient();
     let timer: number | null = null;
+    let pesquisa: number | null = null;
+    let conectado = false;
+
     const aplicar = () => {
       if (ocupadoRef.current) {
         atualizacaoPendente.current = true; // guarda pra quando a mão sair
@@ -192,6 +195,16 @@ export function RundownGrid({
       // junta rajadas (reordenar mexe em vários blocos de uma vez)
       if (timer) window.clearTimeout(timer);
       timer = window.setTimeout(() => router.refresh(), 250);
+    };
+
+    // Rede de segurança. O websocket é o caminho rápido, não o único: celular
+    // dorme e derruba a conexão, wi-fi de igreja às vezes bloqueia websocket, e
+    // no meio do culto ninguém vai descobrir que "parou de atualizar". Então
+    // também perguntamos de tempos em tempos — devagar quando o tempo real está
+    // de pé, rápido quando ele caiu.
+    const repesquisar = () => {
+      if (pesquisa) window.clearInterval(pesquisa);
+      pesquisa = window.setInterval(aplicar, conectado ? 30_000 : 8_000);
     };
 
     const canal = supabase
@@ -206,10 +219,23 @@ export function RundownGrid({
         { event: "UPDATE", schema: "public", table: "events", filter: `id=eq.${eventId}` },
         aplicar,
       )
-      .subscribe();
+      .subscribe((status) => {
+        conectado = status === "SUBSCRIBED";
+        repesquisar();
+      });
+    repesquisar();
+
+    // Voltou pro app depois de bloquear a tela: o socket provavelmente morreu
+    // enquanto estava em segundo plano. Busca na hora, sem esperar o intervalo.
+    const aoVoltar = () => {
+      if (document.visibilityState === "visible") aplicar();
+    };
+    document.addEventListener("visibilitychange", aoVoltar);
 
     return () => {
       if (timer) window.clearTimeout(timer);
+      if (pesquisa) window.clearInterval(pesquisa);
+      document.removeEventListener("visibilitychange", aoVoltar);
       supabase.removeChannel(canal);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
