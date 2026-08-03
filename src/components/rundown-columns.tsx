@@ -1,8 +1,8 @@
 "use client";
 
-import { useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Play, Square, RotateCcw, Check } from "lucide-react";
+import { Play, Square, RotateCcw, Check, Minus, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/toast";
 import { warm } from "@/lib/toasts";
@@ -39,24 +39,78 @@ import { useRundownRealtime } from "@/components/rundown-realtime";
  *  - SEM coluna de link: 0 dos 28 blocos reais da Aliança usa o campo. Coluna
  *    que nasce vazia parece defeito.
  *  - SEM coluna de tipo: hoje `kind` é a MESMA palavra do título ("Louvor" /
- *    "Louvor"). O tipo já fala pela COR da linha.
- *  - Observação leva a folga: é o único campo com texto de verdade (44
- *    caracteres em média), enquanto os títulos têm 8.
+ *    "Louvor"). O tipo já fala pela COR do ponto.
+ *  - Observação leva quase toda a folga: é o único campo com texto de verdade,
+ *    enquanto os títulos têm 8 caracteres. Bloco e Responsável ficam estreitos.
  *
  * A régia CONDUZ, o celular EDITA. Aqui dá pra iniciar, avançar e encerrar —
  * o que se faz com o culto rolando. Reordenar, criar e apagar bloco continua na
  * aba Roteiro: no meio do culto ninguém reestrutura, e um arraste acidental num
  * monitor de sala de controle sairia caro.
+ *
+ * TUDO É DIMENSIONADO EM `em`, e o `font-size` da raiz é o que os botões A−/A+
+ * mudam. É o que permite adaptar a régia à distância de leitura da sala sem que
+ * o texto estoure a coluna: aumentar a letra aumenta junto o respiro das linhas
+ * e a largura mínima de cada coluna.
  */
 
-const COLS = "grid-cols-[2.5rem_4.5rem_4.5rem_4rem_minmax(7rem,1fr)_minmax(6rem,1fr)_minmax(10rem,2.2fr)]";
+const CHAVE_FONTE = "sirvo:control:fonte";
+const FONTE_PADRAO = 15;
+const FONTE_MIN = 12;
+const FONTE_MAX = 26;
+
+/** Larguras em `em` pra escalarem junto com o controle de fonte. */
+const COLS =
+  "grid-cols-[2.2em_4.6em_4.6em_4.6em_minmax(6em,0.7fr)_minmax(5em,0.7fr)_minmax(16em,3fr)]";
+
+const TZ = "America/Sao_Paulo";
+/** "seg · 3 ago · 17:15" — a régia não precisa de "Segunda-Feira, 3 De Agosto". */
+function dataCurta(iso: string): string {
+  const d = new Date(iso);
+  const partes = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: TZ,
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  }).formatToParts(d);
+  const pega = (t: string) => partes.find((p) => p.type === t)?.value.replace(".", "") ?? "";
+  return `${pega("weekday")} · ${pega("day")} ${pega("month")}`;
+}
+
+/** "Atrasado 7 min" / "Adiantado 3 min" / "No horário". */
+function desvioTexto(ms: number): { texto: string; tom: string } {
+  const min = Math.round(ms / 60000);
+  if (min === 0) return { texto: "No horário", tom: "bg-success/15 text-success-ink" };
+  if (min > 0) return { texto: `Atrasado ${min} min`, tom: "bg-destructive/15 text-destructive-ink" };
+  return { texto: `Adiantado ${Math.abs(min)} min`, tom: "bg-success/15 text-success-ink" };
+}
+
+/** Rótulo miúdo em cima do número — o número é que tem que ser lido de longe. */
+function Medida({
+  label,
+  children,
+  className,
+}: {
+  label: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className="flex flex-col leading-none">
+      <span className={cn("font-bold tabular-nums", className)}>{children}</span>
+      <span className="mt-[0.35em] text-[0.62em] font-semibold uppercase tracking-wide text-muted-foreground">
+        {label}
+      </span>
+    </div>
+  );
+}
 
 function Cabecalho() {
   return (
     <div
       className={cn(
-        "grid items-center gap-x-3 border-b border-border px-3 pb-1.5",
-        "text-[11px] font-semibold uppercase tracking-wide text-muted-foreground",
+        "grid items-end gap-x-[0.9em] border-b border-border px-[0.9em] pb-[0.4em]",
+        "text-[0.72em] font-semibold uppercase tracking-wide text-muted-foreground",
         COLS,
       )}
     >
@@ -69,14 +123,6 @@ function Cabecalho() {
       <span>Observação</span>
     </div>
   );
-}
-
-/** "Atrasado 7 min" / "Adiantado 3 min" / "No horário". */
-function desvioTexto(ms: number): { texto: string; tom: string } {
-  const min = Math.round(ms / 60000);
-  if (min === 0) return { texto: "No horário", tom: "text-success-ink" };
-  if (min > 0) return { texto: `Atrasado ${min} min`, tom: "text-destructive-ink" };
-  return { texto: `Adiantado ${Math.abs(min)} min`, tom: "text-success-ink" };
 }
 
 function Linha({
@@ -99,20 +145,28 @@ function Linha({
   const { it, startMs, endMs, durMs, status } = row;
   const live = status === "live";
   const done = status === "done";
+  const [aberto, setAberto] = useState(false);
+
+  const decorridoMs = live ? (now != null ? now - startMs : 0) : done ? endMs - startMs : durMs;
+  const estourouMs = Math.max(0, decorridoMs - durMs);
+  const heat = live ? heatOf(durMs - decorridoMs) : done && estourouMs > 0 ? "red" : "normal";
+
   // Marca de "estou editando" vale por 2 min (igual ao celular): esquecida por
   // quem fechou o app, ela não pode assombrar o bloco durante o culto.
   const editandoNome =
     it.editingBy && it.editingAt && now != null && now - new Date(it.editingAt).getTime() < 120_000
       ? (it.editingNome ?? "Alguém")
       : null;
-  const decorridoMs = live ? (now != null ? now - startMs : 0) : done ? endMs - startMs : durMs;
-  const estourouMs = Math.max(0, decorridoMs - durMs);
-  const heat = live ? heatOf(durMs - decorridoMs) : done && estourouMs > 0 ? "red" : "normal";
+
+  // Sem medir o DOM: texto comprido ou com quebra ganha o "ver tudo". Erra pra
+  // mais (mostra o botão em texto que coube), o que é o lado barato de errar.
+  const note = it.note ?? "";
+  const longo = note.length > 120 || note.includes("\n");
 
   return (
     <div
       className={cn(
-        "grid items-center gap-x-3 px-3 py-2 text-[13.5px]",
+        "grid items-start gap-x-[0.9em] px-[0.9em] py-[0.62em]",
         COLS,
         live && "bg-primary/[0.07] font-semibold",
         done && "text-muted-foreground",
@@ -120,13 +174,10 @@ function Linha({
       aria-current={live ? "step" : undefined}
     >
       {/* Cor do bloco num PONTO, o mesmo vocabulário da trilha do celular
-          (rundown-grid.tsx: nó redondo que fica vermelho ao vivo). Antes isto era
-          uma barra de 4px na borda esquerda da linha — inventava um segundo jeito
-          de dizer a mesma coisa e, com 6 linhas, virava uma escada colorida na
-          lateral competindo com a leitura das horas. */}
-      <span className="flex items-center justify-center gap-1.5 tabular-nums">
+          (rundown-grid.tsx: nó redondo que fica vermelho ao vivo). */}
+      <span className="flex items-center justify-center gap-[0.4em] tabular-nums">
         <span
-          className={cn("size-2 shrink-0 rounded-full", live && "animate-pulse")}
+          className={cn("size-[0.5em] shrink-0 rounded-full", live && "animate-pulse")}
           style={{ backgroundColor: live ? "hsl(var(--destructive))" : cor }}
         />
         {live ? (
@@ -144,38 +195,62 @@ function Linha({
         {live ? clock(Math.max(0, decorridoMs)) : `${it.durationMin}m`}
       </span>
 
-      <span className="min-w-0 truncate" title={it.title}>
+      <span className="min-w-0 break-words" title={it.title}>
         {it.title}
         {done && estourouMs > 0 ? (
-          <span className="ml-1.5 text-[11px] font-semibold text-destructive-ink">
+          <span className="ml-[0.4em] text-[0.8em] font-semibold text-destructive-ink">
             +{clock(estourouMs)}
           </span>
         ) : null}
       </span>
 
-      <span className="min-w-0 truncate text-muted-foreground" title={it.responsible ?? ""}>
-        {it.responsible || "—"}
-      </span>
+      <span className="min-w-0 break-words text-muted-foreground">{it.responsible || "—"}</span>
 
-      <span className="flex min-w-0 items-center gap-2">
-        <span className="min-w-0 truncate" title={it.note ?? ""}>
-          {it.note || <span className="text-muted-foreground">—</span>}
+      <span className="flex min-w-0 items-start gap-[0.6em]">
+        <span className="min-w-0 flex-1">
+          {note ? (
+            <>
+              {/* `whitespace-pre-wrap` preserva as quebras de quem colou o texto;
+                  4 linhas é o teto pra uma linha não empurrar o resto da grade
+                  pra fora da tela. */}
+              {/* `block` e `line-clamp-4` disputam a mesma propriedade
+                  (`display`), e quem vence depende da ordem interna do Tailwind,
+                  não da ordem aqui — por isso um OU outro, nunca os dois. */}
+              <span
+                className={cn(
+                  "whitespace-pre-wrap break-words",
+                  !aberto && longo ? "line-clamp-4" : "block",
+                )}
+              >
+                {note}
+              </span>
+              {longo ? (
+                <button
+                  type="button"
+                  onClick={() => setAberto((v) => !v)}
+                  className="press-sm mt-[0.2em] text-[0.8em] font-bold text-primary"
+                >
+                  {aberto ? "ver menos" : "ver tudo"}
+                </button>
+              ) : null}
+            </>
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          )}
+          {editandoNome ? (
+            <span className="ml-[0.4em] inline-block rounded-full bg-warning/15 px-[0.5em] py-[0.1em] align-middle text-[0.72em] font-semibold text-warning-ink">
+              {editandoNome} editando
+            </span>
+          ) : null}
         </span>
-        {/* Alguém está com o bloco na mão (trava macia da 0048). Chega pelo
-            realtime, então a régia vê em ~1s — e sabe que a observação pode mudar
-            debaixo dos olhos dela. */}
-        {editandoNome ? (
-          <span className="shrink-0 rounded-full bg-warning/15 px-2 py-0.5 text-[11px] font-semibold text-warning-ink">
-            {editandoNome} editando
-          </span>
-        ) : null}
+
         {podeAvancar && live ? (
           <button
             onClick={onAvancar}
             disabled={ocupado}
-            className="press-sm ml-auto inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-primary px-3 text-[12.5px] font-bold text-primary-foreground disabled:opacity-60"
+            className="press-sm inline-flex shrink-0 items-center gap-[0.4em] rounded-full bg-primary px-[0.8em] py-[0.35em] text-[0.85em] font-bold text-primary-foreground disabled:opacity-60"
           >
-            <Check className="size-3.5" /> Encerrar bloco
+            <Check className="size-[1.1em]" /> Encerrar bloco
           </button>
         ) : null}
       </span>
@@ -185,6 +260,7 @@ function Linha({
 
 export function RundownColumns({
   eventId,
+  titulo,
   startsAt,
   startedAt,
   endedAt,
@@ -193,6 +269,7 @@ export function RundownColumns({
   canEdit,
 }: {
   eventId: string;
+  titulo: string;
   startsAt: string;
   startedAt: string | null;
   endedAt: string | null;
@@ -203,16 +280,39 @@ export function RundownColumns({
   const router = useRouter();
   const { showToast } = useToast();
   const [ocupado, startTx] = useTransition();
+  const [fonte, setFonte] = useState(FONTE_PADRAO);
+
+  // O tamanho da letra é do APARELHO, não da conta: depende da distância entre a
+  // mesa e o monitor daquela sala — mesma lógica da URL do stream.
+  useEffect(() => {
+    try {
+      const salvo = Number(localStorage.getItem(CHAVE_FONTE));
+      if (salvo >= FONTE_MIN && salvo <= FONTE_MAX) setFonte(salvo);
+    } catch {
+      /* sem localStorage: fica no padrão */
+    }
+  }, []);
+  const mudarFonte = (delta: number) =>
+    setFonte((f) => {
+      const novo = Math.min(FONTE_MAX, Math.max(FONTE_MIN, f + delta));
+      try {
+        localStorage.setItem(CHAVE_FONTE, String(novo));
+      } catch {
+        /* vale só nesta sessão */
+      }
+      return novo;
+    });
 
   // Só-leitura no que importa pro realtime: não há estado local espelhando
   // `items` aqui (sem arraste, sem modal), então nunca precisa esperar a mão.
   useRundownRealtime({ eventId });
 
-  const { now, rows, totalMin, allDone, startedMs, endedMs, finishMs, desvioMs, corDoBloco } =
+  const { now, rows, totalMin, startedMs, endedMs, finishMs, desvioMs, corDoBloco } =
     useRundownTiming({ items, kinds, startsAt, started: startedAt, ended: endedAt });
 
   const rodando = startedMs != null && endedMs == null;
   const desvio = desvioTexto(desvioMs);
+  const corridoMs = startedMs != null ? (endedMs ?? now ?? startedMs) - startedMs : 0;
 
   const agir = (fn: () => Promise<ActionResult>, sucesso?: string) =>
     startTx(async () => {
@@ -225,83 +325,132 @@ export function RundownColumns({
       router.refresh();
     });
 
-  if (items.length === 0) {
-    return (
-      <p className="grid h-full place-items-center text-center text-sm text-muted-foreground">
-        Este culto ainda não tem roteiro. Monte a ordem na aba Roteiro.
-      </p>
-    );
-  }
-
   return (
-    <div className="flex min-h-0 min-w-[52rem] flex-col">
-      {/* ---- faixa de estado: a pergunta da régia é "vamos furar o horário?" */}
-      <div className="mb-2 flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1 px-3">
-        <span className="text-[13px] text-muted-foreground">
-          Término previsto{" "}
-          <strong className="tabular-nums text-foreground">{fmtHora(finishMs)}</strong>
-        </span>
-        {rodando ? <span className={cn("text-[13px] font-bold", desvio.tom)}>{desvio.texto}</span> : null}
-        <span className="text-[13px] text-muted-foreground">
-          {items.length} blocos · {totalMin} min planejados
-        </span>
+    <div className="flex min-h-0 min-w-[52em] flex-col" style={{ fontSize: `${fonte}px` }}>
+      {/* --------------------------------------------------------------------
+          UMA barra só. Antes eram duas — título numa, números noutra — e as duas
+          quase vazias. O que a régia lê de longe (corrido e desvio) fica grande;
+          o resto encolhe pra rótulo miúdo.
+         -------------------------------------------------------------------- */}
+      <div className="mb-[0.7em] flex shrink-0 flex-wrap items-center gap-x-[1.4em] gap-y-[0.5em] rounded-[0.8em] bg-primary/[0.06] px-[0.9em] py-[0.6em]">
+        <div className="min-w-0">
+          <p className="truncate font-display text-[1.15em] font-extrabold leading-tight">{titulo}</p>
+          <p className="text-[0.72em] text-muted-foreground">{dataCurta(startsAt)}</p>
+        </div>
 
-        {canEdit ? (
-          <span className="ml-auto flex items-center gap-1.5">
-            {!rodando && !allDone && startedMs == null ? (
-              <button
-                onClick={() => agir(() => iniciarCronograma(eventId))}
-                disabled={ocupado}
-                className="press-sm inline-flex h-9 items-center gap-1.5 rounded-full bg-primary px-3.5 text-[13px] font-bold text-primary-foreground disabled:opacity-60"
-              >
-                <Play className="size-4" /> Iniciar
-              </button>
-            ) : null}
-            {rodando ? (
-              <button
-                onClick={() => agir(() => encerrarCronograma(eventId), warm("cultoEncerrado"))}
-                disabled={ocupado}
-                aria-label="Encerrar o roteiro"
-                title="Encerrar o roteiro"
-                className="press-sm inline-flex h-9 items-center gap-1.5 rounded-full border border-border px-3.5 text-[13px] font-bold disabled:opacity-60"
-              >
-                <Square className="size-3.5" /> Encerrar
-              </button>
-            ) : null}
-            {startedMs != null ? (
-              <button
-                onClick={() => {
-                  if (!window.confirm("Reiniciar o roteiro deste culto? Os blocos voltam a ficar em aberto.")) return;
-                  agir(() => reiniciarCronograma(eventId));
-                }}
-                disabled={ocupado}
-                aria-label="Reiniciar o roteiro"
-                title="Reiniciar o roteiro"
-                className="press-sm grid size-9 place-items-center rounded-full border border-border disabled:opacity-60"
-              >
-                <RotateCcw className="size-4" />
-              </button>
-            ) : null}
+        <Medida label="início · previsão" className="text-[1.05em]">
+          {fmtHora(new Date(startsAt).getTime())}
+          <span className="mx-[0.25em] font-normal text-muted-foreground">→</span>
+          {fmtHora(finishMs)}
+        </Medida>
+
+        {startedMs != null ? (
+          <>
+            <Medida label="tempo corrido" className="text-[1.9em]">
+              {clock(Math.max(0, corridoMs))}
+            </Medida>
+            <span
+              className={cn(
+                "rounded-full px-[0.7em] py-[0.3em] text-[1.05em] font-extrabold",
+                desvio.tom,
+              )}
+            >
+              {desvio.texto}
+            </span>
+          </>
+        ) : (
+          // Antes de começar, este espaço serve pra CONFERIR o plano; depois ele
+          // vira o cronômetro, que é o que importa com o culto rolando.
+          <span className="text-[0.85em] text-muted-foreground">
+            {items.length} blocos · {totalMin} min planejados
           </span>
-        ) : null}
+        )}
+
+        <span className="ml-auto flex items-center gap-[0.4em]">
+          {/* tamanho da letra: a régia de cada sala tem uma distância de leitura */}
+          <span className="mr-[0.4em] inline-flex items-center rounded-full border border-border">
+            <button
+              onClick={() => mudarFonte(-1)}
+              disabled={fonte <= FONTE_MIN}
+              aria-label="Diminuir o tamanho do texto"
+              title="Diminuir o tamanho do texto"
+              className="press-sm grid size-[2em] place-items-center rounded-l-full disabled:opacity-40"
+            >
+              <Minus className="size-[1em]" />
+            </button>
+            <span className="px-[0.3em] text-[0.72em] font-bold tabular-nums text-muted-foreground">
+              {fonte}
+            </span>
+            <button
+              onClick={() => mudarFonte(1)}
+              disabled={fonte >= FONTE_MAX}
+              aria-label="Aumentar o tamanho do texto"
+              title="Aumentar o tamanho do texto"
+              className="press-sm grid size-[2em] place-items-center rounded-r-full disabled:opacity-40"
+            >
+              <Plus className="size-[1em]" />
+            </button>
+          </span>
+
+          {canEdit && items.length > 0 ? (
+            <>
+              {startedMs == null ? (
+                <button
+                  onClick={() => agir(() => iniciarCronograma(eventId))}
+                  disabled={ocupado}
+                  className="press-sm inline-flex h-[2.4em] items-center gap-[0.4em] rounded-full bg-primary px-[0.9em] text-[0.9em] font-bold text-primary-foreground disabled:opacity-60"
+                >
+                  <Play className="size-[1.1em]" /> Iniciar
+                </button>
+              ) : null}
+              {rodando ? (
+                <button
+                  onClick={() => agir(() => encerrarCronograma(eventId), warm("cultoEncerrado"))}
+                  disabled={ocupado}
+                  className="press-sm inline-flex h-[2.4em] items-center gap-[0.4em] rounded-full border border-border px-[0.9em] text-[0.9em] font-bold disabled:opacity-60"
+                >
+                  <Square className="size-[0.9em]" /> Encerrar
+                </button>
+              ) : null}
+              {startedMs != null ? (
+                <button
+                  onClick={() => agir(() => reiniciarCronograma(eventId))}
+                  disabled={ocupado}
+                  aria-label="Reiniciar o roteiro"
+                  title="Reiniciar o roteiro"
+                  className="press-sm grid size-[2.4em] place-items-center rounded-full border border-border disabled:opacity-60"
+                >
+                  <RotateCcw className="size-[1.1em]" />
+                </button>
+              ) : null}
+            </>
+          ) : null}
+        </span>
       </div>
 
-      <Cabecalho />
-
-      <div className="min-h-0 divide-y divide-border">
-        {rows.map((row, idx) => (
-          <Linha
-            key={row.it.id}
-            row={row}
-            idx={idx}
-            cor={corDoBloco(row.it)}
-            now={now}
-            podeAvancar={canEdit && rodando}
-            ocupado={ocupado}
-            onAvancar={() => agir(() => marcarBlocoFeito(row.it.id, eventId, true))}
-          />
-        ))}
-      </div>
+      {items.length === 0 ? (
+        <p className="grid flex-1 place-items-center text-center text-[0.9em] text-muted-foreground">
+          Este culto ainda não tem roteiro. Monte a ordem na aba Roteiro.
+        </p>
+      ) : (
+        <>
+          <Cabecalho />
+          <div className="min-h-0 divide-y divide-border">
+            {rows.map((row, idx) => (
+              <Linha
+                key={row.it.id}
+                row={row}
+                idx={idx}
+                cor={corDoBloco(row.it)}
+                now={now}
+                podeAvancar={canEdit && rodando}
+                ocupado={ocupado}
+                onAvancar={() => agir(() => marcarBlocoFeito(row.it.id, eventId, true))}
+              />
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }

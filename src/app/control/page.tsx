@@ -12,7 +12,6 @@ import {
   getRundownState,
 } from "@/lib/data";
 import { listarCanais } from "@/lib/chat";
-import { fmtEventWhen } from "@/lib/format";
 
 /**
  * /control — a régia. Endereço digitado à mão, de propósito fora do menu.
@@ -71,11 +70,10 @@ export default async function ControlPage({ searchParams }: { searchParams: Prom
 
   return (
     <ControlRoom
-      eventoTitulo={ev.title}
-      quando={fmtEventWhen(ev.starts_at)}
       rundownSlot={
         <RundownColumns
           eventId={ev.id}
+          titulo={ev.title}
           startsAt={ev.starts_at}
           startedAt={state.startedAt}
           endedAt={state.endedAt}

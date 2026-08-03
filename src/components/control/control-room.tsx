@@ -51,13 +51,9 @@ function detectar(url: string): Modo {
 }
 
 export function ControlRoom({
-  eventoTitulo,
-  quando,
   rundownSlot,
   chatSlot,
 }: {
-  eventoTitulo: string;
-  quando: string;
   rundownSlot: React.ReactNode;
   chatSlot: React.ReactNode;
 }) {
@@ -219,13 +215,12 @@ export function ControlRoom({
       {/* ------------------------------- roteiro: a largura INTEIRA da tela */}
       {cheio ? null : (
         <section className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-soft">
-          <header className="flex shrink-0 items-baseline gap-2 border-b border-border bg-primary/[0.06] px-4 py-2">
-            <p className="truncate font-display text-[17px] font-extrabold leading-tight">{eventoTitulo}</p>
-            <p className="truncate text-[12.5px] capitalize text-muted-foreground">{quando}</p>
-          </header>
+          {/* Sem cabeçalho aqui: título, data, contadores e controles vivem numa
+              BARRA SÓ, dentro da própria grade — duas faixas quase vazias
+              empilhadas comiam altura que a régia não tem pra dar. */}
           {/* `overflow-auto` e não `overflow-y-auto`: a grade tem largura mínima
               e precisa poder rolar na horizontal em vez de espremer as colunas */}
-          <div className="min-h-0 flex-1 overflow-auto px-3 py-3">{rundownSlot}</div>
+          <div className="min-h-0 flex-1 overflow-auto p-3">{rundownSlot}</div>
         </section>
       )}
     </div>
