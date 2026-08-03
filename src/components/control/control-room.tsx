@@ -9,11 +9,16 @@ import { cn } from "@/lib/utils";
  *
  *   ┌──────────────────────────────┬───────────────┐
  *   │            VÍDEO             │               │
- *   │          (2/3 largura,       │    ROTEIRO    │
- *   │         2/3 da altura)       │   (1/3, tela  │
- *   ├──────────────────────────────┤    inteira)   │
- *   │             CHAT             │               │
+ *   │                              │     CHAT      │
+ *   ├──────────────────────────────┤  (coluna da   │
+ *   │           ROTEIRO            │   direita,    │
+ *   │      (base, largura toda)    │  altura toda) │
  *   └──────────────────────────────┴───────────────┘
+ *
+ * O roteiro embaixo, ocupando a largura inteira, é o passo 1 rumo ao formato de
+ * grade (bloco = linha, colunas por departamento). Por ora ele é a mesma lista
+ * vertical do celular, só que larga — o layout vem antes das colunas de
+ * propósito, pra decidir as colunas com a tela na mão.
  *
  * Não entra no menu de propósito: é um endereço que se digita, pro operador da
  * régia. Sem barra de navegação, sem rolagem na página — cada painel rola
@@ -88,9 +93,9 @@ export function ControlRoom({
   const modo = detectar(url);
 
   return (
-    <div className="grid min-h-dvh w-full grid-cols-1 gap-2 bg-background p-2 max-lg:auto-rows-[minmax(18rem,auto)] lg:h-dvh lg:grid-cols-[2fr_1fr] lg:grid-rows-1">
-      {/* ------------------------------------------------ coluna do vídeo + chat */}
-      <div className={cn("grid min-h-0 gap-2", cheio ? "grid-rows-1" : "grid-rows-[2fr_1fr]")}>
+    <div className="grid min-h-dvh w-full grid-cols-1 gap-2 bg-background p-2 max-lg:auto-rows-[minmax(18rem,auto)] lg:h-dvh lg:grid-cols-[minmax(0,3fr)_minmax(20rem,1fr)] lg:grid-rows-1">
+      {/* --------------------------------------------- coluna do vídeo + roteiro */}
+      <div className={cn("grid min-h-0 gap-2", cheio ? "grid-rows-1" : "grid-rows-[3fr_2fr]")}>
         <section className="relative min-h-0 overflow-hidden rounded-2xl border border-border bg-[hsl(var(--foreground))] shadow-soft">
           {modo === "video" ? (
             // eslint-disable-next-line jsx-a11y/media-has-caption
@@ -161,8 +166,8 @@ export function ControlRoom({
             </button>
             <button
               onClick={() => setCheio((v) => !v)}
-              aria-label={cheio ? "Mostrar o chat" : "Vídeo em tela cheia"}
-              title={cheio ? "Mostrar o chat" : "Vídeo em tela cheia"}
+              aria-label={cheio ? "Mostrar o roteiro" : "Só o vídeo"}
+              title={cheio ? "Mostrar o roteiro" : "Só o vídeo"}
               className="press-sm grid size-9 place-items-center rounded-full bg-black/60 text-white backdrop-blur"
             >
               {cheio ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
@@ -199,21 +204,21 @@ export function ControlRoom({
           ) : null}
         </section>
 
-        {/* -------------------------------------------------------------- chat */}
+        {/* ----------------------------------------------------------- roteiro */}
         {cheio ? null : (
-          <section className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-border bg-card px-3 pb-3 pt-2 shadow-soft">
-            {chatSlot}
+          <section className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-soft">
+            <header className="flex shrink-0 items-baseline gap-2 border-b border-border bg-primary/[0.06] px-4 py-2">
+              <p className="truncate font-display text-[17px] font-extrabold leading-tight">{eventoTitulo}</p>
+              <p className="truncate text-[12.5px] capitalize text-muted-foreground">{quando}</p>
+            </header>
+            <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">{rundownSlot}</div>
           </section>
         )}
       </div>
 
-      {/* ---------------------------------------------------------- roteiro */}
-      <aside className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-soft">
-        <header className="shrink-0 border-b border-border bg-primary/[0.06] px-4 py-2.5">
-          <p className="truncate font-display text-[17px] font-extrabold leading-tight">{eventoTitulo}</p>
-          <p className="truncate text-[12.5px] capitalize text-muted-foreground">{quando}</p>
-        </header>
-        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">{rundownSlot}</div>
+      {/* ------------------------------------------------------------- chat */}
+      <aside className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-border bg-card px-3 pb-3 pt-2 shadow-soft">
+        {chatSlot}
       </aside>
     </div>
   );

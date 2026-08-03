@@ -470,11 +470,25 @@ export function RundownGrid({
             started ? (
               <div className="flex items-center gap-1.5">
                 <div className={cn("flex items-center gap-1.5 rounded-full px-3 py-1.5", ended ? "bg-success/12" : "bg-destructive/10")}>
-                  {ended ? null : <span className="size-2.5 animate-pulse rounded-full bg-destructive" />}
-                  <span className={cn("text-[11px] font-extrabold uppercase tracking-wide", ended ? "text-success-ink" : "text-destructive-ink")}>
+                  {ended ? null : <span className="size-2.5 shrink-0 animate-pulse rounded-full bg-destructive" />}
+                  {/* "Ao vivo" some no celular: o ponto pulsando já diz isso, e a
+                      palavra custa ~65px — que faltam justamente quando o culto
+                      passa de 1h e o relógio vira 1:02:34. Encerrado mantém o
+                      rótulo, porque aí não há ponto pra falar por ele. */}
+                  <span
+                    className={cn(
+                      "text-[11px] font-extrabold uppercase tracking-wide",
+                      ended ? "text-success-ink" : "hidden text-destructive-ink sm:inline",
+                    )}
+                  >
                     {ended ? "Encerrado" : "Ao vivo"}
                   </span>
-                  <span className={cn("text-2xl font-extrabold tabular-nums leading-none", ended ? "text-success-ink" : "text-destructive-ink")}>
+                  <span
+                    className={cn(
+                      "text-xl font-extrabold tabular-nums leading-none sm:text-2xl",
+                      ended ? "text-success-ink" : "text-destructive-ink",
+                    )}
+                  >
                     {clock((liveNow ?? startedMs ?? 0) - (startedMs ?? 0))}
                   </span>
                 </div>
