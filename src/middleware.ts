@@ -11,7 +11,13 @@ function isPublic(pathname: string): boolean {
     pathname === "/" ||
     pathname.startsWith("/entrar") ||
     pathname.startsWith("/cadastro") ||
-    pathname.startsWith("/auth")
+    pathname.startsWith("/auth") ||
+    // O cron da Vercel chama sem cookie de sessão: sem esta linha o gate abaixo
+    // devolvia 307 pra /entrar e a cobrança da escala NUNCA rodava (reminder_log
+    // ficou vazia de 31/jul a 03/ago). "Público" aqui é só perante o middleware
+    // — a rota se defende com CRON_SECRET, e é só ELA que fica de fora do gate,
+    // não `/api` inteiro, pra que uma futura rota de API nasça protegida.
+    pathname.startsWith("/api/cron")
   );
 }
 
