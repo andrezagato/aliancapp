@@ -112,21 +112,25 @@ function Linha({
   return (
     <div
       className={cn(
-        "grid items-center gap-x-3 border-l-4 px-3 py-2 text-[13.5px]",
+        "grid items-center gap-x-3 px-3 py-2 text-[13.5px]",
         COLS,
         live && "bg-primary/[0.07] font-semibold",
         done && "text-muted-foreground",
       )}
-      style={{ borderLeftColor: cor }}
       aria-current={live ? "step" : undefined}
     >
-      {/* número, ou o ponto pulsando de "é aqui que estamos" */}
-      <span className="text-center tabular-nums">
+      {/* Cor do bloco num PONTO, o mesmo vocabulário da trilha do celular
+          (rundown-grid.tsx: nó redondo que fica vermelho ao vivo). Antes isto era
+          uma barra de 4px na borda esquerda da linha — inventava um segundo jeito
+          de dizer a mesma coisa e, com 6 linhas, virava uma escada colorida na
+          lateral competindo com a leitura das horas. */}
+      <span className="flex items-center justify-center gap-1.5 tabular-nums">
+        <span
+          className={cn("size-2 shrink-0 rounded-full", live && "animate-pulse")}
+          style={{ backgroundColor: live ? "hsl(var(--destructive))" : cor }}
+        />
         {live ? (
-          <span className="inline-flex items-center gap-1">
-            <span className="size-2 animate-pulse rounded-full bg-destructive-ink" />
-            <span className="sr-only">Ao vivo:</span>
-          </span>
+          <span className="sr-only">Ao vivo:</span>
         ) : (
           <span className={cn(done && "line-through")}>{idx + 1}</span>
         )}
