@@ -3,6 +3,7 @@ import { getSession, isActive } from "@/lib/auth";
 import { BottomNav } from "@/components/app-shell/bottom-nav";
 import { ToastProvider } from "@/components/ui/toast";
 import { AchievementWatcher } from "@/components/achievement-watcher";
+import { PushSync } from "@/components/push-sync";
 import { EventModalProvider } from "@/components/event/event-modal-provider";
 import { ChatBubble } from "@/components/chat/chat-bubble";
 import { listarCanais } from "@/lib/chat";
@@ -26,6 +27,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <BottomNav />
           <ChatBubble canais={canais} meId={session.userId} role={session.role} />
           <AchievementWatcher />
+          {/* Sem UI: reassina o push quando a inscrição do aparelho não confere
+              mais com a chave VAPID atual (ver src/lib/push-client.ts) */}
+          <PushSync />
         </div>
       </EventModalProvider>
     </ToastProvider>

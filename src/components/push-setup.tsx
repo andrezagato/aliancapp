@@ -2,16 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { BellRing, BellOff, Check } from "lucide-react";
-import { salvarPushSubscription } from "@/lib/actions";
-
-function urlBase64ToUint8Array(base64String: string): Uint8Array {
-  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
-  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
-  const raw = atob(base64);
-  const out = new Uint8Array(raw.length);
-  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
-  return out;
-}
+import { pedirPermissaoEAssinar, sincronizarPush } from "@/lib/push-client";
 
 type Status = "loading" | "unsupported" | "default" | "granted" | "denied";
 
@@ -29,27 +20,17 @@ export function PushSetup() {
     }
     navigator.serviceWorker.register("/sw.js").catch(() => {});
     setStatus(Notification.permission as Status);
+    // Quem já concedeu permissão nunca passava por aqui de novo: o ramo
+    // "granted" só desenhava um texto. Se a inscrição por trás tivesse morrido
+    // (chave VAPID trocada, expiração do navegador), o push estava desligado e
+    // esta tela dizia o contrário. Reconciliar é justamente o conserto.
+    void sincronizarPush();
   }, []);
 
   const enable = async () => {
     setBusy(true);
     try {
-      const perm = await Notification.requestPermission();
-      setStatus(perm as Status);
-      if (perm !== "granted") return;
-      const key = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-      if (!key) return;
-      const reg = await navigator.serviceWorker.ready;
-      const sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(key) as BufferSource,
-      });
-      const json = sub.toJSON();
-      await salvarPushSubscription({
-        endpoint: sub.endpoint,
-        p256dh: json.keys?.p256dh ?? "",
-        auth: json.keys?.auth ?? "",
-      });
+      setStatus((await pedirPermissaoEAssinar()) as Status);
     } finally {
       setBusy(false);
     }
