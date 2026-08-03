@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { CalendarDays } from "lucide-react";
 import { ControlRoom } from "@/components/control/control-room";
-import { RundownGrid } from "@/components/rundown-grid";
+import { RundownColumns } from "@/components/rundown-columns";
 import { ControlChat } from "@/components/control/control-chat";
 import { getSession } from "@/lib/auth";
 import {
@@ -9,9 +9,7 @@ import {
   listLiveRundownEvents,
   getEventRundown,
   listRundownKinds,
-  listRundownTemplates,
   getRundownState,
-  estouEscaladoNoEvento,
 } from "@/lib/data";
 import { listarCanais } from "@/lib/chat";
 import { fmtEventWhen } from "@/lib/format";
@@ -58,11 +56,11 @@ export default async function ControlPage({ searchParams }: { searchParams: Prom
     );
   }
 
-  const [rundown, kinds, templates, canContribute, canais] = await Promise.all([
+  // Sem modelos nem "estou escalado": a régia CONDUZ (inicia, avança, encerra) e
+  // não edita estrutura, então essas duas consultas saíram do caminho.
+  const [rundown, kinds, canais] = await Promise.all([
     getEventRundown(ev.id),
     listRundownKinds(),
-    listRundownTemplates(),
-    estouEscaladoNoEvento(session, ev.id),
     listarCanais(session),
   ]);
   const canEdit = session.role === "admin" || session.profile.teams.some((t) => t.manages_rundown);
@@ -76,16 +74,14 @@ export default async function ControlPage({ searchParams }: { searchParams: Prom
       eventoTitulo={ev.title}
       quando={fmtEventWhen(ev.starts_at)}
       rundownSlot={
-        <RundownGrid
+        <RundownColumns
           eventId={ev.id}
           startsAt={ev.starts_at}
           startedAt={state.startedAt}
           endedAt={state.endedAt}
           items={rundown}
           kinds={kinds}
-          templates={templates}
           canEdit={canEdit}
-          canContribute={canContribute}
         />
       }
       chatSlot={

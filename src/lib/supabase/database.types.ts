@@ -662,6 +662,10 @@ export type Database = {
       event_rundown: {
         Row: {
           color: string | null
+          content_updated_at: string
+          content_updated_by: string | null
+          editing_at: string | null
+          editing_by: string | null
           created_at: string
           done_at: string | null
           duration_min: number
@@ -676,6 +680,10 @@ export type Database = {
         }
         Insert: {
           color?: string | null
+          content_updated_at?: string
+          content_updated_by?: string | null
+          editing_at?: string | null
+          editing_by?: string | null
           created_at?: string
           done_at?: string | null
           duration_min?: number
@@ -690,6 +698,10 @@ export type Database = {
         }
         Update: {
           color?: string | null
+          content_updated_at?: string
+          content_updated_by?: string | null
+          editing_at?: string | null
+          editing_by?: string | null
           created_at?: string
           done_at?: string | null
           duration_min?: number
@@ -1849,7 +1861,11 @@ export type Database = {
         Returns: undefined
       }
       contribuir_no_bloco: {
-        Args: { p_bloco: string; p_link: string; p_note: string }
+        Args: { p_bloco: string; p_link: string; p_note: string; p_versao?: string | null }
+        Returns: undefined
+      }
+      marcar_editando_bloco: {
+        Args: { p_bloco: string; p_on: boolean }
         Returns: undefined
       }
       definir_pasta_evento: {

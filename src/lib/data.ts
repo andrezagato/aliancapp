@@ -1108,16 +1108,43 @@ export type RundownItem = {
   note: string | null;
   link: string | null;
   doneAt: string | null;
+  /**
+   * Versão do CONTEÚDO (migration 0048). Volta no salvamento pra que uma
+   * alteração feita por outra pessoa no meio do caminho seja RECUSADA em vez de
+   * sobrescrita em silêncio.
+   */
+  contentUpdatedAt: string;
+  /** Quem apertou "Editar" — aviso, não bloqueio. `null` quando ninguém está. */
+  editingBy: string | null;
+  editingAt: string | null;
+  /** Nome de quem está editando, já resolvido pra a UI não ter que buscar. */
+  editingNome: string | null;
 };
+
+/**
+ * Nome de um perfil embutido numa consulta. O PostgREST devolve o embed de uma
+ * FK como objeto, mas os tipos gerados às vezes o inferem como array (depende de
+ * ele conseguir provar que é para-um) — normalizar aqui evita espalhar `[0]` e
+ * casts pelo código.
+ */
+function nomeDoPerfil(v: unknown): string | null {
+  const p = (Array.isArray(v) ? v[0] : v) as
+    | { nickname?: string | null; full_name?: string | null }
+    | null
+    | undefined;
+  return p?.nickname || p?.full_name || null;
+}
 
 export async function getEventRundown(eventId: string): Promise<RundownItem[]> {
   const supabase = await createClient();
   const { data } = await supabase
     .from("event_rundown")
-    .select("id, sort_order, title, kind, color, duration_min, responsible, note, link, done_at")
+    .select(
+      "id, sort_order, title, kind, color, duration_min, responsible, note, link, done_at, content_updated_at, editing_by, editing_at, editor:profiles!event_rundown_editing_by_fkey ( nickname, full_name )",
+    )
     .eq("event_id", eventId)
     .order("sort_order", { ascending: true });
-  return ((data ?? []) as {
+  return ((data ?? []) as unknown as {
     id: string;
     sort_order: number;
     title: string;
@@ -1128,6 +1155,10 @@ export async function getEventRundown(eventId: string): Promise<RundownItem[]> {
     note: string | null;
     link: string | null;
     done_at: string | null;
+    content_updated_at: string;
+    editing_by: string | null;
+    editing_at: string | null;
+    editor: unknown;
   }[]).map((r) => ({
     id: r.id,
     sortOrder: r.sort_order,
@@ -1139,6 +1170,10 @@ export async function getEventRundown(eventId: string): Promise<RundownItem[]> {
     note: r.note,
     link: r.link,
     doneAt: r.done_at,
+    contentUpdatedAt: r.content_updated_at,
+    editingBy: r.editing_by,
+    editingAt: r.editing_at,
+    editingNome: nomeDoPerfil(r.editor),
   }));
 }
 

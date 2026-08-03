@@ -34,51 +34,71 @@ import {
   excluirModeloCronograma,
   aplicarModeloCronograma,
   contribuirNoBloco,
+  marcarEditandoBloco,
 } from "@/lib/actions";
 import { warm } from "@/lib/toasts";
-import { createClient } from "@/lib/supabase/client";
 import type { RundownItem, RundownKind, RundownTemplate } from "@/lib/data";
 import { CATEGORY_HEXES, CATEGORY_NEUTRAL } from "@/lib/palette";
+import {
+  useRundownTiming,
+  fmtHora as fmt,
+  clock,
+  heatOf,
+  HEAT_TEXT,
+  type Heat,
+} from "@/components/rundown-timing";
+import { useRundownRealtime } from "@/components/rundown-realtime";
 
 const PX_PER_MIN = 6; // altura do bloco = duração × isto (arrastar 1min = 6px)
 const MIN_H = 72; // altura mínima pra caber os contadores/toque
 // Cor de bloco vem da Paleta de Categoria (DESIGN.md) — a rampa antiga era a
 // paleta default do Tailwind (ciano/violeta/azul), fria e de outra casa.
-const DEFAULT_COLOR = CATEGORY_NEUTRAL;
 const SWATCHES = [...CATEGORY_HEXES, CATEGORY_NEUTRAL];
 
-const tf = new Intl.DateTimeFormat("pt-BR", {
-  timeZone: "America/Sao_Paulo",
-  hour: "2-digit",
-  minute: "2-digit",
-  hourCycle: "h23",
-});
-const fmt = (ms: number) => tf.format(new Date(ms));
 const heightOf = (dur: number) => Math.max(MIN_H, dur * PX_PER_MIN);
-const pad = (n: number) => String(n).padStart(2, "0");
-function clock(ms: number): string {
-  const s = Math.max(0, Math.floor(ms / 1000));
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  return h > 0 ? `${h}:${pad(m)}:${pad(s % 60)}` : `${m}:${pad(s % 60)}`;
+
+/**
+ * TRAVA MACIA (migration 0048) — quanto tempo a marca "estou editando" vale.
+ *
+ * Curto de propósito: no meio de um culto, uma marca esquecida por quem fechou o
+ * app não pode assombrar o bloco. Depois disto o bloco lê como livre — e mesmo
+ * antes, dá pra assumir confirmando. O que garante que nada se perde é a VERSÃO
+ * (`contentUpdatedAt`), não esta marca.
+ */
+const TRAVA_TTL_MS = 2 * 60_000;
+
+/** Nome de quem está com o bloco na mão agora, ou `null` se está livre. */
+function quemEstaEditando(item: RundownItem, meId: string): string | null {
+  if (!item.editingBy || !item.editingAt || item.editingBy === meId) return null;
+  if (Date.now() - new Date(item.editingAt).getTime() > TRAVA_TTL_MS) return null;
+  return item.editingNome ?? "Outra pessoa";
 }
 
-// Escala de cor do contador conforme o tempo restante do bloco (ao vivo).
-type Heat = "normal" | "amber" | "orange" | "red";
-function heatOf(remainingMs: number): Heat {
-  if (remainingMs <= 0) return "red";
-  if (remainingMs <= 60_000) return "orange";
-  if (remainingMs <= 120_000) return "amber";
-  return "normal";
+/**
+ * Marca o bloco como "em edição" enquanto o modal está aberto e solta ao fechar.
+ * Aceita `null` porque o mesmo modal serve pra criar bloco, quando não há o que
+ * marcar.
+ */
+function useMarcaDeEdicao(blocoId: string | null) {
+  useEffect(() => {
+    if (!blocoId) return;
+    void marcarEditandoBloco(blocoId, true);
+    return () => {
+      void marcarEditandoBloco(blocoId, false);
+    };
+  }, [blocoId]);
 }
-// O sistema tem DUAS cores de alerta (âmbar = atenção, telha = estourou), não
-// três. O terceiro degrau escala no PESO, não numa cor nova de biblioteca.
-const HEAT_TEXT: Record<Heat, string> = {
-  normal: "text-foreground",
-  amber: "text-warning-ink",
-  orange: "text-destructive-ink",
-  red: "text-destructive-ink font-extrabold",
-};
+
+/** Aviso de que outra pessoa abriu o bloco antes de você. */
+function AvisoDeEdicao({ nome }: { nome: string }) {
+  return (
+    <p className="rounded-[14px] bg-warning/10 px-3 py-2 text-[13px] leading-snug text-warning-ink">
+      <strong>{nome}</strong> abriu este bloco pra editar agora. Se salvar por cima, o que a outra
+      pessoa escrever depois não vai ser perdido — o app recusa e avisa. Mas talvez valha combinar
+      antes.
+    </p>
+  );
+}
 
 /** Contador com rótulo (início · corrido · passou). */
 function Stat({
@@ -111,14 +131,6 @@ function Stat({
   );
 }
 
-type Row = {
-  it: RundownItem;
-  startMs: number;
-  endMs: number;
-  durMs: number;
-  status: "done" | "live" | "future" | "planned";
-};
-
 type Drag =
   | { mode: "resize"; id: string; startY: number; startDur: number; newDur: number }
   | { mode: "reorder"; id: string }
@@ -134,6 +146,7 @@ export function RundownGrid({
   templates,
   canEdit,
   canContribute,
+  meId,
   actions,
 }: {
   eventId: string;
@@ -145,6 +158,8 @@ export function RundownGrid({
   templates: RundownTemplate[];
   canEdit: boolean;
   canContribute: boolean;
+  /** Pra não avisar "você está editando" pra própria pessoa (trava da 0048). */
+  meId: string;
   actions?: React.ReactNode;
 }) {
   const router = useRouter();
@@ -155,7 +170,6 @@ export function RundownGrid({
   const [started, setStarted] = useState<string | null>(startedAt);
   const [ended, setEnded] = useState<string | null>(endedAt);
   const [drag, setDrag] = useState<Drag>(null);
-  const [now, setNow] = useState<number | null>(null);
   const [editing, setEditing] = useState<RundownItem | "new" | null>(null);
   const [contributing, setContributing] = useState<RundownItem | null>(null);
   const [manageKinds, setManageKinds] = useState(false);
@@ -166,95 +180,15 @@ export function RundownGrid({
   useEffect(() => setStarted(startedAt), [startedAt]);
   useEffect(() => setEnded(endedAt), [endedAt]);
 
-  // ---------------------------------------------------------------------------
-  // AO VIVO PRA TODO MUNDO (migration 0047)
-  // Antes, quem marcava um bloco via a mudança na hora e o resto da equipe só
-  // depois de puxar a tela — no meio do culto, quando ninguém tem mão livre.
-  // Agora o app escuta as mudanças do roteiro deste evento e se atualiza.
-  //
-  // O cuidado: o grid espelha `items` em estado local, então um refresh no meio
-  // de um arraste ou com um modal aberto atropelaria o que a pessoa está
-  // fazendo. Enquanto ela estiver ocupada, a atualização espera a mão sair.
-  // ---------------------------------------------------------------------------
+  // Tempo real (migration 0047) mora no hook, compartilhado com a régia. Aqui
+  // `ocupado` importa: este grid espelha `items` em estado local, então atualizar
+  // no meio de um arraste ou com modal aberto atropelaria a mão da pessoa.
   const ocupado = drag !== null || editing !== null || contributing !== null || manageKinds || manageTpl;
+  useRundownRealtime({ eventId, ocupado });
+  // Ref à parte pra centralizar no bloco ao vivo lendo o valor mais recente sem
+  // reexecutar o efeito (ele depende da TROCA de bloco, não de `ocupado`).
   const ocupadoRef = useRef(ocupado);
   ocupadoRef.current = ocupado;
-  const atualizacaoPendente = useRef(false);
-
-  useEffect(() => {
-    const supabase = createClient();
-    let timer: number | null = null;
-    let pesquisa: number | null = null;
-    let conectado = false;
-
-    const aplicar = () => {
-      if (ocupadoRef.current) {
-        atualizacaoPendente.current = true; // guarda pra quando a mão sair
-        return;
-      }
-      // junta rajadas (reordenar mexe em vários blocos de uma vez)
-      if (timer) window.clearTimeout(timer);
-      timer = window.setTimeout(() => router.refresh(), 250);
-    };
-
-    // Rede de segurança. O websocket é o caminho rápido, não o único: celular
-    // dorme e derruba a conexão, wi-fi de igreja às vezes bloqueia websocket, e
-    // no meio do culto ninguém vai descobrir que "parou de atualizar". Então
-    // também perguntamos de tempos em tempos — devagar quando o tempo real está
-    // de pé, rápido quando ele caiu.
-    const repesquisar = () => {
-      if (pesquisa) window.clearInterval(pesquisa);
-      pesquisa = window.setInterval(aplicar, conectado ? 30_000 : 8_000);
-    };
-
-    const canal = supabase
-      .channel(`roteiro:${eventId}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "event_rundown", filter: `event_id=eq.${eventId}` },
-        aplicar,
-      )
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "events", filter: `id=eq.${eventId}` },
-        aplicar,
-      )
-      .subscribe((status) => {
-        conectado = status === "SUBSCRIBED";
-        repesquisar();
-      });
-    repesquisar();
-
-    // Voltou pro app depois de bloquear a tela: o socket provavelmente morreu
-    // enquanto estava em segundo plano. Busca na hora, sem esperar o intervalo.
-    const aoVoltar = () => {
-      if (document.visibilityState === "visible") aplicar();
-    };
-    document.addEventListener("visibilitychange", aoVoltar);
-
-    return () => {
-      if (timer) window.clearTimeout(timer);
-      if (pesquisa) window.clearInterval(pesquisa);
-      document.removeEventListener("visibilitychange", aoVoltar);
-      supabase.removeChannel(canal);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [eventId]);
-
-  // A mão saiu (soltou o bloco, fechou o modal) e tinha mudança esperando.
-  useEffect(() => {
-    if (ocupado || !atualizacaoPendente.current) return;
-    atualizacaoPendente.current = false;
-    router.refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ocupado]);
-
-  // Relógio ao vivo (só depois de montar, pra não quebrar a hidratação).
-  useEffect(() => {
-    setNow(Date.now());
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, []);
 
   const listRef = useRef(list);
   listRef.current = list;
@@ -266,43 +200,22 @@ export function RundownGrid({
   // só o guard `!drag` não segura — daí o modal abrir sem querer).
   const suppressClickRef = useRef(false);
 
-  const colorOf = useCallback(
-    (it: RundownItem) => it.color ?? kinds.find((k) => k.label === it.kind)?.color ?? DEFAULT_COLOR,
-    [kinds],
-  );
-
-  // ---- Projeção de horários (o coração do "ao vivo") ----------------------
-  const startedMs = started ? new Date(started).getTime() : null;
-  const endedMs = ended ? new Date(ended).getTime() : null;
-  const plannedStartMs = new Date(startsAt).getTime();
-  // Encerrado → congela em endedMs (nada "ao vivo"); senão segue o relógio.
-  const liveNow = endedMs ?? now;
-  const liveIdx = startedMs != null && endedMs == null ? list.findIndex((it) => !it.doneAt) : -1;
-  const totalMin = list.reduce((s, i) => s + i.durationMin, 0);
-  const allDone = list.length > 0 && list.every((it) => it.doneAt);
-
-  let cursor = startedMs ?? plannedStartMs;
-  const rows: Row[] = list.map((it, i) => {
-    const durMs = it.durationMin * 60000;
-    const startMs = cursor;
-    let endMs: number;
-    let status: Row["status"];
-    if (it.doneAt) {
-      endMs = new Date(it.doneAt).getTime();
-      status = "done";
-    } else if (i === liveIdx) {
-      status = "live";
-      const plannedEnd = startMs + durMs;
-      endMs = liveNow != null ? Math.max(plannedEnd, liveNow) : plannedEnd;
-    } else {
-      status = startedMs != null ? "future" : "planned";
-      endMs = startMs + durMs;
-    }
-    cursor = endMs;
-    return { it, startMs, endMs, durMs, status };
-  });
-  const finishMs = cursor;
-  const overFinish = startedMs != null && endedMs == null && finishMs > plannedStartMs + totalMin * 60000 + 60000;
+  // ---- Projeção de horários -----------------------------------------------
+  // Mora no hook: a grade da régia (`rundown-columns.tsx`) desenha OUTRA coisa a
+  // partir exatamente destes números, e as duas telas não podem discordar sobre
+  // que hora começa o sermão.
+  const {
+    now,
+    rows,
+    totalMin,
+    allDone,
+    startedMs,
+    plannedStartMs,
+    finishMs,
+    liveNow,
+    overFinish,
+    corDoBloco: colorOf,
+  } = useRundownTiming({ items: list, kinds, startsAt, started, ended });
 
   // ---- Persistência -------------------------------------------------------
   const persistOrder = (next: RundownItem[]) =>
@@ -740,6 +653,7 @@ export function RundownGrid({
         <BlocoModal
           eventId={eventId}
           item={editing === "new" ? null : editing}
+          meId={meId}
           kinds={kinds}
           onManageKinds={() => setManageKinds(true)}
           onDelete={editing !== "new" ? () => remove((editing as RundownItem).id) : undefined}
@@ -747,7 +661,9 @@ export function RundownGrid({
         />
       ) : null}
 
-      {contributing ? <ContribuirModal item={contributing} onClose={() => setContributing(null)} /> : null}
+      {contributing ? (
+        <ContribuirModal item={contributing} meId={meId} onClose={() => setContributing(null)} />
+      ) : null}
 
       {manageKinds ? <KindsManager kinds={kinds} onClose={() => setManageKinds(false)} /> : null}
 
@@ -777,18 +693,30 @@ const inputCls = "w-full rounded-[12px] border border-border bg-card px-3 py-2 t
 // -----------------------------------------------------------------------------
 // Modal de CONTRIBUIÇÃO — voluntário escalado só adiciona link/observação
 // -----------------------------------------------------------------------------
-function ContribuirModal({ item, onClose }: { item: RundownItem; onClose: () => void }) {
+function ContribuirModal({
+  item,
+  meId,
+  onClose,
+}: {
+  item: RundownItem;
+  meId: string;
+  onClose: () => void;
+}) {
   const router = useRouter();
   const { showToast } = useToast();
   const [pending, startTx] = useTransition();
   const [link, setLink] = useState(item.link ?? "");
   const [note, setNote] = useState(item.note ?? "");
   const [error, setError] = useState<string | null>(null);
+  useMarcaDeEdicao(item.id);
+  const outro = quemEstaEditando(item, meId);
 
   const save = () => {
     setError(null);
     startTx(async () => {
-      const r = await contribuirNoBloco(item.id, link, note);
+      // Manda a versão que ESTE modal leu: se alguém salvou no meio, a ação
+      // recusa e diz quem foi, em vez de apagar o que a pessoa escreveu.
+      const r = await contribuirNoBloco(item.id, link, note, item.contentUpdatedAt);
       if (r.ok) {
         onClose();
         router.refresh();
@@ -802,6 +730,7 @@ function ContribuirModal({ item, onClose }: { item: RundownItem; onClose: () => 
   return (
     <Modal open onClose={() => !pending && onClose()} sheet title={item.title}>
       <div className="mt-1 space-y-4">
+        {outro ? <AvisoDeEdicao nome={outro} /> : null}
         <label className="block">
           <span className="mb-1 block text-sm font-medium">Link (opcional)</span>
           <input className={inputCls} placeholder="YouTube, Drive, letra…" value={link} onChange={(e) => setLink(e.target.value)} />
@@ -826,6 +755,7 @@ function ContribuirModal({ item, onClose }: { item: RundownItem; onClose: () => 
 function BlocoModal({
   eventId,
   item,
+  meId,
   kinds,
   onManageKinds,
   onDelete,
@@ -833,6 +763,7 @@ function BlocoModal({
 }: {
   eventId: string;
   item: RundownItem | null;
+  meId: string;
   kinds: RundownKind[];
   onManageKinds: () => void;
   onDelete?: () => void;
@@ -849,6 +780,8 @@ function BlocoModal({
   const [note, setNote] = useState(item?.note ?? "");
   const [link, setLink] = useState(item?.link ?? "");
   const [error, setError] = useState<string | null>(null);
+  useMarcaDeEdicao(item?.id ?? null);
+  const outro = item ? quemEstaEditando(item, meId) : null;
 
   const pickKind = (k: RundownKind) => {
     setKind(k.label);
@@ -870,7 +803,8 @@ function BlocoModal({
         link,
       };
       const r = item
-        ? await atualizarBlocoCronograma(item.id, eventId, input)
+        ? // a versão lida ao abrir: quem salvou primeiro ganha, o segundo é avisado
+          await atualizarBlocoCronograma(item.id, eventId, input, item.contentUpdatedAt)
         : await adicionarBlocoCronograma(eventId, input);
       if (r.ok) {
         onClose();
@@ -885,6 +819,7 @@ function BlocoModal({
   return (
     <Modal open onClose={() => !pending && onClose()} sheet title={item ? "Editar bloco" : "Novo bloco"}>
       <div className="mt-1 space-y-4">
+        {outro ? <AvisoDeEdicao nome={outro} /> : null}
         <div>
           <div className="mb-1.5 flex items-center justify-between">
             <p className="text-sm font-medium">Tipo</p>

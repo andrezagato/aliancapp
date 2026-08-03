@@ -1275,8 +1275,20 @@ async function podeEditarCronograma(session: Session, _eventId: string): Promise
   return session.role === "admin" || session.profile.teams.some((t) => t.manages_rundown);
 }
 
-/** Voluntário escalado no evento adiciona link/observação a um bloco (não mexe na estrutura). */
-export async function contribuirNoBloco(blocoId: string, link: string, note: string): Promise<ActionResult> {
+/**
+ * Voluntário escalado no evento adiciona link/observação a um bloco (não mexe na
+ * estrutura).
+ *
+ * `versao` é o `contentUpdatedAt` que o cliente LEU. A RPC recusa se o conteúdo
+ * mudou nesse meio-tempo (migration 0048) — antes disso, dois departamentos
+ * anotando no mesmo bloco se sobrescreviam sem ninguém ficar sabendo.
+ */
+export async function contribuirNoBloco(
+  blocoId: string,
+  link: string,
+  note: string,
+  versao?: string | null,
+): Promise<ActionResult> {
   const session = await getSession();
   if (!session) return fail("Sessão expirada.");
   const supabase = await createClient();
@@ -1284,9 +1296,36 @@ export async function contribuirNoBloco(blocoId: string, link: string, note: str
     p_bloco: blocoId,
     p_link: link.trim(),
     p_note: note.trim(),
+    p_versao: versao ?? null,
   });
-  if (error) return fail(error.message);
+  if (error) {
+    const conflito = /ALTERADO_POR:(.+)$/.exec(error.message);
+    if (conflito) return fail(mensagemDeConflito(conflito[1].trim()));
+    return fail(error.message);
+  }
   revalidatePath("/cronograma");
+  return ok;
+}
+
+/** Uma frase só, e ela precisa dizer o que fazer — não só que deu errado. */
+function mensagemDeConflito(nome: string): string {
+  return `${nome} alterou este bloco enquanto você escrevia. Feche e abra de novo pra ver o que mudou — nada foi apagado.`;
+}
+
+/**
+ * Marca/solta o aviso "estou editando este bloco" (migration 0048).
+ *
+ * É AVISO, não bloqueio: aparece na tela dos outros pelo realtime da 0047 e pode
+ * ser assumido por quem confirmar. Trava dura no meio de um culto ao vivo seria
+ * pior que o problema — bastaria o celular de quem abriu morrer pra ninguém mais
+ * poder corrigir o roteiro.
+ */
+export async function marcarEditandoBloco(blocoId: string, on: boolean): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("marcar_editando_bloco", { p_bloco: blocoId, p_on: on });
+  if (error) return fail(error.message);
   return ok;
 }
 
@@ -1388,14 +1427,24 @@ export async function adicionarBlocoCronograma(eventId: string, input: BlocoInpu
   return ok;
 }
 
-export async function atualizarBlocoCronograma(id: string, eventId: string, input: BlocoInput): Promise<ActionResult> {
+/**
+ * `versao` é o `contentUpdatedAt` que o cliente leu. O filtro `.eq` sobre ele faz
+ * do UPDATE um compare-and-set atômico no banco: se outra pessoa salvou nesse
+ * meio-tempo, nenhuma linha casa e nada é sobrescrito.
+ */
+export async function atualizarBlocoCronograma(
+  id: string,
+  eventId: string,
+  input: BlocoInput,
+  versao?: string | null,
+): Promise<ActionResult> {
   const session = await getSession();
   if (!session) return fail("Sessão expirada.");
   if (!(await podeEditarCronograma(session, eventId))) return fail("Sem permissão.");
   const title = input.title.trim();
   if (!title) return fail("Dê um nome ao bloco.");
   const supabase = await createClient();
-  const { error } = await supabase
+  let q = supabase
     .from("event_rundown")
     .update({
       title,
@@ -1405,9 +1454,34 @@ export async function atualizarBlocoCronograma(id: string, eventId: string, inpu
       responsible: input.responsible?.trim() || null,
       note: input.note?.trim() || null,
       link: input.link?.trim() || null,
+      content_updated_at: new Date().toISOString(),
+      content_updated_by: session.userId,
+      // salvou = soltou: não deixa a própria marca de "editando" pra trás
+      editing_by: null,
+      editing_at: null,
     })
     .eq("id", id);
+  // Sem `versao` (cliente antigo, aba aberta desde antes deste deploy) o
+  // comportamento continua o de sempre — travar quem não sabe da versão seria
+  // trocar uma perda silenciosa por um erro incompreensível.
+  if (versao) q = q.eq("content_updated_at", versao);
+  const { data: salvos, error } = await q.select("id");
   if (error) return fail(error.message);
+
+  if (versao && (!salvos || salvos.length === 0)) {
+    const { data: atual } = await supabase
+      .from("event_rundown")
+      .select("id, autor:profiles!event_rundown_content_updated_by_fkey ( nickname, full_name )")
+      .eq("id", id)
+      .maybeSingle();
+    if (!atual) return fail("Este bloco foi removido do roteiro.");
+    const a = (Array.isArray(atual.autor) ? atual.autor[0] : atual.autor) as
+      | { nickname: string | null; full_name: string | null }
+      | null
+      | undefined;
+    return fail(mensagemDeConflito(a?.nickname || a?.full_name || "Outra pessoa"));
+  }
+
   revalidatePath(`/escalas/${eventId}`);
   revalidatePath("/cronograma");
   return ok;

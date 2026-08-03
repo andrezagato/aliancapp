@@ -105,6 +105,7 @@ export default async function CronogramaPage({ searchParams }: { searchParams: P
                 templates={templates}
                 canEdit={canEdit}
                 canContribute={canContribute}
+                meId={session.userId}
                 actions={
                   <EventFilesCard eventId={ev.id} url={filesUrl} canEdit={canEdit} escalaHref={`/escalas/${ev.id}`} />
                 }
