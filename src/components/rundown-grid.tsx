@@ -364,8 +364,11 @@ export function RundownGrid({
 
   return (
     <section>
-      {/* Cabeçalho: início → fim + total + relógio ao vivo */}
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-0.5">
+      {/* Cabeçalho: início → fim + total + relógio ao vivo.
+          GRUDADO no topo: o relógio ao vivo e o botão de encerrar são justamente
+          o que não pode sumir quando se rola a lista pra conferir um bloco lá
+          embaixo. `bg-card` casa com o card que envolve o roteiro. */}
+      <div className="sticky top-0 z-20 mb-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 bg-card px-0.5 py-2">
         <div className="min-w-0">
           <h3 className="font-display text-xl font-extrabold leading-tight">Ordem do culto</h3>
           {list.length > 0 ? (
@@ -752,7 +755,12 @@ function ContribuirModal({
   );
 }
 
-function BlocoModal({
+/**
+ * Exportado porque a régia (`rundown-columns.tsx`) edita bloco com ESTE mesmo
+ * modal. Duas telas de edição divergiriam — e a trava por versão da 0048 só
+ * funciona se as duas mandarem o `contentUpdatedAt` do mesmo jeito.
+ */
+export function BlocoModal({
   eventId,
   item,
   meId,
@@ -765,7 +773,8 @@ function BlocoModal({
   item: RundownItem | null;
   meId: string;
   kinds: RundownKind[];
-  onManageKinds: () => void;
+  /** Ausente na régia: gerenciar tipos é coisa de montar roteiro, não de conduzir. */
+  onManageKinds?: () => void;
   onDelete?: () => void;
   onClose: () => void;
 }) {
@@ -823,9 +832,11 @@ function BlocoModal({
         <div>
           <div className="mb-1.5 flex items-center justify-between">
             <p className="text-sm font-medium">Tipo</p>
-            <button onClick={onManageKinds} className="press-sm inline-flex items-center gap-1 text-[13px] font-semibold text-primary">
-              <Settings2 className="size-3.5" /> Gerenciar
-            </button>
+            {onManageKinds ? (
+              <button onClick={onManageKinds} className="press-sm inline-flex items-center gap-1 text-[13px] font-semibold text-primary">
+                <Settings2 className="size-3.5" /> Gerenciar
+              </button>
+            ) : null}
           </div>
           <div className="flex flex-wrap gap-1.5">
             {kinds.map((k) => (

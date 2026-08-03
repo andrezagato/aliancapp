@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Play, Square, RotateCcw, Check, Minus, Plus } from "lucide-react";
+import { Play, Square, RotateCcw, Check, Minus, Plus, ChevronUp, ChevronDown, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/toast";
 import { warm } from "@/lib/toasts";
@@ -11,7 +11,10 @@ import {
   reiniciarCronograma,
   encerrarCronograma,
   marcarBlocoFeito,
+  reordenarCronograma,
+  removerBlocoCronograma,
 } from "@/lib/actions";
+import { BlocoModal } from "@/components/rundown-grid";
 import type { RundownItem, RundownKind } from "@/lib/data";
 import type { ActionResult } from "@/lib/types";
 import {
@@ -61,7 +64,7 @@ const FONTE_MAX = 26;
 
 /** Larguras em `em` pra escalarem junto com o controle de fonte. */
 const COLS =
-  "grid-cols-[2.2em_4.6em_4.6em_4.6em_minmax(6em,0.7fr)_minmax(5em,0.7fr)_minmax(16em,3fr)]";
+  "grid-cols-[2.2em_4.6em_4.6em_4.6em_minmax(6em,0.7fr)_minmax(5em,0.7fr)_minmax(16em,3fr)_auto]";
 
 const TZ = "America/Sao_Paulo";
 /** "seg · 3 ago · 17:15" — a régia não precisa de "Segunda-Feira, 3 De Agosto". */
@@ -121,6 +124,7 @@ function Cabecalho() {
       <span>Bloco</span>
       <span>Responsável</span>
       <span>Observação</span>
+      <span />
     </div>
   );
 }
@@ -133,6 +137,13 @@ function Linha({
   podeAvancar,
   onAvancar,
   ocupado,
+  canEdit,
+  primeiro,
+  ultimo,
+  onSubir,
+  onDescer,
+  onEditar,
+  refLinha,
 }: {
   row: RundownRow;
   idx: number;
@@ -141,6 +152,13 @@ function Linha({
   podeAvancar: boolean;
   onAvancar: () => void;
   ocupado: boolean;
+  canEdit: boolean;
+  primeiro: boolean;
+  ultimo: boolean;
+  onSubir: () => void;
+  onDescer: () => void;
+  onEditar: () => void;
+  refLinha: (el: HTMLElement | null) => void;
 }) {
   const { it, startMs, endMs, durMs, status } = row;
   const live = status === "live";
@@ -165,6 +183,7 @@ function Linha({
 
   return (
     <div
+      ref={refLinha}
       className={cn(
         "grid items-start gap-x-[0.9em] px-[0.9em] py-[0.62em]",
         COLS,
@@ -254,6 +273,43 @@ function Linha({
           </button>
         ) : null}
       </span>
+
+      {/* Reordenar por SETAS, não por arraste: num monitor de sala de controle,
+          durante o culto, um arraste acidental reescreveria a ordem do culto sem
+          ninguém perceber. Duas setas exigem intenção e não têm meio-termo. */}
+      {canEdit ? (
+        <span className="flex shrink-0 items-center gap-[0.15em]">
+          <button
+            onClick={onSubir}
+            disabled={ocupado || primeiro}
+            aria-label={`Mover "${it.title}" para cima`}
+            title="Mover para cima"
+            className="press-sm grid size-[1.9em] place-items-center rounded-full text-muted-foreground disabled:opacity-25"
+          >
+            <ChevronUp className="size-[1.1em]" />
+          </button>
+          <button
+            onClick={onDescer}
+            disabled={ocupado || ultimo}
+            aria-label={`Mover "${it.title}" para baixo`}
+            title="Mover para baixo"
+            className="press-sm grid size-[1.9em] place-items-center rounded-full text-muted-foreground disabled:opacity-25"
+          >
+            <ChevronDown className="size-[1.1em]" />
+          </button>
+          <button
+            onClick={onEditar}
+            disabled={ocupado}
+            aria-label={`Editar "${it.title}"`}
+            title="Editar bloco"
+            className="press-sm grid size-[1.9em] place-items-center rounded-full text-muted-foreground disabled:opacity-40"
+          >
+            <Pencil className="size-[1em]" />
+          </button>
+        </span>
+      ) : (
+        <span />
+      )}
     </div>
   );
 }
@@ -261,6 +317,7 @@ function Linha({
 export function RundownColumns({
   eventId,
   titulo,
+  meId,
   startsAt,
   startedAt,
   endedAt,
@@ -270,6 +327,7 @@ export function RundownColumns({
 }: {
   eventId: string;
   titulo: string;
+  meId: string;
   startsAt: string;
   startedAt: string | null;
   endedAt: string | null;
@@ -281,6 +339,7 @@ export function RundownColumns({
   const { showToast } = useToast();
   const [ocupado, startTx] = useTransition();
   const [fonte, setFonte] = useState(FONTE_PADRAO);
+  const [editando, setEditando] = useState<RundownItem | "novo" | null>(null);
 
   // O tamanho da letra é do APARELHO, não da conta: depende da distância entre a
   // mesa e o monitor daquela sala — mesma lógica da URL do stream.
@@ -303,12 +362,25 @@ export function RundownColumns({
       return novo;
     });
 
-  // Só-leitura no que importa pro realtime: não há estado local espelhando
-  // `items` aqui (sem arraste, sem modal), então nunca precisa esperar a mão.
-  useRundownRealtime({ eventId });
+  // Com um modal aberto a atualização espera: um refresh no meio da digitação
+  // remontaria a grade debaixo da pessoa. Fora isso a régia não espelha `items`
+  // em estado local, então pode atualizar à vontade.
+  useRundownRealtime({ eventId, ocupado: editando !== null });
 
   const { now, rows, totalMin, startedMs, endedMs, finishMs, desvioMs, corDoBloco } =
     useRundownTiming({ items, kinds, startsAt, started: startedAt, ended: endedAt });
+
+  // Bloco ao vivo sempre à vista, MESMA regra do celular: centraliza quando o
+  // bloco TROCA, não a cada segundo — senão brigaria com quem rolou a grade pra
+  // conferir outro trecho, puxando a tela de volta no meio da leitura.
+  const linhaRefs = useRef(new Map<string, HTMLElement>());
+  const blocoAtivoId = rows.find((r) => r.status === "live")?.it.id ?? null;
+  const editandoRef = useRef(editando);
+  editandoRef.current = editando;
+  useEffect(() => {
+    if (!blocoAtivoId || editandoRef.current) return;
+    linhaRefs.current.get(blocoAtivoId)?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [blocoAtivoId]);
 
   const rodando = startedMs != null && endedMs == null;
   const desvio = desvioTexto(desvioMs);
@@ -325,14 +397,26 @@ export function RundownColumns({
       router.refresh();
     });
 
+  /** Troca o bloco de lugar com o vizinho e persiste a ordem inteira. */
+  const mover = (idx: number, delta: number) => {
+    const proxima = [...rows.map((r) => r.it)];
+    const destino = idx + delta;
+    if (destino < 0 || destino >= proxima.length) return;
+    [proxima[idx], proxima[destino]] = [proxima[destino], proxima[idx]];
+    agir(() => reordenarCronograma(eventId, proxima.map((x) => x.id)));
+  };
+
   return (
     <div className="flex min-h-0 min-w-[52em] flex-col" style={{ fontSize: `${fonte}px` }}>
       {/* --------------------------------------------------------------------
-          UMA barra só. Antes eram duas — título numa, números noutra — e as duas
-          quase vazias. O que a régia lê de longe (corrido e desvio) fica grande;
-          o resto encolhe pra rótulo miúdo.
+          UMA barra só, GRUDADA no topo. Antes eram duas — título numa, números
+          noutra — e as duas quase vazias. O que a régia lê de longe (corrido e
+          desvio) fica grande; o resto encolhe pra rótulo miúdo. O `sticky`
+          envolve também os rótulos das colunas: rolar a grade e perder de vista
+          o cronômetro OU o nome das colunas quebraria a leitura no meio.
          -------------------------------------------------------------------- */}
-      <div className="mb-[0.7em] flex shrink-0 flex-wrap items-center gap-x-[1.4em] gap-y-[0.5em] rounded-[0.8em] bg-primary/[0.06] px-[0.9em] py-[0.6em]">
+      <div className="sticky top-0 z-10 shrink-0 bg-card pt-[0.1em]">
+      <div className="mb-[0.7em] flex flex-wrap items-center gap-x-[1.4em] gap-y-[0.5em] rounded-[0.8em] bg-primary/[0.06] px-[0.9em] py-[0.6em]">
         <div className="min-w-0">
           <p className="truncate font-display text-[1.15em] font-extrabold leading-tight">{titulo}</p>
           <p className="text-[0.72em] text-muted-foreground">{dataCurta(startsAt)}</p>
@@ -392,6 +476,16 @@ export function RundownColumns({
             </button>
           </span>
 
+          {canEdit ? (
+            <button
+              onClick={() => setEditando("novo")}
+              disabled={ocupado}
+              className="press-sm inline-flex h-[2.4em] items-center gap-[0.4em] rounded-full border border-border px-[0.9em] text-[0.9em] font-bold disabled:opacity-60"
+            >
+              <Plus className="size-[1.1em]" /> Bloco
+            </button>
+          ) : null}
+
           {canEdit && items.length > 0 ? (
             <>
               {startedMs == null ? (
@@ -428,29 +522,63 @@ export function RundownColumns({
         </span>
       </div>
 
+        {items.length > 0 ? <Cabecalho /> : null}
+      </div>
+
       {items.length === 0 ? (
         <p className="grid flex-1 place-items-center text-center text-[0.9em] text-muted-foreground">
-          Este culto ainda não tem roteiro. Monte a ordem na aba Roteiro.
+          Este culto ainda não tem roteiro.{" "}
+          {canEdit ? "Toque em “Bloco” acima pra começar." : "Monte a ordem na aba Roteiro."}
         </p>
       ) : (
-        <>
-          <Cabecalho />
-          <div className="min-h-0 divide-y divide-border">
-            {rows.map((row, idx) => (
-              <Linha
-                key={row.it.id}
-                row={row}
-                idx={idx}
-                cor={corDoBloco(row.it)}
-                now={now}
-                podeAvancar={canEdit && rodando}
-                ocupado={ocupado}
-                onAvancar={() => agir(() => marcarBlocoFeito(row.it.id, eventId, true))}
-              />
-            ))}
-          </div>
-        </>
+        <div className="min-h-0 divide-y divide-border">
+          {rows.map((row, idx) => (
+            <Linha
+              key={row.it.id}
+              row={row}
+              idx={idx}
+              cor={corDoBloco(row.it)}
+              now={now}
+              podeAvancar={canEdit && rodando}
+              ocupado={ocupado}
+              onAvancar={() => agir(() => marcarBlocoFeito(row.it.id, eventId, true))}
+              canEdit={canEdit}
+              primeiro={idx === 0}
+              ultimo={idx === rows.length - 1}
+              onSubir={() => mover(idx, -1)}
+              onDescer={() => mover(idx, 1)}
+              onEditar={() => setEditando(row.it)}
+              refLinha={(el) => {
+                if (el) linhaRefs.current.set(row.it.id, el);
+                else linhaRefs.current.delete(row.it.id);
+              }}
+            />
+          ))}
+        </div>
       )}
+
+      {/* MESMO modal do celular (exportado de rundown-grid.tsx): duas telas de
+          edição divergiriam, e a trava por versão da 0048 depende das duas
+          mandarem o `contentUpdatedAt` igual. Sem "gerenciar tipos" aqui —
+          isso é montar roteiro, não conduzir culto. */}
+      {editando ? (
+        <BlocoModal
+          eventId={eventId}
+          item={editando === "novo" ? null : editando}
+          meId={meId}
+          kinds={kinds}
+          onDelete={
+            editando !== "novo"
+              ? () => {
+                  const alvo = editando;
+                  setEditando(null);
+                  agir(() => removerBlocoCronograma(alvo.id, eventId));
+                }
+              : undefined
+          }
+          onClose={() => setEditando(null)}
+        />
+      ) : null}
     </div>
   );
 }
