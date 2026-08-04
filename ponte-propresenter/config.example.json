@@ -1,0 +1,36 @@
+{
+  "_comentario": "Copie este arquivo como config.json (ao lado de ponte.js) e preencha. Nada aqui vai pro git.",
+
+  "supabaseUrl": "https://SEU-PROJETO.supabase.co",
+  "supabaseAnonKey": "COLE_A_NEXT_PUBLIC_SUPABASE_ANON_KEY",
+
+  "_conta": "Conta do Sirvo que a ponte usa pra LER o roteiro. Use uma conta dedicada (ex: regia@...), membro comum — ela só precisa ler.",
+  "email": "regia@suaigreja.com",
+  "senha": "SENHA_DA_CONTA_REGIA",
+
+  "proPresenter": {
+    "_host": "127.0.0.1 = o próprio PC do ProPresenter (é onde a ponte deve rodar).",
+    "host": "127.0.0.1",
+    "_porta": "Preferências → Rede → porta da rede do ProPresenter.",
+    "porta": 20304,
+    "_senha": "A senha de CONTROLE (controller) do ProPresenter Remote. Se não houver, deixe \"\".",
+    "senha": "",
+
+    "_timer": "Deixe timerIndice em null e a ponte acha o timer pelo nome. Depois do --diagnosticar você pode fixar o índice.",
+    "timerNome": "BLOCO",
+    "timerIndice": null,
+
+    "_overrun": "true = o timer continua contando no negativo quando o bloco estoura (recomendado: mostra o quanto passou).",
+    "overrun": true,
+
+    "_renomearTimer": "true = renomeia o timer com o nome do bloco a cada troca. Exige timerIndice fixado.",
+    "renomearTimer": false
+  },
+
+  "_poll": "De quanto em quanto tempo a ponte pergunta ao Sirvo se o bloco mudou (ms).",
+  "pollAoVivoMs": 1000,
+  "pollParadoMs": 10000,
+
+  "_overrunBooleano": "Não mexa a não ser que o ProPresenter reclame do clockUpdate. true manda clockOverrun como true/false; false manda como 1/0.",
+  "overrunBooleano": true
+}

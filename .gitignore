@@ -44,3 +44,8 @@ yarn-error.log*
 # impeccable (guardrail de design) — cache do hook e skill instalada por máquina
 .impeccable/hook.cache.json
 /.claude/skills/
+
+# ponte do ProPresenter — config tem senha, o resto é por máquina
+/ponte-propresenter/config.json
+/ponte-propresenter/ponte.log
+/ponte-propresenter/node/
