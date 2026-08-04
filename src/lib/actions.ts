@@ -1531,16 +1531,22 @@ export async function ajustarDuracaoBloco(id: string, eventId: string, durationM
 
 // --- Modo ao vivo do cronograma -------------------------------------------
 
+/**
+ * As três abaixo mexem em `events`, e é aí que morava um bug silencioso: a RLS
+ * de `events` só deixa ADMIN escrever, mas o app libera quem gerencia roteiro
+ * (Produção). O UPDATE da líder casava com zero linhas — e zero linhas NÃO é
+ * erro — então o app dizia "iniciado" e o banco não guardava nada. Desde a
+ * migration 0049 elas passam por RPC `security definer`, que checa a permissão
+ * por dentro e RECLAMA quando nega. Ver o cabeçalho da 0049.
+ */
+
 /** Marca o START real do culto (âncora que desloca todos os horários). */
 export async function iniciarCronograma(eventId: string): Promise<ActionResult> {
   const session = await getSession();
   if (!session) return fail("Sessão expirada.");
   if (!(await podeEditarCronograma(session, eventId))) return fail("Sem permissão.");
   const supabase = await createClient();
-  const { error } = await supabase
-    .from("events")
-    .update({ rundown_started_at: new Date().toISOString() })
-    .eq("id", eventId);
+  const { error } = await supabase.rpc("iniciar_roteiro", { p_event: eventId });
   if (error) return fail(error.message);
   revalidatePath("/cronograma");
   return ok;
@@ -1552,8 +1558,8 @@ export async function reiniciarCronograma(eventId: string): Promise<ActionResult
   if (!session) return fail("Sessão expirada.");
   if (!(await podeEditarCronograma(session, eventId))) return fail("Sem permissão.");
   const supabase = await createClient();
-  await supabase.from("events").update({ rundown_started_at: null, rundown_ended_at: null }).eq("id", eventId);
-  await supabase.from("event_rundown").update({ done_at: null }).eq("event_id", eventId);
+  const { error } = await supabase.rpc("reiniciar_roteiro", { p_event: eventId });
+  if (error) return fail(error.message);
   revalidatePath("/cronograma");
   return ok;
 }
@@ -1564,10 +1570,7 @@ export async function encerrarCronograma(eventId: string): Promise<ActionResult>
   if (!session) return fail("Sessão expirada.");
   if (!(await podeEditarCronograma(session, eventId))) return fail("Sem permissão.");
   const supabase = await createClient();
-  const { error } = await supabase
-    .from("events")
-    .update({ rundown_ended_at: new Date().toISOString() })
-    .eq("id", eventId);
+  const { error } = await supabase.rpc("encerrar_roteiro", { p_event: eventId });
   if (error) return fail(error.message);
   revalidatePath("/cronograma");
   return ok;

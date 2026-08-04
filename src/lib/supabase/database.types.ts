@@ -1872,6 +1872,23 @@ export type Database = {
         Args: { p_event: string; p_url: string }
         Returns: undefined
       }
+      // migration 0049 — modo ao vivo do roteiro (a RLS de `events` é admin-only)
+      pode_conduzir_roteiro: {
+        Args: Record<string, never>
+        Returns: boolean
+      }
+      iniciar_roteiro: {
+        Args: { p_event: string }
+        Returns: string
+      }
+      encerrar_roteiro: {
+        Args: { p_event: string }
+        Returns: string
+      }
+      reiniciar_roteiro: {
+        Args: { p_event: string }
+        Returns: undefined
+      }
       get_push_subs: {
         Args: { p_profile: string }
         Returns: {
