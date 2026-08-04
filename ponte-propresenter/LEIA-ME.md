@@ -101,6 +101,46 @@ config). Bom pra assistir um culto inteiro antes de confiar.
 
 ---
 
+## Deixar fixo — a ponte subindo sozinha
+
+Depois que o `2-testar-5-min.cmd` funcionou, rode **uma vez**:
+
+### `instalar-inicio-automatico.cmd`
+
+Ele escreve um lançador de duas linhas na pasta de Inicialização **do seu
+usuário** e liga a ponte na hora. Sem administrador, sem serviço, sem Agendador
+de Tarefas — um arquivo, que o desinstalador apaga.
+
+A partir daí ela sobe **escondida** (sem janela de console que alguém feche sem
+querer no meio do culto) e um supervisor de 20 linhas (`ponte-oculta.vbs`) sobe
+de novo em 15s se ela cair por algo inesperado. Ele **não** insiste quando a
+saída foi deliberada — config errada, senha errada, ou já ter outra rodando —
+porque nesses casos reiniciar só encheria o log de repetição inútil.
+
+**A pegadinha que vale saber:** ela sobe no **logon** do usuário. Numa régia que
+fica ligada e logada, isso é o que você quer. Se o PC reinicia e para na tela de
+senha, nada roda até alguém entrar.
+
+### `ver-log.cmd` — ela está viva?
+
+Como ela agora é invisível, precisava de um jeito de provar que está de pé:
+ela grava um batimento a cada 30s, e este atalho responde **"PONTE VIVA —
+último batimento há 4s"** ou **"PONTE PARADA?"**, e depois mostra o log ao vivo.
+Sem o batimento, "nada no log há três dias" seria indistinguível de "morreu na
+quinta". Sair daqui (Ctrl+C) **não** desliga a ponte.
+
+### `desinstalar-inicio-automatico.cmd`
+
+Apaga o lançador e encerra a ponte que estiver rodando. Se houver mensagem no
+telão naquele instante, ela **fica lá** — sem a ponte viva não há quem tire.
+
+**Uma ponte só:** ela guarda um cadeado com o próprio PID. Se você clicar no
+`3-ligar-ponte.cmd` com o início automático instalado, a nova diz *"já existe
+uma ponte rodando"* e sai — isso é o certo, não um defeito. O cadeado não trava
+pra sempre: se o processo morreu de forma abrupta (sem liberar), a próxima
+assume, porque o desempate é o batimento e não só o PID (no Windows PID é
+reciclado, e um cadeado órfão poderia impedir a ponte de subir pra sempre).
+
 ## O que ela faz, exatamente
 
 | Acontece no Sirvo | A ponte faz |

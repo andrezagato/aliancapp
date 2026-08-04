@@ -51,6 +51,17 @@ const RAIZ = __dirname;
 const ARQ_CONFIG = path.join(RAIZ, "config.json");
 const ARQ_LOG = path.join(RAIZ, "ponte.log");
 const ARQ_ESTADO = path.join(RAIZ, "ponte-estado.json");
+const ARQ_LOCK = path.join(RAIZ, "ponte.lock");
+
+/**
+ * Códigos de saída, porque agora existe um supervisor lendo eles
+ * (ponte-oculta.vbs). Só o inesperado merece reinício.
+ */
+const SAIDA = {
+  limpa: 0, // Ctrl+C, encerrar pedido
+  fatal: 3, // config errada / senha errada — reiniciar não conserta nada
+  duplicada: 4, // já tem uma ponte rodando
+};
 
 // ---------------------------------------------------------------- log
 
@@ -74,8 +85,62 @@ function log(...partes) {
 
 const morrer = (msg) => {
   log("ERRO:", msg);
-  process.exit(1);
+  process.exit(SAIDA.fatal);
 };
+
+/**
+ * UMA PONTE SÓ. Com início automático instalado, é fácil acabar com duas
+ * (a que subiu no logon + alguém clicando no atalho) — e duas mandando o mesmo
+ * comando brigariam pela migalha de estado da mensagem. O cadeado guarda o PID;
+ * se o processo antigo morreu, o cadeado é assumido sem drama.
+ */
+function processoVivo(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** O batimento é recente? (o `visto` é gravado a cada 30s enquanto ela vive) */
+function batimentoRecente() {
+  const visto = lerEstado().visto;
+  if (!visto) return false;
+  return Date.now() - new Date(visto).getTime() < 90_000;
+}
+
+function travar() {
+  try {
+    const anterior = Number(fs.readFileSync(ARQ_LOCK, "utf8"));
+    // Duas condições, não uma. No Windows um `kill` é abrupto: não roda handler
+    // de saída, então cadeado órfão é comum — e PID é RECICLADO, então "o pid do
+    // cadeado está vivo" sozinho poderia ser um processo qualquer e a ponte se
+    // recusaria a subir pra sempre, calada. O batimento desempata.
+    if (anterior && anterior !== process.pid && processoVivo(anterior) && batimentoRecente()) {
+      log(`já existe uma ponte rodando (pid ${anterior}) — saindo pra não mandar comando em dobro.`);
+      process.exit(SAIDA.duplicada);
+    }
+  } catch {
+    /* sem cadeado, ou cadeado ilegível: segue e sobrescreve */
+  }
+  try {
+    fs.writeFileSync(ARQ_LOCK, String(process.pid));
+  } catch {
+    /* não poder gravar o cadeado não é motivo pra não trabalhar */
+  }
+  // Batimento na hora: fecha a janela em que uma segunda ponte, subindo no mesmo
+  // segundo, veria o batimento velho e acharia que pode assumir.
+  gravarEstado({ visto: new Date().toISOString() });
+}
+
+function destravar() {
+  try {
+    if (Number(fs.readFileSync(ARQ_LOCK, "utf8")) === process.pid) fs.unlinkSync(ARQ_LOCK);
+  } catch {
+    /* já foi */
+  }
+}
 
 /**
  * Migalha de estado no disco — só pra UMA coisa: se a ponte morrer com uma
@@ -91,9 +156,12 @@ function lerEstado() {
     return {};
   }
 }
-function gravarEstado(estado) {
+let estadoEmMemoria = null;
+/** Grava mesclando: o `visto` do batimento não pode apagar o `msgId`. */
+function gravarEstado(patch) {
+  estadoEmMemoria = { ...(estadoEmMemoria ?? lerEstado()), ...patch };
   try {
-    fs.writeFileSync(ARQ_ESTADO, JSON.stringify(estado));
+    fs.writeFileSync(ARQ_ESTADO, JSON.stringify(estadoEmMemoria));
   } catch {
     /* perder a migalha custa uma mensagem órfã, não o culto */
   }
@@ -708,6 +776,7 @@ async function rodar(cfg, driver) {
   let msgAplicada = estado.msgId ?? null;
   let msgNoTelao = !!estado.noTelao;
   let proximaChecagemDeCulto = 0;
+  let ultimoBatimento = 0;
   let culto = null;
 
   log("Ponte no ar. Esperando um roteiro começar. (Ctrl+C encerra; nada no app depende disso.)");
@@ -739,6 +808,14 @@ async function rodar(cfg, driver) {
           gravarEstado({ noTelao: false });
           log("✉ mensagem tirada do telão");
         }
+      }
+
+      // Batimento. Um processo escondido precisa PROVAR que está vivo: sem isto,
+      // "nada no log há 3 dias" é indistinguível de "morreu na quinta". É o que
+      // o ver-log.cmd usa pra dizer "viva há 4s" em vez de dar de ombros.
+      if (Date.now() - ultimoBatimento > 30_000) {
+        ultimoBatimento = Date.now();
+        gravarEstado({ visto: new Date().toISOString() });
       }
 
       erroSeguido = 0;
@@ -1031,14 +1108,25 @@ async function principal() {
     return testar(cfg, min);
   }
 
+  travar();
+
   const driver = seco ? new DriverSeco() : new DriverPro76(cfg);
   const sair = () => {
     log("encerrando (o roteiro do Sirvo segue normal).");
     driver.fechar();
-    process.exit(0);
+    destravar();
+    process.exit(SAIDA.limpa);
   };
   process.on("SIGINT", sair);
   process.on("SIGTERM", sair);
+  process.on("exit", destravar);
+
+  // Rodando escondida no logon, morrer calada é o pior desfecho possível: no
+  // domingo ninguém vai descobrir que o timer parou porque uma promessa
+  // estourou numa terça. Registra alto e continua — o laço se recupera sozinho.
+  process.on("uncaughtException", (e) => log(`ERRO NÃO TRATADO (sigo de pé): ${e?.stack || e}`));
+  process.on("unhandledRejection", (e) => log(`PROMESSA REJEITADA (sigo de pé): ${e?.stack || e}`));
+
   await rodar(cfg, driver);
 }
 

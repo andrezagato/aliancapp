@@ -55,3 +55,4 @@ yarn-error.log*
 
 # zip de transporte da ponte (feito na mao pra levar no pendrive)
 /ponte-propresenter.zip
+/ponte-propresenter/ponte.lock
