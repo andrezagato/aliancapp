@@ -17,6 +17,13 @@ import {
 } from "lucide-react";
 import { Modal } from "@/components/modal";
 import { useToast } from "@/components/ui/toast";
+import {
+  StageMessageButton,
+  StageMessageSheet,
+  StageMessageStrip,
+  type StageAtalho,
+  type StageMsg,
+} from "@/components/stage-message";
 import { cn } from "@/lib/utils";
 import {
   adicionarBlocoCronograma,
@@ -148,6 +155,8 @@ export function RundownGrid({
   canContribute,
   meId,
   actions,
+  stageMsg = null,
+  stageAtalhos = [],
 }: {
   eventId: string;
   startsAt: string;
@@ -161,6 +170,9 @@ export function RundownGrid({
   /** Pra não avisar "você está editando" pra própria pessoa (trava da 0048). */
   meId: string;
   actions?: React.ReactNode;
+  /** Mensagem no telão do palco (0050): quem pode conduzir manda, todos veem. */
+  stageMsg?: StageMsg | null;
+  stageAtalhos?: StageAtalho[];
 }) {
   const router = useRouter();
   const { showToast } = useToast();
@@ -174,6 +186,7 @@ export function RundownGrid({
   const [contributing, setContributing] = useState<RundownItem | null>(null);
   const [manageKinds, setManageKinds] = useState(false);
   const [manageTpl, setManageTpl] = useState(false);
+  const [abrirMsg, setAbrirMsg] = useState(false);
   const [flashId, setFlashId] = useState<string | null>(null); // bloco recém-movido (destaque pós-drop)
 
   useEffect(() => setList(items), [items]);
@@ -381,6 +394,10 @@ export function RundownGrid({
         {/* wrap continua ligado de propósito: em tela estreita o grupo "ao vivo"
             desce inteiro (ele é um flex próprio) em vez de vazar pra fora */}
         <div className="flex flex-wrap items-center justify-end gap-2">
+          {/* O ícone fica no cabeçalho GRUDADO de propósito: é o sinal que
+              sobrevive à rolagem. A faixa com o texto vem abaixo e rola junto,
+              mas o ícone âmbar continua à vista dizendo "tem algo no telão". */}
+          {canEdit ? <StageMessageButton ligado={!!stageMsg} onClick={() => setAbrirMsg(true)} /> : null}
           {actions}
           {list.length > 0 ? (
             started ? (
@@ -439,6 +456,20 @@ export function RundownGrid({
           ) : null}
         </div>
       </div>
+
+      {/* A faixa só existe quando há mensagem no ar. Uma faixa permanente
+          dizendo "nada no telão" seria ruído em 99% do tempo — e ruído
+          constante é o que faz ninguém ver o aviso quando ele importa. */}
+      {stageMsg ? (
+        <div className="mb-3">
+          <StageMessageStrip
+            msg={stageMsg}
+            eventId={eventId}
+            podeMexer={canEdit}
+            onAbrir={() => canEdit && setAbrirMsg(true)}
+          />
+        </div>
+      ) : null}
 
       {list.length === 0 ? (
         <p className="rounded-2xl border border-dashed border-border bg-card px-4 py-6 text-center text-sm text-muted-foreground">
@@ -669,6 +700,14 @@ export function RundownGrid({
       ) : null}
 
       {manageKinds ? <KindsManager kinds={kinds} onClose={() => setManageKinds(false)} /> : null}
+
+      <StageMessageSheet
+        open={abrirMsg}
+        onClose={() => setAbrirMsg(false)}
+        eventId={eventId}
+        msg={stageMsg}
+        atalhos={stageAtalhos}
+      />
 
       {manageTpl ? (
         <TemplatesManager

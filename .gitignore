@@ -49,3 +49,9 @@ yarn-error.log*
 /ponte-propresenter/config.json
 /ponte-propresenter/ponte.log
 /ponte-propresenter/node/
+
+# ponte: migalha de estado (qual mensagem ELA mandou pro telao)
+/ponte-propresenter/ponte-estado.json
+
+# zip de transporte da ponte (feito na mao pra levar no pendrive)
+/ponte-propresenter.zip

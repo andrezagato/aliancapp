@@ -50,6 +50,7 @@ const path = require("node:path");
 const RAIZ = __dirname;
 const ARQ_CONFIG = path.join(RAIZ, "config.json");
 const ARQ_LOG = path.join(RAIZ, "ponte.log");
+const ARQ_ESTADO = path.join(RAIZ, "ponte-estado.json");
 
 // ---------------------------------------------------------------- log
 
@@ -75,6 +76,28 @@ const morrer = (msg) => {
   log("ERRO:", msg);
   process.exit(1);
 };
+
+/**
+ * Migalha de estado no disco — só pra UMA coisa: se a ponte morrer com uma
+ * mensagem no telão, ao reabrir ela precisa saber que aquela mensagem é DELA
+ * pra poder tirar. Sem isso, um travamento deixaria texto órfão na tela do
+ * pregador até alguém mexer no ProPresenter na mão. Nunca é usado pra apagar
+ * mensagem que a ponte não mandou.
+ */
+function lerEstado() {
+  try {
+    return JSON.parse(fs.readFileSync(ARQ_ESTADO, "utf8"));
+  } catch {
+    return {};
+  }
+}
+function gravarEstado(estado) {
+  try {
+    fs.writeFileSync(ARQ_ESTADO, JSON.stringify(estado));
+  } catch {
+    /* perder a migalha custa uma mensagem órfã, não o culto */
+  }
+}
 
 // ---------------------------------------------------------------- config
 
@@ -518,6 +541,22 @@ class DriverPro76 {
     this.ws.enviarJson({ action: "clockStop", clockIndex: this.indice });
   }
 
+  /**
+   * Mensagem no telão do palco (migration 0050 do app). Diferente do
+   * clockUpdate, estas duas são de campo único — nada de eco, nada de formato.
+   */
+  async mensagem(texto) {
+    if (!this.pronto) return false;
+    this.ws.enviarJson({ action: "stageDisplaySendMessage", stageDisplayMessage: String(texto) });
+    return true;
+  }
+
+  async esconderMensagem() {
+    if (!this.pronto) return false;
+    this.ws.enviarJson({ action: "stageDisplayHideMessage" });
+    return true;
+  }
+
   fechar() {
     this.pronto = false;
     if (this.ws) this.ws.fechar();
@@ -539,6 +578,14 @@ class DriverSeco {
   }
   async parar() {
     log("SECO → pararia o timer");
+  }
+  async mensagem(texto) {
+    log(`SECO → mandaria pro telão: "${texto}"`);
+    return true;
+  }
+  async esconderMensagem() {
+    log("SECO → tiraria a mensagem do telão");
+    return true;
   }
   fechar() {}
 }
@@ -613,6 +660,22 @@ class Banco {
       `event_rundown?select=id,sort_order,title,duration_min,done_at&event_id=eq.${eventId}&order=sort_order.asc`,
     );
   }
+
+  /**
+   * A mensagem que está no telão agora. É por IGREJA, não por culto: a Produção
+   * pode mandar antes de o roteiro começar, e aí não há evento "ao vivo" pra
+   * pendurar a consulta. A expiração é filtrada aqui — a linha vira histórico
+   * sozinha quando `expires_at` passa.
+   */
+  async mensagemAtual() {
+    const agora = new Date().toISOString();
+    const r = await this.consultar(
+      "stage_messages?select=id,texto,expires_at" +
+        `&church_id=eq.${this.churchId}&cleared_at=is.null&expires_at=gt.${agora}` +
+        "&order=sent_at.desc&limit=1",
+    );
+    return r[0] ?? null;
+  }
 }
 
 // ---------------------------------------------------------------- laço principal
@@ -638,13 +701,59 @@ async function rodar(cfg, driver) {
   let nossoTimerRodando = false;
   let erroSeguido = 0;
 
+  // Mensagem no telão. Os dois valores nascem do disco: se a ponte morreu com
+  // uma mensagem no ar, ela sabe que aquela é DELA e a primeira leitura tira
+  // do telão — sem nunca apagar mensagem que o operador pôs na mão.
+  const estado = lerEstado();
+  let msgAplicada = estado.msgId ?? null;
+  let msgNoTelao = !!estado.noTelao;
+  let proximaChecagemDeCulto = 0;
+  let culto = null;
+
   log("Ponte no ar. Esperando um roteiro começar. (Ctrl+C encerra; nada no app depende disso.)");
 
   for (;;) {
-    let intervalo = cfg.pollParadoMs;
+    let intervalo = cfg.pollAoVivoMs;
     try {
-      const culto = await banco.cultoAoVivo();
+      // O CULTO é consultado devagar quando não há nada rolando. A MENSAGEM, a
+      // cada volta: recado pro palco é o tipo de coisa que ninguém aceita
+      // esperar dez segundos, e ela pode ser mandada antes de o roteiro começar.
+      if (Date.now() >= proximaChecagemDeCulto) {
+        culto = await banco.cultoAoVivo();
+        proximaChecagemDeCulto = Date.now() + (culto ? cfg.pollAoVivoMs : cfg.pollParadoMs);
+        await tratarRoteiro();
+      }
 
+      const msg = await banco.mensagemAtual();
+      if (msg && msg.id !== msgAplicada) {
+        if (await driver.mensagem(msg.texto)) {
+          msgAplicada = msg.id;
+          msgNoTelao = true;
+          gravarEstado({ msgId: msgAplicada, noTelao: true });
+          log(`✉ no telão: "${msg.texto}"`);
+        }
+      } else if (!msg && msgNoTelao) {
+        if (await driver.esconderMensagem()) {
+          msgAplicada = null;
+          msgNoTelao = false;
+          gravarEstado({ noTelao: false });
+          log("✉ mensagem tirada do telão");
+        }
+      }
+
+      erroSeguido = 0;
+    } catch (e) {
+      erroSeguido++;
+      // Rede de igreja oscila. Isso não é motivo pra derrubar a ponte no meio
+      // do culto: loga, respira e tenta de novo, com o intervalo crescendo.
+      log(`falha na leitura (${erroSeguido}ª): ${e.message}`);
+      intervalo = Math.min(30000, 2000 * erroSeguido);
+    }
+    await espera(intervalo);
+  }
+
+  /** Uma volta da lógica do roteiro (fica em função pra o laço acima respirar). */
+  async function tratarRoteiro() {
       if (!culto) {
         if (nossoTimerRodando) {
           log("Roteiro encerrado — parando o timer.");
@@ -653,7 +762,6 @@ async function rodar(cfg, driver) {
         }
         chaveAplicada = null;
       } else {
-        intervalo = cfg.pollAoVivoMs;
         const blocos = await banco.blocos(culto.id);
         const bloco = blocoAoVivo(blocos);
 
@@ -678,15 +786,6 @@ async function rodar(cfg, driver) {
           }
         }
       }
-      erroSeguido = 0;
-    } catch (e) {
-      erroSeguido++;
-      // Rede de igreja oscila. Isso não é motivo pra derrubar a ponte no meio
-      // do culto: loga, respira e tenta de novo, com o intervalo crescendo.
-      log(`falha na leitura (${erroSeguido}ª): ${e.message}`);
-      intervalo = Math.min(30000, 2000 * erroSeguido);
-    }
-    await espera(intervalo);
   }
 }
 

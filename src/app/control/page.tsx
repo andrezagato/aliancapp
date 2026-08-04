@@ -10,6 +10,8 @@ import {
   getEventRundown,
   listRundownKinds,
   getRundownState,
+  getStageMessage,
+  listStageShortcuts,
 } from "@/lib/data";
 import { listarCanais } from "@/lib/chat";
 
@@ -57,10 +59,12 @@ export default async function ControlPage({ searchParams }: { searchParams: Prom
 
   // Sem modelos nem "estou escalado": a régia CONDUZ (inicia, avança, encerra) e
   // não edita estrutura, então essas duas consultas saíram do caminho.
-  const [rundown, kinds, canais] = await Promise.all([
+  const [rundown, kinds, canais, stageMsg, stageAtalhos] = await Promise.all([
     getEventRundown(ev.id),
     listRundownKinds(),
     listarCanais(session),
+    getStageMessage(session.profile.church_id),
+    listStageShortcuts(session.profile.church_id),
   ]);
   const canEdit = session.role === "admin" || session.profile.teams.some((t) => t.manages_rundown);
 
@@ -81,6 +85,8 @@ export default async function ControlPage({ searchParams }: { searchParams: Prom
           items={rundown}
           kinds={kinds}
           canEdit={canEdit}
+          stageMsg={stageMsg}
+          stageAtalhos={stageAtalhos}
         />
       }
       chatSlot={

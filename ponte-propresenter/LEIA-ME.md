@@ -109,13 +109,26 @@ config). Bom pra assistir um culto inteiro antes de confiar.
 | Bloco encerrado → o seguinte fica ao vivo | escreve a duração do novo e dá start |
 | Alguém edita observação/título/responsável | **nada** (não reinicia o timer no ar) |
 | Alguém ajusta a duração do bloco **que já está no ar** | **nada** — ver limitação abaixo |
+| Alguém manda **mensagem no telão** pelo app | manda pro stage display do ProPresenter |
+| A mensagem é tirada, ou expira | limpa o stage display |
 | Último bloco encerrado, ou culto encerrado | para o timer |
 | Nenhum culto ao vivo | nada — o timer de pré-culto fica na mão do operador |
 | A conexão com o ProPresenter cai e volta | reconecta sozinha, **sem** reiniciar o timer |
 | Você fecha e reabre a ponte no meio do culto | reaplica o bloco atual — o cronômetro volta ao cheio |
 
 A troca de bloco chega em até 1 segundo (a ponte pergunta ao Sirvo a cada
-segundo enquanto há culto ao vivo, e a cada 10 fora dele).
+segundo enquanto há culto ao vivo, e a cada 10 fora dele). **A mensagem no telão
+é consultada a cada segundo sempre** — inclusive fora do culto, porque recado
+pro palco é o que menos aceita espera, e ele pode ser mandado antes de o roteiro
+começar.
+
+Pra a mensagem aparecer, o layout de **Stage** do ProPresenter precisa ter um
+elemento de *Message* — a ponte manda, mas quem desenha a tela é ele.
+
+O arquivo `ponte-estado.json` guarda só uma coisa: qual mensagem *a ponte*
+mandou. É o que permite, depois de um travamento, ela tirar do telão uma
+mensagem órfã — e nunca apagar mensagem que o operador pôs na mão dentro do
+ProPresenter.
 
 **Limitação consciente:** ajustar a duração de um bloco que já está no ar não
 mexe no timer. Reaplicar reiniciaria a contagem cheia no meio da pregação, o que

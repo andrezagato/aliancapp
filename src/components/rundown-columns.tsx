@@ -15,6 +15,13 @@ import {
   removerBlocoCronograma,
 } from "@/lib/actions";
 import { BlocoModal } from "@/components/rundown-grid";
+import {
+  StageMessageButton,
+  StageMessageSheet,
+  StageMessageStrip,
+  type StageAtalho,
+  type StageMsg,
+} from "@/components/stage-message";
 import type { RundownItem, RundownKind } from "@/lib/data";
 import type { ActionResult } from "@/lib/types";
 import {
@@ -324,6 +331,8 @@ export function RundownColumns({
   items,
   kinds,
   canEdit,
+  stageMsg = null,
+  stageAtalhos = [],
 }: {
   eventId: string;
   titulo: string;
@@ -334,12 +343,16 @@ export function RundownColumns({
   items: RundownItem[];
   kinds: RundownKind[];
   canEdit: boolean;
+  /** Mensagem no telão do palco (0050). */
+  stageMsg?: StageMsg | null;
+  stageAtalhos?: StageAtalho[];
 }) {
   const router = useRouter();
   const { showToast } = useToast();
   const [ocupado, startTx] = useTransition();
   const [fonte, setFonte] = useState(FONTE_PADRAO);
   const [editando, setEditando] = useState<RundownItem | "novo" | null>(null);
+  const [abrirMsg, setAbrirMsg] = useState(false);
 
   // O tamanho da letra é do APARELHO, não da conta: depende da distância entre a
   // mesa e o monitor daquela sala — mesma lógica da URL do stream.
@@ -451,6 +464,7 @@ export function RundownColumns({
         )}
 
         <span className="ml-auto flex items-center gap-[0.4em]">
+          {canEdit ? <StageMessageButton ligado={!!stageMsg} onClick={() => setAbrirMsg(true)} em /> : null}
           {/* tamanho da letra: a régia de cada sala tem uma distância de leitura */}
           <span className="mr-[0.4em] inline-flex items-center rounded-full border border-border">
             <button
@@ -522,6 +536,20 @@ export function RundownColumns({
         </span>
       </div>
 
+        {/* Dentro do sticky de propósito: numa régia, a mensagem que está no
+            telão do palco não pode sair de vista ao rolar a grade. */}
+        {stageMsg ? (
+          <div className="mb-[0.7em]">
+            <StageMessageStrip
+              msg={stageMsg}
+              eventId={eventId}
+              podeMexer={canEdit}
+              onAbrir={() => canEdit && setAbrirMsg(true)}
+              em
+            />
+          </div>
+        ) : null}
+
         {items.length > 0 ? <Cabecalho /> : null}
       </div>
 
@@ -579,6 +607,16 @@ export function RundownColumns({
           onClose={() => setEditando(null)}
         />
       ) : null}
+
+      {/* O MESMO painel do celular: duas telas de envio divergiriam, e esta é a
+          informação que menos pode discordar entre quem manda e quem confere. */}
+      <StageMessageSheet
+        open={abrirMsg}
+        onClose={() => setAbrirMsg(false)}
+        eventId={eventId}
+        msg={stageMsg}
+        atalhos={stageAtalhos}
+      />
     </div>
   );
 }

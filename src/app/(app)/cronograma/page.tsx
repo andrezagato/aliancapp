@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { RundownGrid } from "@/components/rundown-grid";
 import { EventFilesCard } from "@/components/event-files-card";
 import { getSession } from "@/lib/auth";
-import { listUpcomingEvents, listLiveRundownEvents, getEventRundown, listRundownKinds, listRundownTemplates, getRundownState, estouEscaladoNoEvento, getPastaEvento } from "@/lib/data";
+import { listUpcomingEvents, listLiveRundownEvents, getEventRundown, listRundownKinds, listRundownTemplates, getRundownState, estouEscaladoNoEvento, getPastaEvento, getStageMessage, listStageShortcuts } from "@/lib/data";
 import { fmtWeekdayShort, fmtDayMonthShort } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -39,6 +39,12 @@ export default async function CronogramaPage({ searchParams }: { searchParams: P
   const canEdit = session.role === "admin" || session.profile.teams.some((t) => t.manages_rundown);
   const canContribute = ev ? await estouEscaladoNoEvento(session, ev.id) : false;
   const filesUrl = ev ? await getPastaEvento(ev.id) : null;
+  // Mensagem no telão (0050): é por IGREJA, não por bloco nem por culto — quem
+  // manda pode estar olhando um roteiro e a mensagem valer pro palco de agora.
+  const [stageMsg, stageAtalhos] = await Promise.all([
+    getStageMessage(session.profile.church_id),
+    canEdit ? listStageShortcuts(session.profile.church_id) : Promise.resolve([]),
+  ]);
 
   return (
     <>
@@ -106,6 +112,8 @@ export default async function CronogramaPage({ searchParams }: { searchParams: P
                 canEdit={canEdit}
                 canContribute={canContribute}
                 meId={session.userId}
+                stageMsg={stageMsg}
+                stageAtalhos={stageAtalhos}
                 actions={
                   <EventFilesCard eventId={ev.id} url={filesUrl} canEdit={canEdit} escalaHref={`/escalas/${ev.id}`} />
                 }

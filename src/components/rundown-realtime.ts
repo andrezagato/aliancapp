@@ -68,6 +68,10 @@ export function useRundownRealtime({
         { event: "UPDATE", schema: "public", table: "events", filter: `id=eq.${eventId}` },
         aplicar,
       )
+      // Mensagem no telão (0050): sem filtro de evento de propósito — ela é da
+      // IGREJA, e a faixa "no telão agora" tem que acender em todas as telas,
+      // inclusive na de quem está olhando outro culto.
+      .on("postgres_changes", { event: "*", schema: "public", table: "stage_messages" }, aplicar)
       .subscribe((status) => {
         conectado = status === "SUBSCRIBED";
         repesquisar();

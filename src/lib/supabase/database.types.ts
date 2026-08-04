@@ -1451,6 +1451,91 @@ export type Database = {
           },
         ]
       }
+      // migration 0050 — mensagem no telão (stage message do ProPresenter)
+      stage_messages: {
+        Row: {
+          autor_id: string | null
+          church_id: string
+          cleared_at: string | null
+          event_id: string | null
+          expires_at: string
+          id: string
+          sent_at: string
+          texto: string
+        }
+        Insert: {
+          autor_id?: string | null
+          church_id: string
+          cleared_at?: string | null
+          event_id?: string | null
+          expires_at: string
+          id?: string
+          sent_at?: string
+          texto: string
+        }
+        Update: {
+          autor_id?: string | null
+          church_id?: string
+          cleared_at?: string | null
+          event_id?: string | null
+          expires_at?: string
+          id?: string
+          sent_at?: string
+          texto?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stage_messages_autor_id_fkey"
+            columns: ["autor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stage_messages_church_id_fkey"
+            columns: ["church_id"]
+            isOneToOne: false
+            referencedRelation: "churches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stage_messages_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      stage_shortcuts: {
+        Row: {
+          church_id: string
+          id: string
+          label: string
+          sort_order: number
+        }
+        Insert: {
+          church_id: string
+          id?: string
+          label: string
+          sort_order?: number
+        }
+        Update: {
+          church_id?: string
+          id?: string
+          label?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stage_shortcuts_church_id_fkey"
+            columns: ["church_id"]
+            isOneToOne: false
+            referencedRelation: "churches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       rundown_kinds: {
         Row: {
           church_id: string
@@ -1887,6 +1972,23 @@ export type Database = {
       }
       reiniciar_roteiro: {
         Args: { p_event: string }
+        Returns: undefined
+      }
+      // migration 0050 — mensagem no telão
+      enviar_stage_message: {
+        Args: { p_event: string; p_texto: string; p_minutos?: number }
+        Returns: string
+      }
+      limpar_stage_message: {
+        Args: { p_event: string }
+        Returns: undefined
+      }
+      salvar_atalho_stage: {
+        Args: { p_label: string }
+        Returns: string
+      }
+      remover_atalho_stage: {
+        Args: { p_id: string }
         Returns: undefined
       }
       get_push_subs: {

@@ -1188,6 +1188,46 @@ export async function getRundownState(eventId: string): Promise<{ startedAt: str
   return { startedAt: data?.rundown_started_at ?? null, endedAt: data?.rundown_ended_at ?? null };
 }
 
+// --- Mensagem no telão (migration 0050) -------------------------------------
+
+export type StageMessageData = { id: string; texto: string; autor: string | null; expiresAt: string };
+
+/**
+ * A mensagem que está NO TELÃO agora — uma por igreja, viva e não expirada.
+ *
+ * A expiração é filtrada aqui e não por rotina de limpeza: a linha vira
+ * histórico sozinha quando o `expires_at` passa, então não existe estado
+ * "no banco diz que está no ar, mas já saiu".
+ */
+export async function getStageMessage(churchId: string | null): Promise<StageMessageData | null> {
+  if (!churchId) return null;
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("stage_messages")
+    .select("id, texto, expires_at, autor:profiles ( nickname, full_name )")
+    .eq("church_id", churchId)
+    .is("cleared_at", null)
+    .gt("expires_at", new Date().toISOString())
+    .order("sent_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!data) return null;
+  const r = data as unknown as { id: string; texto: string; expires_at: string; autor: unknown };
+  return { id: r.id, texto: r.texto, autor: nomeDoPerfil(r.autor), expiresAt: r.expires_at };
+}
+
+/** Atalhos de mensagem da igreja (máx. 6, ver 0050). */
+export async function listStageShortcuts(churchId: string | null): Promise<{ id: string; label: string }[]> {
+  if (!churchId) return [];
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("stage_shortcuts")
+    .select("id, label")
+    .eq("church_id", churchId)
+    .order("sort_order", { ascending: true });
+  return (data ?? []) as { id: string; label: string }[];
+}
+
 export type RundownKind = { id: string; label: string; color: string };
 
 /** Tipos de bloco cadastrados pela igreja (para o seletor de tipo do cronograma). */

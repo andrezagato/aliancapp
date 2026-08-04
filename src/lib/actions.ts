@@ -1576,6 +1576,68 @@ export async function encerrarCronograma(eventId: string): Promise<ActionResult>
   return ok;
 }
 
+// --- Mensagem no telão (migration 0050) -------------------------------------
+
+/**
+ * A Produção falando com quem está no palco. O app grava, a ponte do
+ * ProPresenter entrega (`stageDisplaySendMessage`). Uma mensagem viva por vez —
+ * quem manda a nova apaga a anterior, dentro da própria RPC.
+ */
+export async function enviarStageMessage(eventId: string, texto: string, minutos: number): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  if (!(await podeEditarCronograma(session, eventId))) return fail("Sem permissão.");
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("enviar_stage_message", {
+    p_event: eventId,
+    p_texto: texto,
+    p_minutos: Math.round(minutos),
+  });
+  if (error) return fail(error.message);
+  revalidatePath("/cronograma");
+  revalidatePath("/control");
+  return ok;
+}
+
+export async function limparStageMessage(eventId: string): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  if (!(await podeEditarCronograma(session, eventId))) return fail("Sem permissão.");
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("limpar_stage_message", { p_event: eventId });
+  if (error) return fail(error.message);
+  revalidatePath("/cronograma");
+  revalidatePath("/control");
+  return ok;
+}
+
+/** Atalhos são da IGREJA, não do aparelho — a régia e o celular usam os mesmos. */
+export async function salvarAtalhoStage(label: string): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  const pode = session.role === "admin" || session.profile.teams.some((t) => t.manages_rundown);
+  if (!pode) return fail("Sem permissão.");
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("salvar_atalho_stage", { p_label: label });
+  if (error) return fail(error.message);
+  revalidatePath("/cronograma");
+  revalidatePath("/control");
+  return ok;
+}
+
+export async function removerAtalhoStage(id: string): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  const pode = session.role === "admin" || session.profile.teams.some((t) => t.manages_rundown);
+  if (!pode) return fail("Sem permissão.");
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("remover_atalho_stage", { p_id: id });
+  if (error) return fail(error.message);
+  revalidatePath("/cronograma");
+  revalidatePath("/control");
+  return ok;
+}
+
 /** Marca/desmarca um bloco como feito (carimba a hora real de término). */
 export async function marcarBlocoFeito(id: string, eventId: string, done: boolean): Promise<ActionResult> {
   const session = await getSession();
