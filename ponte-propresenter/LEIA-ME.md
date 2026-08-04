@@ -132,12 +132,25 @@ mexe no timer. Reaplicar reiniciaria a contagem cheia no meio da pregação, o q
 | `login falhou (400)` | email/senha da conta do Sirvo |
 | `sem igreja (church_id nulo)` | a conta logou mas está pendente — destrave em Equipes |
 | timer certo, telão não mostra | o timer não está no layout de stage display / na tela |
+| o timer **inicia** mas continua com a duração antiga | é a armadilha do `clockUpdate` — rode o `4-sonda.cmd` |
 
 Se o ProPresenter **travar ou fechar** na hora que a ponte manda o comando: é o
 risco conhecido do protocolo reverso da 7.6. Feche a ponte, reabra o
-ProPresenter e me mande o `ponte.log` — o suspeito número um é o formato do
-campo `clockOverrun`, e existe um interruptor pra isso no `config.json`
-(`overrunBooleano: false`).
+ProPresenter e me mande o `ponte.log`.
+
+### `4-sonda.cmd` — só se a duração parar de pegar
+
+A 7.6.1 decodifica o `clockUpdate` numa estrutura **rígida**: se faltar
+qualquer campo que ela espera — inclusive o `clockFormat` aninhado —, ela
+**descarta a mensagem calada** e o timer segue com a duração velha. Por isso a
+ponte relê o timer e devolve o objeto inteiro, trocando só a duração.
+Medido na 7.6.1 em 04/08/2026: das 8 formas testadas, só o eco completo passou —
+e os dois campos que a documentação jura obrigatórios (`clockIsPM`,
+`clockElapsedTime`) não existem no que ela reporta.
+
+A sonda existe pra refazer essa medição se um dia o comportamento mudar: ela
+testa as 8 formas e lê o estado depois de cada uma. **Ela escreve durações de
+teste no timer — rode fora do culto.**
 
 ## Trocar de programa depois
 

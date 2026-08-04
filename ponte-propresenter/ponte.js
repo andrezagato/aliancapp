@@ -104,7 +104,6 @@ function lerConfig({ exigePro = true } = {}) {
   c.supabaseUrl = String(c.supabaseUrl).replace(/\/+$/, "");
   c.pollAoVivoMs = c.pollAoVivoMs || 1000;
   c.pollParadoMs = c.pollParadoMs || 10000;
-  c.overrunBooleano = c.overrunBooleano !== false; // ver comentário em clockUpdate
 
   // No ensaio seco e no diagnóstico a ponte tolera config incompleta do
   // ProPresenter — que é justamente o que você ainda não tem em mãos hoje.
@@ -451,11 +450,28 @@ class DriverPro76 {
   /**
    * O coração: escreve a duração no timer e dá start.
    *
-   * A ordem importa. `clockUpdate` sozinho NÃO reseta — na 7.6 ele troca a
-   * duração e, se o timer não estiver correndo, retoma do valor atual. Então
-   * pra um bloco novo começar cheio é preciso parar, reescrever, resetar e só
-   * então iniciar. Os intervalos existem porque o Pro7 não responde ao
-   * clockUpdate: não há o que aguardar, só dar tempo dele processar.
+   * DUAS DESCOBERTAS DURAS, medidas contra a 7.6.1 de verdade (04/ago/2026,
+   * modo `--sonda`), porque a documentação reversa erra as duas:
+   *
+   * 1. O `clockUpdate` tem que ser o ECO DO OBJETO INTEIRO que o próprio
+   *    ProPresenter reportou no `clockRequest`, trocando só a duração. Ele
+   *    decodifica a mensagem numa estrutura rígida e, se faltar QUALQUER campo
+   *    — inclusive o `clockFormat` aninhado e o `clockState` —, descarta tudo
+   *    calado: sem erro, sem resposta, e o timer segue com a duração velha.
+   *    Foram 6 variantes ignoradas antes desta (só `clockTime`, só
+   *    `clockDuration`, os dois, payload mínimo, `clockEndTime`, com
+   *    milissegundos). Por isso o estado é RELIDO a cada bloco em vez de
+   *    montado à mão: se alguém mexer no formato do relógio na interface, o eco
+   *    continua certo.
+   * 2. Os campos que a doc jura obrigatórios — `clockIsPM` e
+   *    `clockElapsedTime` — NÃO existem no que ele reporta, e a única variante
+   *    que funciona é justamente a que não os manda. Não os reintroduza.
+   *
+   * A ordem também importa: `clockUpdate` sozinho não reseta o valor corrente,
+   * então é parar → reescrever → resetar → iniciar. Confirmado na sonda que o
+   * `clockReset` PRESERVA a duração nova. Os intervalos existem porque o Pro7
+   * não responde ao clockUpdate — não há o que aguardar, só dar tempo dele
+   * processar.
    */
   async aplicar({ nome, segundos }) {
     if (!this.pronto) {
@@ -467,22 +483,28 @@ class DriverPro76 {
       return false;
     }
     const idx = this.indice;
-    const nomeTimer = this.pp.renomearTimer ? nome : (this.pp.timerNome ?? this.relogios[idx]?.clockName ?? "Timer");
 
     this.ws.enviarJson({ action: "clockStop", clockIndex: idx });
     await espera(150);
+
+    // Releitura: é daqui que sai o objeto a ecoar (ver nota 1 acima).
+    await this.lerRelogios();
+    const base = this.relogios[idx];
+    if (!base) {
+      log(`ProPresenter: o timer ${idx} não veio no clockRequest — não vou mandar update às cegas`);
+      return false;
+    }
+
+    const duracao = hms(segundos);
     this.ws.enviarJson({
+      ...base,
       action: "clockUpdate",
       clockIndex: idx,
       clockType: 0, // 0 = contagem regressiva
-      clockTime: hms(segundos),
-      // A doc reversa se contradiz aqui: o schema diz inteiro, o exemplo real
-      // manda booleano. Deixei configurável porque mensagem inválida derruba o
-      // ProPresenter — se der problema, vire overrunBooleano pra false.
-      clockOverrun: this.cfg.overrunBooleano ? Boolean(this.pp.overrun) : this.pp.overrun ? 1 : 0,
-      clockIsPM: 0,
-      clockName: nomeTimer,
-      clockElapsedTime: "00:00:00",
+      clockDuration: duracao,
+      clockTime: duracao,
+      clockOverrun: this.pp.overrun === undefined ? base.clockOverrun : Boolean(this.pp.overrun),
+      clockName: this.pp.renomearTimer ? nome : (base.clockName ?? this.pp.timerNome ?? "Timer"),
     });
     await espera(150);
     this.ws.enviarJson({ action: "clockReset", clockIndex: idx });
@@ -751,6 +773,133 @@ async function diagnosticar(cfg) {
   process.exit(0);
 }
 
+/**
+ * SONDA DO clockUpdate — descobre qual formato a 7.6.1 real aceita.
+ *
+ * Existe porque no ProPresenter 7.6.1 de produção o `clockStart` obedece mas a
+ * escrita da duração é ignorada em silêncio: o timer inicia com o valor que já
+ * estava salvo. Como o protocolo é reverso e não há resposta pro clockUpdate
+ * (nem erro), o único jeito de saber é tentar cada forma plausível e LER o
+ * estado depois de cada uma. Cada variante usa uma duração diferente, então o
+ * valor lido denuncia qual delas pegou.
+ */
+async function sondar(cfg) {
+  const pp = new DriverPro76(cfg);
+  await pp.ligar();
+  const idx = pp.indice;
+  const atual = pp.relogios[idx] ?? {};
+  const nome = atual.clockName ?? "BLOCO";
+
+  const variantes = [
+    {
+      rotulo: "V1 clockTime (o que eu mando hoje)",
+      alvo: "00:03:00",
+      msg: { clockTime: "00:03:00", clockOverrun: true, clockIsPM: 0, clockName: nome, clockElapsedTime: "00:00:00" },
+    },
+    {
+      rotulo: "V2 clockDuration no lugar de clockTime",
+      alvo: "00:04:00",
+      msg: { clockDuration: "00:04:00", clockOverrun: true, clockIsPM: 0, clockName: nome, clockElapsedTime: "00:00:00" },
+    },
+    {
+      rotulo: "V3 clockTime + clockDuration juntos",
+      alvo: "00:06:00",
+      msg: { clockTime: "00:06:00", clockDuration: "00:06:00", clockOverrun: true, clockIsPM: 0, clockName: nome, clockElapsedTime: "00:00:00" },
+    },
+    {
+      rotulo: "V4 mínimo (só type + clockTime)",
+      alvo: "00:07:00",
+      msg: { clockTime: "00:07:00" },
+    },
+    {
+      rotulo: "V5 clockEndTime em vez de Elapsed",
+      alvo: "00:08:00",
+      msg: { clockTime: "00:08:00", clockOverrun: true, clockIsPM: 0, clockName: nome, clockEndTime: "00:00:00" },
+    },
+    {
+      rotulo: "V6 com milissegundos (.00)",
+      alvo: "00:02:00",
+      msg: { clockTime: "00:02:00.00", clockDuration: "00:02:00.00", clockOverrun: true, clockIsPM: 0, clockName: nome, clockElapsedTime: "00:00:00.00" },
+    },
+    {
+      // O ProPresenter pode estar decodificando o JSON num objeto rígido e
+      // descartando a mensagem inteira quando falta campo. Aqui eu devolvo
+      // EXATAMENTE a forma que ele mesmo reportou, só trocando a duração.
+      rotulo: "V7 eco do objeto que ele reportou",
+      alvo: "00:09:00",
+      msg: { ...atual, clockTime: "00:09:00", clockDuration: "00:09:00" },
+    },
+    {
+      // Hipótese de ORDEM, não de formato: talvez ele só aceite nova duração
+      // com o relógio já resetado. Hoje eu mando o update ANTES do reset.
+      rotulo: "V8 reset ANTES do update",
+      alvo: "00:11:00",
+      preReset: true,
+      msg: { clockTime: "00:11:00", clockDuration: "00:11:00", clockOverrun: true, clockIsPM: 0, clockName: nome, clockElapsedTime: "00:00:00" },
+    },
+  ];
+
+  const iguais = (lido, alvo) => String(lido ?? "").replace(/\.\d+$/, "") === alvo;
+  const leitura = async () => {
+    await pp.lerRelogios();
+    const c = pp.relogios[idx] ?? {};
+    return { dur: c.clockDuration, tempo: c.clockTime, rodando: verdade(c.clockState) };
+  };
+
+  console.log(`\nTimer [${idx}] "${nome}" — estado antes: duração=${atual.clockDuration} tempo=${atual.clockTime}\n`);
+  console.log("Cada variante escreve uma duração diferente. A que aparecer na leitura é a que funciona.\n");
+
+  const vencedoras = [];
+  for (const v of variantes) {
+    pp.ws.enviarJson({ action: "clockStop", clockIndex: idx });
+    await espera(200);
+    if (v.preReset) {
+      pp.ws.enviarJson({ action: "clockReset", clockIndex: idx });
+      await espera(250);
+    }
+    pp.ws.enviarJson({ action: "clockUpdate", clockIndex: idx, clockType: 0, ...v.msg });
+    await espera(500);
+    const r = await leitura();
+    const ok = iguais(r.dur, v.alvo) || iguais(r.tempo, v.alvo);
+    if (ok) vencedoras.push(v);
+    console.log(
+      `${ok ? "✔ PEGOU " : "· ignorou"}  ${v.rotulo.padEnd(38)} pedi ${v.alvo} → duração=${r.dur} tempo=${r.tempo}`,
+    );
+  }
+
+  console.log("");
+  if (!vencedoras.length) {
+    console.log("NENHUMA variante mudou a duração. Me manda esta saída inteira — o próximo passo é");
+    console.log("olhar o tráfego do app ProPresenter Remote de verdade pra copiar a forma exata.");
+  } else {
+    const v = vencedoras[0];
+    console.log(`FORMATO BOM: ${v.rotulo}`);
+    console.log("Agora conferindo se o clockReset preserva ou apaga a duração nova…\n");
+    pp.ws.enviarJson({ action: "clockStop", clockIndex: idx });
+    await espera(200);
+    pp.ws.enviarJson({ action: "clockUpdate", clockIndex: idx, clockType: 0, ...v.msg });
+    await espera(400);
+    console.log(`   depois do update ........ duração=${(await leitura()).dur}`);
+    pp.ws.enviarJson({ action: "clockReset", clockIndex: idx });
+    await espera(400);
+    const posReset = await leitura();
+    console.log(`   depois do clockReset .... duração=${posReset.dur} tempo=${posReset.tempo}`);
+    pp.ws.enviarJson({ action: "clockStart", clockIndex: idx });
+    await espera(1200);
+    const posStart = await leitura();
+    console.log(`   depois do clockStart .... tempo=${posStart.tempo} rodando=${posStart.rodando ? "sim" : "não"}`);
+    console.log(
+      `\n${iguais(posReset.dur, v.alvo) ? "O reset PRESERVA a duração nova — a sequência de 4 mensagens continua válida." : "⚠ O reset APAGOU a duração nova — vou tirar o clockReset da sequência."}`,
+    );
+  }
+
+  pp.ws.enviarJson({ action: "clockStop", clockIndex: idx });
+  await espera(300);
+  console.log("\n(deixei o timer parado; a duração ficou no valor da última variante)\n");
+  pp.fechar();
+  process.exit(0);
+}
+
 async function testar(cfg, minutos) {
   const pp = new DriverPro76(cfg);
   await pp.ligar();
@@ -774,6 +923,7 @@ async function principal() {
   const cfg = lerConfig({ exigePro: !seco && !args.includes("--diagnosticar") });
 
   if (args.includes("--diagnosticar")) return diagnosticar(cfg);
+  if (args.includes("--sonda")) return sondar(cfg);
 
   const iTeste = args.indexOf("--testar");
   if (iTeste !== -1) {

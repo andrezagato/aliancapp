@@ -29,8 +29,5 @@
 
   "_poll": "De quanto em quanto tempo a ponte pergunta ao Sirvo se o bloco mudou (ms).",
   "pollAoVivoMs": 1000,
-  "pollParadoMs": 10000,
-
-  "_overrunBooleano": "Não mexa a não ser que o ProPresenter reclame do clockUpdate. true manda clockOverrun como true/false; false manda como 1/0.",
-  "overrunBooleano": true
+  "pollParadoMs": 10000
 }
