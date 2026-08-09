@@ -424,7 +424,9 @@ export function RundownGrid({
           {actions}
           {list.length > 0 ? (
             started ? (
-              <div className="flex items-center gap-1.5">
+              // `select-none` no grupo todo: a seleção do iOS não respeita o
+              // limite do botão — ela pegava o relógio ao lado junto.
+              <div className="flex select-none items-center gap-1.5">
                 <div className={cn("flex items-center gap-1.5 rounded-full px-3 py-1.5", ended ? "bg-success/12" : "bg-destructive/10")}>
                   {ended ? null : <span className="size-2.5 shrink-0 animate-pulse rounded-full bg-destructive" />}
                   {/* "Ao vivo" some no celular: o ponto pulsando já diz isso, e a

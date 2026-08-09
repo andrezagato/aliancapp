@@ -128,7 +128,15 @@ export function BotaoSegurar({
         e.preventDefault();
         if (window.confirm(textoTeclado)) aoConfirmar();
       }}
-      className={cn("relative isolate overflow-hidden disabled:opacity-40", className)}
+      // `select-none` + `touch-callout` NÃO são enfeite: sem eles o iOS entende a
+      // pressão longa como seleção de texto, acende a lupa, marca o relógio ao
+      // lado em azul e abre "Copiar / Pesquisar com o Google" por cima do botão.
+      // Prevenir o `pointerdown` não resolve — a seleção do Safari mora na camada
+      // de toque, não nos pointer events.
+      className={cn(
+        "relative isolate select-none overflow-hidden [-webkit-touch-callout:none] disabled:opacity-40",
+        className,
+      )}
       style={{ touchAction: "none" }}
       {...resto}
     >
@@ -194,7 +202,11 @@ export function FaixaEncerrado({
       {suspeito ? (
         <TriangleAlert className={cn("size-5 shrink-0 text-warning-ink", em && "size-[1.2em]")} />
       ) : null}
-      <p className={cn("min-w-0 flex-1 text-sm", em && "text-[1em]")}>
+      {/* `min-w` em vez de `min-w-0`: sem piso, o texto se espremia numa coluna
+          de 5 palavras pra caber o botão do lado ("Este culto foi / encerrado
+          depois / de 48 segundos, / ..."). Com piso, quando não cabe o botão
+          desce inteiro pra linha de baixo — que no celular é o lugar dele. */}
+      <p className={cn("min-w-[14rem] flex-1 text-sm", em && "text-[1em]")}>
         {suspeito ? (
           <>
             <strong className="font-extrabold text-warning-ink">
@@ -214,7 +226,9 @@ export function FaixaEncerrado({
         onClick={aoReabrir}
         disabled={ocupado}
         className={cn(
-          "press-sm inline-flex shrink-0 items-center gap-2 rounded-full px-4 py-2 text-sm font-extrabold disabled:opacity-60",
+          // No celular ocupa a linha toda (alvo grande, e evita o texto espremido);
+          // da régia pra cima volta a caber ao lado.
+          "press-sm inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-extrabold disabled:opacity-60 sm:w-auto",
           em && "gap-[0.4em] px-[0.9em] py-[0.4em] text-[0.95em]",
           suspeito
             ? "bg-warning text-warning-foreground"
