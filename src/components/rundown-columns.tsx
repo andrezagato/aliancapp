@@ -2,7 +2,19 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Play, Square, RotateCcw, Check, Minus, Plus, ChevronUp, ChevronDown, Pencil } from "lucide-react";
+import Link from "next/link";
+import {
+  Play,
+  Square,
+  RotateCcw,
+  Check,
+  Minus,
+  Plus,
+  ChevronUp,
+  ChevronDown,
+  Pencil,
+  TriangleAlert,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/toast";
 import { warm } from "@/lib/toasts";
@@ -10,6 +22,7 @@ import {
   iniciarCronograma,
   reiniciarCronograma,
   encerrarCronograma,
+  reabrirCronograma,
   marcarBlocoFeito,
   reordenarCronograma,
   removerBlocoCronograma,
@@ -33,6 +46,7 @@ import {
   type RundownRow,
 } from "@/components/rundown-timing";
 import { useRundownRealtime } from "@/components/rundown-realtime";
+import { BotaoSegurar, FaixaEncerrado, useCarencia } from "@/components/rundown-salvaguardas";
 
 /**
  * O ROTEIRO EM GRADE — o desenho da régia (bloco = linha, campo = coluna).
@@ -111,6 +125,131 @@ function Medida({
       <span className="mt-[0.35em] text-[0.62em] font-semibold uppercase tracking-wide text-muted-foreground">
         {label}
       </span>
+    </div>
+  );
+}
+
+export type CultoOpcao = {
+  id: string;
+  titulo: string;
+  startsAt: string;
+  rodando: boolean;
+  encerrado: boolean;
+  hoje: boolean;
+};
+
+/**
+ * SELETOR DE CULTO — a saída que a régia não tinha.
+ *
+ * Em 09/08/2026 a régia ficou presa no culto errado e a única forma de trocar
+ * era digitar `?ev=<uuid>` na barra de endereço. Qualquer regra automática vai
+ * errar um dia; quando errar, a troca tem que custar dois toques.
+ *
+ * O selo de data é a outra metade: enquanto o culto exibido não for o de hoje, a
+ * data fica âmbar e diz isso com todas as letras. Naquele dia a régia passou
+ * horas mostrando um culto de outra semana sem nada na tela denunciando.
+ */
+function SeletorCulto({
+  titulo,
+  startsAt,
+  deHoje,
+  cultos,
+}: {
+  titulo: string;
+  startsAt: string;
+  deHoje: boolean;
+  cultos: CultoOpcao[];
+}) {
+  const [aberto, setAberto] = useState(false);
+  const caixa = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!aberto) return;
+    const fora = (e: PointerEvent) => {
+      if (caixa.current && !caixa.current.contains(e.target as Node)) setAberto(false);
+    };
+    const tecla = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setAberto(false);
+    };
+    document.addEventListener("pointerdown", fora);
+    document.addEventListener("keydown", tecla);
+    return () => {
+      document.removeEventListener("pointerdown", fora);
+      document.removeEventListener("keydown", tecla);
+    };
+  }, [aberto]);
+
+  const trocavel = cultos.length > 1;
+
+  return (
+    <div ref={caixa} className="relative min-w-0">
+      <button
+        type="button"
+        onClick={() => trocavel && setAberto((v) => !v)}
+        disabled={!trocavel}
+        aria-haspopup="listbox"
+        aria-expanded={aberto}
+        className="press-sm -mx-[0.4em] flex min-w-0 items-center gap-[0.5em] rounded-[0.6em] px-[0.4em] py-[0.2em] text-left disabled:pointer-events-none"
+      >
+        <span className="min-w-0">
+          <span className="block truncate font-display text-[1.15em] font-extrabold leading-tight">
+            {titulo}
+          </span>
+          <span
+            className={cn(
+              "mt-[0.15em] inline-flex items-center gap-[0.35em] rounded-full text-[0.72em]",
+              deHoje
+                ? "text-muted-foreground"
+                : "bg-warning/15 px-[0.6em] py-[0.15em] font-bold text-warning-ink",
+            )}
+          >
+            {deHoje ? null : <TriangleAlert className="size-[1.1em]" />}
+            {dataCurta(startsAt)}
+            {deHoje ? null : " · não é o culto de hoje"}
+          </span>
+        </span>
+        {trocavel ? (
+          <ChevronDown
+            className={cn("size-[1.1em] shrink-0 text-muted-foreground", aberto && "rotate-180")}
+          />
+        ) : null}
+      </button>
+
+      {aberto ? (
+        <div
+          role="listbox"
+          className="absolute left-0 top-full z-30 mt-[0.4em] max-h-[60vh] w-[24em] overflow-y-auto rounded-[0.8em] border border-border bg-card p-[0.3em] shadow-lift"
+        >
+          {cultos.map((c) => (
+            <Link
+              key={c.id}
+              href={`/control?ev=${c.id}`}
+              role="option"
+              aria-selected={c.startsAt === startsAt && c.titulo === titulo}
+              onClick={() => setAberto(false)}
+              className="flex items-center gap-[0.6em] rounded-[0.6em] px-[0.7em] py-[0.5em] hover:bg-muted"
+            >
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[0.95em] font-bold">{c.titulo}</span>
+                <span className="block text-[0.78em] text-muted-foreground">
+                  {dataCurta(c.startsAt)}
+                  {c.hoje ? " · hoje" : ""}
+                </span>
+              </span>
+              {c.rodando ? (
+                <span className="inline-flex shrink-0 items-center gap-[0.3em] rounded-full bg-destructive/12 px-[0.6em] py-[0.2em] text-[0.72em] font-extrabold uppercase text-destructive-ink">
+                  <span className="size-[0.5em] animate-pulse rounded-full bg-destructive" />
+                  ao vivo
+                </span>
+              ) : c.encerrado ? (
+                <span className="shrink-0 rounded-full bg-muted px-[0.6em] py-[0.2em] text-[0.72em] font-bold uppercase text-muted-foreground">
+                  encerrado
+                </span>
+              ) : null}
+            </Link>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -331,6 +470,8 @@ export function RundownColumns({
   items,
   kinds,
   canEdit,
+  cultos = [],
+  deHoje = true,
   stageMsg = null,
   stageAtalhos = [],
 }: {
@@ -343,6 +484,10 @@ export function RundownColumns({
   items: RundownItem[];
   kinds: RundownKind[];
   canEdit: boolean;
+  /** Todos os cultos que a régia pode abrir — alimenta o seletor do cabeçalho. */
+  cultos?: CultoOpcao[];
+  /** Calculado no servidor, no fuso da igreja (ver a nota em control/page.tsx). */
+  deHoje?: boolean;
   /** Mensagem no telão do palco (0050). */
   stageMsg?: StageMsg | null;
   stageAtalhos?: StageAtalho[];
@@ -350,6 +495,8 @@ export function RundownColumns({
   const router = useRouter();
   const { showToast } = useToast();
   const [ocupado, startTx] = useTransition();
+  const [emCarencia, armarCarencia] = useCarencia();
+  const [iniciando, setIniciando] = useState(false);
   const [fonte, setFonte] = useState(FONTE_PADRAO);
   const [editando, setEditando] = useState<RundownItem | "novo" | null>(null);
   const [abrirMsg, setAbrirMsg] = useState(false);
@@ -410,6 +557,32 @@ export function RundownColumns({
       router.refresh();
     });
 
+  /**
+   * Transição do modo ao vivo: igual a `agir`, mas arma a carência. Aqui era o
+   * pior caso do app — "Iniciar" saía do flex e "Encerrar" entrava no MESMO
+   * lugar, mesma altura, mesma largura, e sem confirmação nenhuma. Dois toques
+   * no mesmo ponto começavam e encerravam o culto.
+   */
+  const transicionar = (fn: () => Promise<ActionResult>, sucesso?: string) => {
+    armarCarencia();
+    agir(fn, sucesso);
+  };
+
+  /** Iniciar tem handler próprio só por causa do rótulo "Iniciando…". */
+  const iniciar = () => {
+    setIniciando(true);
+    armarCarencia();
+    startTx(async () => {
+      const r = await iniciarCronograma(eventId);
+      setIniciando(false);
+      if (!r.ok) {
+        showToast(r.error);
+        return;
+      }
+      router.refresh();
+    });
+  };
+
   /** Troca o bloco de lugar com o vizinho e persiste a ordem inteira. */
   const mover = (idx: number, delta: number) => {
     const proxima = [...rows.map((r) => r.it)];
@@ -430,10 +603,7 @@ export function RundownColumns({
          -------------------------------------------------------------------- */}
       <div className="sticky top-0 z-10 shrink-0 bg-card pt-[0.1em]">
       <div className="mb-[0.7em] flex flex-wrap items-center gap-x-[1.4em] gap-y-[0.5em] rounded-[0.8em] bg-primary/[0.06] px-[0.9em] py-[0.6em]">
-        <div className="min-w-0">
-          <p className="truncate font-display text-[1.15em] font-extrabold leading-tight">{titulo}</p>
-          <p className="text-[0.72em] text-muted-foreground">{dataCurta(startsAt)}</p>
-        </div>
+        <SeletorCulto titulo={titulo} startsAt={startsAt} deHoje={deHoje} cultos={cultos} />
 
         <Medida label="início · previsão" className="text-[1.05em]">
           {fmtHora(new Date(startsAt).getTime())}
@@ -503,38 +673,66 @@ export function RundownColumns({
           {canEdit && items.length > 0 ? (
             <>
               {startedMs == null ? (
+                // A régia não tem estado otimista: `startedMs` só muda quando o
+                // servidor responde. Sem um sinal, a janela entre o toque e a
+                // resposta é literalmente uma tela que não reagiu — que foi o
+                // que fez a pessoa tocar de novo. Daí o rótulo próprio, e um
+                // `iniciando` só desta ação (o `ocupado` é de todas, e ticar um
+                // bloco não pode fazer este botão dizer "Iniciando…").
                 <button
-                  onClick={() => agir(() => iniciarCronograma(eventId))}
-                  disabled={ocupado}
+                  onClick={iniciar}
+                  disabled={ocupado || emCarencia}
                   className="press-sm inline-flex h-[2.4em] items-center gap-[0.4em] rounded-full bg-primary px-[0.9em] text-[0.9em] font-bold text-primary-foreground disabled:opacity-60"
                 >
-                  <Play className="size-[1.1em]" /> Iniciar
+                  <Play className="size-[1.1em]" /> {iniciando ? "Iniciando…" : "Iniciar"}
                 </button>
               ) : null}
-              {rodando ? (
-                <button
-                  onClick={() => agir(() => encerrarCronograma(eventId), warm("cultoEncerrado"))}
-                  disabled={ocupado}
-                  className="press-sm inline-flex h-[2.4em] items-center gap-[0.4em] rounded-full border border-border px-[0.9em] text-[0.9em] font-bold disabled:opacity-60"
+              {/* O par destrutivo não nasce junto com a transição: por 3s o
+                  lugar fica VAZIO, e o segundo toque de quem achou que o
+                  primeiro não pegou não encontra nada pra apertar. */}
+              {rodando && !emCarencia ? (
+                <BotaoSegurar
+                  aoConfirmar={() => transicionar(() => encerrarCronograma(eventId), warm("cultoEncerrado"))}
+                  textoTeclado="Encerrar o culto agora? O relógio para."
+                  desabilitado={ocupado}
+                  title="Segure para encerrar o culto"
+                  className="press-sm inline-flex h-[2.4em] items-center gap-[0.4em] rounded-full border border-destructive/40 bg-destructive/10 px-[0.9em] text-[0.9em] font-bold text-destructive-ink"
                 >
-                  <Square className="size-[0.9em]" /> Encerrar
-                </button>
+                  <Square className="size-[0.9em]" /> Segure p/ encerrar
+                </BotaoSegurar>
               ) : null}
-              {startedMs != null ? (
-                <button
-                  onClick={() => agir(() => reiniciarCronograma(eventId))}
-                  disabled={ocupado}
-                  aria-label="Reiniciar o roteiro"
-                  title="Reiniciar o roteiro"
+              {startedMs != null && !emCarencia ? (
+                <BotaoSegurar
+                  aoConfirmar={() => transicionar(() => reiniciarCronograma(eventId))}
+                  textoTeclado="Reiniciar o roteiro? Isso apaga o início, o encerramento e os checks."
+                  desabilitado={ocupado}
+                  aria-label="Reiniciar o roteiro — segure para confirmar"
+                  title="Segure para reiniciar — apaga início, encerramento e checks"
                   className="press-sm grid size-[2.4em] place-items-center rounded-full border border-border disabled:opacity-60"
                 >
                   <RotateCcw className="size-[1.1em]" />
-                </button>
+                </BotaoSegurar>
               ) : null}
             </>
           ) : null}
         </span>
       </div>
+
+        {/* A porta de volta, também dentro do sticky: um culto encerrado por
+            engano tem que ser desfeito de onde a pessoa está olhando, sem rolar
+            a grade atrás do botão. */}
+        {canEdit && endedAt ? (
+          <div className="mb-[0.7em]">
+            <FaixaEncerrado
+              startedAt={startedAt}
+              endedAt={endedAt}
+              algumTique={items.some((x) => x.doneAt)}
+              aoReabrir={() => transicionar(() => reabrirCronograma(eventId), "Culto reaberto.")}
+              ocupado={ocupado}
+              em
+            />
+          </div>
+        ) : null}
 
         {/* Dentro do sticky de propósito: numa régia, a mensagem que está no
             telão do palco não pode sair de vista ao rolar a grade. */}

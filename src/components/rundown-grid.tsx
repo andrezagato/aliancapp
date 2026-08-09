@@ -34,6 +34,7 @@ import {
   iniciarCronograma,
   reiniciarCronograma,
   encerrarCronograma,
+  reabrirCronograma,
   marcarBlocoFeito,
   adicionarTipoBloco,
   removerTipoBloco,
@@ -55,6 +56,7 @@ import {
   type Heat,
 } from "@/components/rundown-timing";
 import { useRundownRealtime } from "@/components/rundown-realtime";
+import { BotaoSegurar, FaixaEncerrado, useCarencia } from "@/components/rundown-salvaguardas";
 
 const PX_PER_MIN = 6; // altura do bloco = duração × isto (arrastar 1min = 6px)
 const MIN_H = 72; // altura mínima pra caber os contadores/toque
@@ -176,7 +178,10 @@ export function RundownGrid({
 }) {
   const router = useRouter();
   const { showToast } = useToast();
-  const [, startTx] = useTransition();
+  const [pendente, startTx] = useTransition();
+  // Todo controle do modo ao vivo nasce dormindo depois de uma transição — é o
+  // que impede o segundo toque de quem achou que o primeiro não pegou.
+  const [emCarencia, armarCarencia] = useCarencia();
 
   const [list, setList] = useState(items);
   const [started, setStarted] = useState<string | null>(startedAt);
@@ -325,6 +330,7 @@ export function RundownGrid({
 
   const start = () => {
     setStarted(new Date().toISOString());
+    armarCarencia();
     startTx(async () => {
       const r = await iniciarCronograma(eventId);
       if (r.ok) router.refresh();
@@ -335,6 +341,7 @@ export function RundownGrid({
     setStarted(null);
     setEnded(null);
     setList((prev) => prev.map((x) => ({ ...x, doneAt: null })));
+    armarCarencia();
     startTx(async () => {
       await reiniciarCronograma(eventId);
       router.refresh();
@@ -342,12 +349,28 @@ export function RundownGrid({
   };
   const encerrar = () => {
     setEnded(new Date().toISOString());
+    armarCarencia();
     startTx(async () => {
       const r = await encerrarCronograma(eventId);
       if (r.ok) {
         showToast(warm("cultoEncerrado"));
         router.refresh();
       } else {
+        showToast(r.error);
+      }
+    });
+  };
+  /** O desfazer da 0051: o start e os tiques ficam de pé, só o fim é apagado. */
+  const reabrir = () => {
+    setEnded(null);
+    armarCarencia();
+    startTx(async () => {
+      const r = await reabrirCronograma(eventId);
+      if (r.ok) {
+        showToast("Culto reaberto — o relógio voltou a correr.");
+        router.refresh();
+      } else {
+        setEnded(endedAt);
         showToast(r.error);
       }
     });
@@ -425,30 +448,43 @@ export function RundownGrid({
                     {clock((liveNow ?? startedMs ?? 0) - (startedMs ?? 0))}
                   </span>
                 </div>
-                {canEdit && !ended ? (
-                  <button
-                    onClick={() => window.confirm("Encerrar o culto agora? O relógio para.") && encerrar()}
-                    aria-label="Encerrar culto"
-                    title="Encerrar culto"
+                {/* Durante a carência o par destrutivo simplesmente NÃO EXISTE:
+                    o segundo toque de quem achou que o primeiro não pegou cai no
+                    relógio, que é inerte. Passados 3s eles aparecem — e a partir
+                    daí só saem por pressão longa, nunca por toque solto. */}
+                {canEdit && !emCarencia && !ended ? (
+                  <BotaoSegurar
+                    aoConfirmar={encerrar}
+                    textoTeclado="Encerrar o culto agora? O relógio para."
+                    aria-label="Encerrar culto — segure para confirmar"
+                    title="Segure para encerrar o culto"
                     className="press-sm grid size-9 place-items-center rounded-full border border-destructive/40 bg-destructive/10 text-destructive-ink"
                   >
                     <Square className="size-3.5 fill-current" />
-                  </button>
+                  </BotaoSegurar>
                 ) : null}
-                {canEdit ? (
-                  <button
-                    onClick={() => window.confirm("Reiniciar o cronograma? Isso apaga o início, o encerramento e os checks.") && reset()}
-                    aria-label="Reiniciar"
+                {canEdit && !emCarencia ? (
+                  <BotaoSegurar
+                    aoConfirmar={reset}
+                    textoTeclado="Reiniciar o cronograma? Isso apaga o início, o encerramento e os checks."
+                    aria-label="Reiniciar o roteiro — segure para confirmar"
+                    title="Segure para reiniciar — apaga início, encerramento e checks"
                     className="press-sm grid size-9 place-items-center rounded-full border border-border text-muted-foreground"
                   >
                     <RotateCcw className="size-4" />
-                  </button>
+                  </BotaoSegurar>
                 ) : null}
               </div>
             ) : canEdit ? (
+              // Sem `window.confirm`: o diálogo nativo aqui só treinava o dedo a
+              // tocar "OK" sem ler, e não impediu nada em 09/08. Aqui o retorno
+              // já é imediato por outro caminho — o `setStarted` otimista troca
+              // este botão pelo relógio no mesmo quadro do toque, então não há
+              // janela de "não aconteceu nada" pra pessoa querer tocar de novo.
               <button
-                onClick={() => window.confirm("Iniciar o culto agora? O relógio começa a rodar.") && start()}
-                className="press inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-base font-extrabold text-primary-foreground"
+                onClick={start}
+                disabled={pendente || emCarencia}
+                className="press inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-base font-extrabold text-primary-foreground disabled:opacity-60"
               >
                 <Play className="size-5 fill-current" /> Iniciar culto
               </button>
@@ -456,6 +492,22 @@ export function RundownGrid({
           ) : null}
         </div>
       </div>
+
+      {/* A porta de volta fica NO TOPO e não some sozinha: quem abre a tela dez
+          minutos depois pode não ser quem errou, e precisa achar o caminho sem
+          perguntar. Antes, um culto encerrado sumia do seletor inteiro — foi o
+          que fez a Produção achar que o culto tinha sido apagado em 09/08. */}
+      {canEdit && ended ? (
+        <div className="mb-3">
+          <FaixaEncerrado
+            startedAt={started}
+            endedAt={ended}
+            algumTique={list.some((x) => x.doneAt)}
+            aoReabrir={reabrir}
+            ocupado={pendente}
+          />
+        </div>
+      ) : null}
 
       {/* A faixa só existe quando há mensagem no ar. Uma faixa permanente
           dizendo "nada no telão" seria ruído em 99% do tempo — e ruído
@@ -650,12 +702,13 @@ export function RundownGrid({
       )}
 
       {canEdit && started && !ended && allDone ? (
-        <button
-          onClick={() => window.confirm("Encerrar o culto? Todos os blocos foram concluídos.") && encerrar()}
+        <BotaoSegurar
+          aoConfirmar={encerrar}
+          textoTeclado="Encerrar o culto? Todos os blocos foram concluídos."
           className="press mt-2 flex w-full items-center justify-center gap-2 rounded-2xl bg-success py-3 text-sm font-extrabold text-white"
         >
-          <Check className="size-4" strokeWidth={3} /> Tudo concluído — encerrar culto
-        </button>
+          <Check className="size-4" strokeWidth={3} /> Segure para encerrar o culto
+        </BotaoSegurar>
       ) : null}
 
       {canEdit ? (

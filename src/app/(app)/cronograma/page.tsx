@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { RundownGrid } from "@/components/rundown-grid";
 import { EventFilesCard } from "@/components/event-files-card";
 import { getSession } from "@/lib/auth";
-import { listUpcomingEvents, listLiveRundownEvents, getEventRundown, listRundownKinds, listRundownTemplates, getRundownState, estouEscaladoNoEvento, getPastaEvento, getStageMessage, listStageShortcuts } from "@/lib/data";
+import { listarCandidatosDeRoteiro, escolherCulto, ehDeHoje, getEventRundown, listRundownKinds, listRundownTemplates, estouEscaladoNoEvento, getPastaEvento, getStageMessage, listStageShortcuts } from "@/lib/data";
 import { fmtWeekdayShort, fmtDayMonthShort } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -16,24 +16,25 @@ export default async function CronogramaPage({ searchParams }: { searchParams: P
 
   // Próximos + cultos com roteiro aberto que já passaram (senão o líder não
   // consegue mais encerrar e a avaliação nunca é liberada). "Ao vivo" primeiro.
-  const [live, futuros] = await Promise.all([listLiveRundownEvents(session), listUpcomingEvents(session, 8)]);
-  const seen = new Set<string>();
-  const upcoming = [...live, ...futuros].filter((e) => (seen.has(e.id) ? false : seen.add(e.id)));
-  // Encerrados saem: escolhe o primeiro não-encerrado (ou o pedido via ?ev=).
-  const states = await Promise.all(upcoming.map((e) => getRundownState(e.id)));
-  const firstOpen = upcoming.findIndex((_, i) => !states[i].endedAt);
-  const chosen = evParam ? upcoming.findIndex((e) => e.id === evParam) : -1;
-  const idx = chosen >= 0 ? chosen : firstOpen;
-  const ev = idx >= 0 ? upcoming[idx] : null;
-  const state = idx >= 0 ? states[idx] : null;
+  const candidatos = await listarCandidatosDeRoteiro(session);
+  const idx = escolherCulto(candidatos, evParam);
+  const escolha = idx >= 0 ? candidatos[idx] : null;
+  const ev = escolha?.ev ?? null;
+  const state = escolha ? { startedAt: escolha.startedAt, endedAt: escolha.endedAt } : null;
   const [rundown, kinds, templates] = ev
     ? await Promise.all([getEventRundown(ev.id), listRundownKinds(), listRundownTemplates()])
     : [[], await listRundownKinds(), []];
-  const allOpen = upcoming.filter((_, i) => !states[i].endedAt);
-  const allEnded = upcoming.filter((_, i) => !!states[i].endedAt);
-  const activePos = ev ? allOpen.findIndex((e) => e.id === ev.id) : -1;
-  const prevEv = activePos > 0 ? allOpen[activePos - 1] : null;
-  const nextEv = activePos >= 0 && activePos < allOpen.length - 1 ? allOpen[activePos + 1] : null;
+
+  // O ENCERRADO DE HOJE FICA. Até 09/08 o seletor descartava todo culto
+  // encerrado, e no dia em que a Produção encerrou o culto por engano ele
+  // evaporou da tela inteira — de onde saiu o "apagaram o culto" e, logo em
+  // seguida, o trabalho em cima do roteiro do domingo seguinte. Some só o que já
+  // passou de verdade; o de hoje continua à mão, com a faixa de reabrir.
+  const visiveis = candidatos.filter((c) => !c.endedAt || ehDeHoje(c.ev.starts_at) || c.ev.id === ev?.id);
+  const encerradosAntigos = candidatos.filter((c) => c.endedAt && !ehDeHoje(c.ev.starts_at));
+  const activePos = ev ? visiveis.findIndex((c) => c.ev.id === ev.id) : -1;
+  const prevEv = activePos > 0 ? visiveis[activePos - 1].ev : null;
+  const nextEv = activePos >= 0 && activePos < visiveis.length - 1 ? visiveis[activePos + 1].ev : null;
   // Estrutura: só admin + Produção (equipe manages_rundown). Conteúdo (link/info
   // por bloco): quem está escalado no evento.
   const canEdit = session.role === "admin" || session.profile.teams.some((t) => t.manages_rundown);
@@ -66,8 +67,10 @@ export default async function CronogramaPage({ searchParams }: { searchParams: P
                 <span className="size-9 shrink-0" />
               )}
               <div className="flex flex-1 snap-x gap-2 overflow-x-auto py-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                {allOpen.map((e) => {
+                {visiveis.map((c) => {
+                  const e = c.ev;
                   const on = e.id === ev.id;
+                  const aoVivo = !!c.startedAt && !c.endedAt;
                   return (
                     <Link
                       key={e.id}
@@ -76,13 +79,24 @@ export default async function CronogramaPage({ searchParams }: { searchParams: P
                       className={cn(
                         "flex shrink-0 snap-start flex-col rounded-2xl border px-3.5 py-2",
                         on ? "border-primary bg-primary/10" : "border-border bg-card",
+                        c.endedAt && !on && "opacity-70",
                       )}
                     >
                       <span className={cn("max-w-[11rem] truncate text-[13px] font-bold", on ? "text-primary" : "text-foreground")}>
                         {e.title}
                       </span>
-                      <span className="text-[11px] capitalize text-muted-foreground">
+                      <span className="flex items-center gap-1.5 text-[11px] capitalize text-muted-foreground">
                         {fmtWeekdayShort(e.starts_at)} · {fmtDayMonthShort(e.starts_at)}
+                        {/* O estado vai em FORMA antes de texto (ponto pulsando /
+                            traço), pra distinguir de relance sem depender de cor. */}
+                        {aoVivo ? (
+                          <span className="inline-flex items-center gap-1 font-bold normal-case text-destructive-ink">
+                            <span className="size-1.5 animate-pulse rounded-full bg-destructive" />
+                            ao vivo
+                          </span>
+                        ) : c.endedAt ? (
+                          <span className="font-bold normal-case">· encerrado</span>
+                        ) : null}
                       </span>
                     </Link>
                   );
@@ -127,10 +141,10 @@ export default async function CronogramaPage({ searchParams }: { searchParams: P
                 <CalendarDays className="size-7" />
               </span>
               <h2 className="font-display text-lg font-bold">
-                {allEnded.length > 0 ? "Tudo em dia por aqui" : "Nenhum culto à frente"}
+                {encerradosAntigos.length > 0 ? "Tudo em dia por aqui" : "Nenhum culto à frente"}
               </h2>
               <p className="max-w-xs text-balance text-sm text-muted-foreground">
-                {allEnded.length > 0
+                {encerradosAntigos.length > 0
                   ? "Os próximos cultos já foram encerrados. Eles ficam guardados em Finalizados, na aba Escalas."
                   : "Quando houver um próximo culto, a ordem dele aparece aqui — pra você montar o passo a passo."}
               </p>

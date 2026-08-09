@@ -5,11 +5,11 @@ import { RundownColumns } from "@/components/rundown-columns";
 import { ControlChat } from "@/components/control/control-chat";
 import { getSession } from "@/lib/auth";
 import {
-  listUpcomingEvents,
-  listLiveRundownEvents,
   getEventRundown,
   listRundownKinds,
-  getRundownState,
+  listarCandidatosDeRoteiro,
+  escolherCulto,
+  ehDeHoje,
   getStageMessage,
   listStageShortcuts,
 } from "@/lib/data";
@@ -18,25 +18,26 @@ import { listarCanais } from "@/lib/chat";
 /**
  * /control — a régia. Endereço digitado à mão, de propósito fora do menu.
  *
- * Escolhe o culto igual à aba Roteiro: ao vivo primeiro, senão o próximo com
- * roteiro aberto; `?ev=<id>` força um específico. O roteiro aqui é o MESMO
- * componente do celular (com o realtime da 0047), então marcar um bloco na régia
- * aparece na mão de todo mundo e vice-versa.
+ * Escolhe o culto igual à aba Roteiro, pela MESMA função (`escolherCulto`):
+ * `?ev=` manda, senão o roteiro em andamento, senão o culto de hoje, senão o
+ * próximo aberto. Antes o critério era só "o primeiro não encerrado", e em
+ * 09/08/2026 isso deixou a régia parada no Culto de Oração de quinta enquanto a
+ * Produção conduzia outro culto — sem seletor na tela, ninguém tinha como
+ * corrigir a não ser digitando um UUID na barra de endereço.
+ *
+ * O roteiro aqui é o MESMO componente do celular (com o realtime da 0047), então
+ * marcar um bloco na régia aparece na mão de todo mundo e vice-versa.
  */
 export default async function ControlPage({ searchParams }: { searchParams: Promise<{ ev?: string }> }) {
   const session = await getSession();
   if (!session) return null;
   const { ev: evParam } = await searchParams;
 
-  const [live, futuros] = await Promise.all([listLiveRundownEvents(session), listUpcomingEvents(session, 8)]);
-  const seen = new Set<string>();
-  const candidatos = [...live, ...futuros].filter((e) => (seen.has(e.id) ? false : seen.add(e.id)));
-  const states = await Promise.all(candidatos.map((e) => getRundownState(e.id)));
-  const primeiroAberto = candidatos.findIndex((_, i) => !states[i].endedAt);
-  const escolhido = evParam ? candidatos.findIndex((e) => e.id === evParam) : -1;
-  const idx = escolhido >= 0 ? escolhido : primeiroAberto;
-  const ev = idx >= 0 ? candidatos[idx] : null;
-  const state = idx >= 0 ? states[idx] : null;
+  const candidatos = await listarCandidatosDeRoteiro(session);
+  const idx = escolherCulto(candidatos, evParam);
+  const escolha = idx >= 0 ? candidatos[idx] : null;
+  const ev = escolha?.ev ?? null;
+  const state = escolha ? { startedAt: escolha.startedAt, endedAt: escolha.endedAt } : null;
 
   if (!ev || !state) {
     return (
@@ -79,6 +80,19 @@ export default async function ControlPage({ searchParams }: { searchParams: Prom
           eventId={ev.id}
           titulo={ev.title}
           meId={session.userId}
+          // A régia deixa de ser uma tela sem saída: a lista inteira vai junto,
+          // pra trocar de culto em dois toques em vez de um UUID na URL.
+          cultos={candidatos.map((c) => ({
+            id: c.ev.id,
+            titulo: c.ev.title,
+            startsAt: c.ev.starts_at,
+            rodando: !!c.startedAt && !c.endedAt,
+            encerrado: !!c.endedAt,
+            // "Hoje" é decidido no SERVIDOR, no fuso da igreja: deixar o cliente
+            // decidir daria divergência de hidratação na virada da meia-noite.
+            hoje: ehDeHoje(c.ev.starts_at),
+          }))}
+          deHoje={ehDeHoje(ev.starts_at)}
           startsAt={ev.starts_at}
           startedAt={state.startedAt}
           endedAt={state.endedAt}

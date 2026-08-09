@@ -1188,6 +1188,37 @@ export async function getRundownState(eventId: string): Promise<{ startedAt: str
   return { startedAt: data?.rundown_started_at ?? null, endedAt: data?.rundown_ended_at ?? null };
 }
 
+export type CandidatoRoteiro = {
+  ev: EventListItem;
+  startedAt: string | null;
+  endedAt: string | null;
+};
+
+// A DECISÃO de qual culto abrir mora em `roteiro-escolha.ts` (pura, testável
+// sem Supabase). Aqui fica só a BUSCA. Reexportado pra que as páginas continuem
+// importando tudo de um lugar só.
+export { escolherCulto, ehDeHoje } from "@/lib/roteiro-escolha";
+
+/**
+ * Os cultos que a aba Roteiro e a régia podem mostrar, com o estado do modo ao
+ * vivo junto. Ao vivo primeiro, depois os próximos — a mesma lista nas duas
+ * telas, pra elas nunca discordarem sobre qual culto existe.
+ */
+export async function listarCandidatosDeRoteiro(
+  session: Session,
+  limite = 8,
+): Promise<CandidatoRoteiro[]> {
+  const [live, futuros] = await Promise.all([
+    listLiveRundownEvents(session),
+    listUpcomingEvents(session, limite),
+  ]);
+  const vistos = new Set<string>();
+  const evs = [...live, ...futuros].filter((e) => (vistos.has(e.id) ? false : vistos.add(e.id)));
+  const estados = await Promise.all(evs.map((e) => getRundownState(e.id)));
+  return evs.map((ev, i) => ({ ev, ...estados[i] }));
+}
+
+
 // --- Mensagem no telão (migration 0050) -------------------------------------
 
 export type StageMessageData = { id: string; texto: string; autor: string | null; expiresAt: string };

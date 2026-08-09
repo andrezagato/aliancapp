@@ -1974,6 +1974,11 @@ export type Database = {
         Args: { p_event: string }
         Returns: undefined
       }
+      // migration 0051 — desfazer o encerramento (mantém start e tiques)
+      reabrir_roteiro: {
+        Args: { p_event: string }
+        Returns: undefined
+      }
       // migration 0050 — mensagem no telão
       enviar_stage_message: {
         Args: { p_event: string; p_texto: string; p_minutos?: number }

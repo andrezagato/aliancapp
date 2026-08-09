@@ -1549,6 +1549,7 @@ export async function iniciarCronograma(eventId: string): Promise<ActionResult> 
   const { error } = await supabase.rpc("iniciar_roteiro", { p_event: eventId });
   if (error) return fail(error.message);
   revalidatePath("/cronograma");
+  revalidatePath("/control");
   return ok;
 }
 
@@ -1561,6 +1562,7 @@ export async function reiniciarCronograma(eventId: string): Promise<ActionResult
   const { error } = await supabase.rpc("reiniciar_roteiro", { p_event: eventId });
   if (error) return fail(error.message);
   revalidatePath("/cronograma");
+  revalidatePath("/control");
   return ok;
 }
 
@@ -1573,6 +1575,25 @@ export async function encerrarCronograma(eventId: string): Promise<ActionResult>
   const { error } = await supabase.rpc("encerrar_roteiro", { p_event: eventId });
   if (error) return fail(error.message);
   revalidatePath("/cronograma");
+  revalidatePath("/control");
+  return ok;
+}
+
+/**
+ * Desfaz o encerramento (0051). Diferente de `reiniciarCronograma`: aqui o
+ * start original e os tiques dos blocos ficam de pé — o culto volta exatamente
+ * de onde estava. É o remédio pro encerramento acidental, e por isso precisa
+ * estar a UM toque de distância de quem acabou de errar.
+ */
+export async function reabrirCronograma(eventId: string): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  if (!(await podeEditarCronograma(session, eventId))) return fail("Sem permissão.");
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("reabrir_roteiro", { p_event: eventId });
+  if (error) return fail(error.message);
+  revalidatePath("/cronograma");
+  revalidatePath("/control");
   return ok;
 }
 
