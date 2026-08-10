@@ -81,9 +81,10 @@ export function BotaoSegurar({
   className?: string;
   duracaoMs?: number;
   desabilitado?: boolean;
-  "aria-label"?: string;
-  title?: string;
-}) {
+} & Omit<
+  React.ButtonHTMLAttributes<HTMLButtonElement>,
+  "className" | "disabled" | "style" | "onKeyDown" | "onPointerDown" | "onPointerUp" | "children"
+>) {
   const [progresso, setProgresso] = useState(0);
   const quadro = useRef<number | null>(null);
   const inicio = useRef(0);

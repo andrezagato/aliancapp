@@ -57,6 +57,7 @@ import {
 } from "@/components/rundown-timing";
 import { useRundownRealtime } from "@/components/rundown-realtime";
 import { BotaoSegurar, FaixaEncerrado, useCarencia } from "@/components/rundown-salvaguardas";
+import { MenuCulto } from "@/components/rundown-menu-culto";
 
 const PX_PER_MIN = 6; // altura do bloco = duração × isto (arrastar 1min = 6px)
 const MIN_H = 72; // altura mínima pra caber os contadores/toque
@@ -450,31 +451,40 @@ export function RundownGrid({
                     {clock((liveNow ?? startedMs ?? 0) - (startedMs ?? 0))}
                   </span>
                 </div>
-                {/* Durante a carência o par destrutivo simplesmente NÃO EXISTE:
-                    o segundo toque de quem achou que o primeiro não pegou cai no
-                    relógio, que é inerte. Passados 3s eles aparecem — e a partir
-                    daí só saem por pressão longa, nunca por toque solto. */}
-                {canEdit && !emCarencia && !ended ? (
-                  <BotaoSegurar
-                    aoConfirmar={encerrar}
-                    textoTeclado="Encerrar o culto agora? O relógio para."
-                    aria-label="Encerrar culto — segure para confirmar"
-                    title="Segure para encerrar o culto"
-                    className="press-sm grid size-9 place-items-center rounded-full border border-destructive/40 bg-destructive/10 text-destructive-ink"
-                  >
-                    <Square className="size-3.5 fill-current" />
-                  </BotaoSegurar>
-                ) : null}
-                {canEdit && !emCarencia ? (
-                  <BotaoSegurar
-                    aoConfirmar={reset}
-                    textoTeclado="Reiniciar o cronograma? Isso apaga o início, o encerramento e os checks."
-                    aria-label="Reiniciar o roteiro — segure para confirmar"
-                    title="Segure para reiniciar — apaga início, encerramento e checks"
-                    className="press-sm grid size-9 place-items-center rounded-full border border-border text-muted-foreground"
-                  >
-                    <RotateCcw className="size-4" />
-                  </BotaoSegurar>
+                {/* O destrutivo mora AQUI DENTRO, não solto na barra. O gatilho
+                    fica no lugar e as opções abrem pra baixo — longe do polegar
+                    (onde a varredura de progresso ficava escondida) e fora da
+                    coordenada do toque anterior. A carência ainda vale pros
+                    itens, de graça, como cinto extra. */}
+                {canEdit ? (
+                  <MenuCulto
+                    itens={[
+                      ...(ended
+                        ? []
+                        : [
+                            {
+                              id: "encerrar",
+                              rotulo: "Encerrar culto",
+                              detalhe: "O relógio para. Dá pra reabrir depois.",
+                              icone: <Square className="size-4 shrink-0 fill-current" />,
+                              destrutivo: true,
+                              desabilitado: emCarencia,
+                              aoEscolher: encerrar,
+                            },
+                          ]),
+                      {
+                        id: "reiniciar",
+                        rotulo: "Reiniciar roteiro",
+                        detalhe: "Apaga início, fim e todos os checks",
+                        icone: <RotateCcw className="size-4 shrink-0" />,
+                        // O único sem desfazer — por isso continua exigindo
+                        // pressão longa, mesmo já estando dentro do menu.
+                        segurar: true,
+                        desabilitado: emCarencia,
+                        aoEscolher: reset,
+                      },
+                    ]}
+                  />
                 ) : null}
               </div>
             ) : canEdit ? (

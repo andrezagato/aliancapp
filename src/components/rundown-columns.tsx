@@ -46,7 +46,8 @@ import {
   type RundownRow,
 } from "@/components/rundown-timing";
 import { useRundownRealtime } from "@/components/rundown-realtime";
-import { BotaoSegurar, FaixaEncerrado, useCarencia } from "@/components/rundown-salvaguardas";
+import { FaixaEncerrado, useCarencia } from "@/components/rundown-salvaguardas";
+import { MenuCulto } from "@/components/rundown-menu-culto";
 
 /**
  * O ROTEIRO EM GRADE — o desenho da régia (bloco = linha, campo = coluna).
@@ -687,31 +688,39 @@ export function RundownColumns({
                   <Play className="size-[1.1em]" /> {iniciando ? "Iniciando…" : "Iniciar"}
                 </button>
               ) : null}
-              {/* O par destrutivo não nasce junto com a transição: por 3s o
-                  lugar fica VAZIO, e o segundo toque de quem achou que o
-                  primeiro não pegou não encontra nada pra apertar. */}
-              {rodando && !emCarencia ? (
-                <BotaoSegurar
-                  aoConfirmar={() => transicionar(() => encerrarCronograma(eventId), warm("cultoEncerrado"))}
-                  textoTeclado="Encerrar o culto agora? O relógio para."
-                  desabilitado={ocupado}
-                  title="Segure para encerrar o culto"
-                  className="press-sm inline-flex h-[2.4em] items-center gap-[0.4em] rounded-full border border-destructive/40 bg-destructive/10 px-[0.9em] text-[0.9em] font-bold text-destructive-ink"
-                >
-                  <Square className="size-[0.9em]" /> Segure p/ encerrar
-                </BotaoSegurar>
-              ) : null}
-              {startedMs != null && !emCarencia ? (
-                <BotaoSegurar
-                  aoConfirmar={() => transicionar(() => reiniciarCronograma(eventId))}
-                  textoTeclado="Reiniciar o roteiro? Isso apaga o início, o encerramento e os checks."
-                  desabilitado={ocupado}
-                  aria-label="Reiniciar o roteiro — segure para confirmar"
-                  title="Segure para reiniciar — apaga início, encerramento e checks"
-                  className="press-sm grid size-[2.4em] place-items-center rounded-full border border-border disabled:opacity-60"
-                >
-                  <RotateCcw className="size-[1.1em]" />
-                </BotaoSegurar>
+              {/* Mesmo menu do celular: o gatilho fica parado no lugar onde
+                  antes o "Encerrar" nascia sozinho, e as opções abrem pra baixo.
+                  Na régia isso também tira dois alvos da barra, que já estava
+                  disputando espaço com fonte, telão e blocos. */}
+              {startedMs != null ? (
+                <MenuCulto
+                  em
+                  itens={[
+                    ...(rodando
+                      ? [
+                          {
+                            id: "encerrar",
+                            rotulo: "Encerrar culto",
+                            detalhe: "O relógio para. Dá pra reabrir depois.",
+                            icone: <Square className="size-[1.1em] shrink-0" />,
+                            destrutivo: true,
+                            desabilitado: ocupado || emCarencia,
+                            aoEscolher: () =>
+                              transicionar(() => encerrarCronograma(eventId), warm("cultoEncerrado")),
+                          },
+                        ]
+                      : []),
+                    {
+                      id: "reiniciar",
+                      rotulo: "Reiniciar roteiro",
+                      detalhe: "Apaga início, fim e todos os checks",
+                      icone: <RotateCcw className="size-[1.1em] shrink-0" />,
+                      segurar: true,
+                      desabilitado: ocupado || emCarencia,
+                      aoEscolher: () => transicionar(() => reiniciarCronograma(eventId)),
+                    },
+                  ]}
+                />
               ) : null}
             </>
           ) : null}
