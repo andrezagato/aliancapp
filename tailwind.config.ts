@@ -132,6 +132,19 @@ const config: Config = {
           from: { transform: "translateX(100%)" },
           to: { transform: "none" },
         },
+        // MENSAGEM CHEGOU NA RÉGIA: moldura piscando na tela inteira. Três
+        // batidas, e não um fade só — piscada única se confunde com o vídeo
+        // trocando de cena, e cabine olha pra tela de canto de olho. Não vai a
+        // zero no meio: a moldura continua visível o tempo todo, só muda de
+        // intensidade, senão quem olha no vale acha que não tem nada.
+        alerta: {
+          "0%, 100%": { opacity: "0" },
+          "6%, 22%": { opacity: "1" },
+          "36%": { opacity: "0.25" },
+          "48%, 60%": { opacity: "1" },
+          "74%": { opacity: "0.25" },
+          "86%": { opacity: "1" },
+        },
       },
       animation: {
         "fade-in": "fade-in 0.24s ease-out both",
@@ -145,6 +158,7 @@ const config: Config = {
         glow: "glow 5s ease-in-out infinite",
         flame: "flame 1s linear infinite",
         push: "push 0.34s cubic-bezier(0.32, 0.72, 0.24, 1) both",
+        alerta: "alerta 2.5s ease-in-out both",
       },
     },
   },

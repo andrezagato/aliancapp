@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Maximize2, Minimize2, Link2, X, MonitorPlay } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useFlashDeAlerta } from "@/lib/alerta";
 
 /**
  * SALA DE CONTROLE (/control) — uma tela só, pra um monitor 16:9 durante o culto.
@@ -61,6 +62,10 @@ export function ControlRoom({
   const [rascunho, setRascunho] = useState("");
   const [editandoUrl, setEditandoUrl] = useState(false);
   const [cheio, setCheio] = useState(false);
+  // Mensagem nova no chat: a moldura da SALA inteira pisca. Mora aqui, e não no
+  // painel do chat, porque o alerta precisa alcançar quem está de olho no vídeo
+  // ou no roteiro — que é onde o operador olha 95% do culto.
+  const flash = useFlashDeAlerta();
 
   // A URL fica no APARELHO da régia (o PC da sala), não na conta: cada sala tem
   // o seu relay, e quem loga ali é qualquer pessoa da equipe.
@@ -211,6 +216,18 @@ export function ControlRoom({
           {chatSlot}
         </aside>
       </div>
+
+      {/* A moldura do alerta. `pointer-events-none` é obrigatório: numa régia,
+          uma camada que engole clique por 2,5s no meio do culto seria pior que
+          perder a mensagem. `key` remonta o elemento a cada piscada pra
+          reiniciar a animação quando duas mensagens chegam em sequência. */}
+      {flash > 0 ? (
+        <span
+          key={flash}
+          aria-hidden
+          className="animate-alerta pointer-events-none fixed inset-0 z-50 shadow-[inset_0_0_0_5px_hsl(var(--primary)),inset_0_0_28px_6px_hsl(var(--primary)/0.35)]"
+        />
+      ) : null}
 
       {/* ------------------------------- roteiro: a largura INTEIRA da tela */}
       {cheio ? null : (

@@ -10,6 +10,8 @@ import { enviarMensagemChat, silenciarCanalChat, apagarMensagemChat } from "@/li
 import { fmtTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useVisualViewport } from "@/lib/use-visual-viewport";
+import { BotaoSom } from "@/components/chat/botao-som";
+import type { EstadoSom } from "@/lib/alerta";
 import type { CanalChat, ChatMessageView } from "@/lib/chat";
 
 type Role = "admin" | "leader" | "volunteer";
@@ -33,6 +35,7 @@ export function ChatModal({
   canais,
   meId,
   role,
+  som,
   onOpenChannel,
   onClose,
   onMuteChange,
@@ -40,6 +43,8 @@ export function ChatModal({
   canais: CanalChat[];
   meId: string;
   role: Role;
+  /** Som do alerta NESTE aparelho — vem do balão, que é quem vigia o Realtime. */
+  som: EstadoSom;
   onOpenChannel: (c: CanalChat) => void;
   onClose: () => void;
   onMuteChange: (type: string, ref: string, muted: boolean) => void;
@@ -110,7 +115,13 @@ export function ChatModal({
         className="-mt-1 flex h-[80dvh] flex-col"
         style={kbOpen ? { height: `calc(${viewportHeight}px - 56px)` } : undefined}
       >
-        <h3 className="mb-2 font-display text-[22px] font-extrabold leading-tight text-foreground">Conversas</h3>
+        {/* O interruptor de som mora no título, longe do sino de silenciar canal
+            que fica dentro da conversa: um é o APARELHO, o outro é o canal pra
+            todo mundo. Vizinhos, seriam trocados um pelo outro. */}
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <h3 className="font-display text-[22px] font-extrabold leading-tight text-foreground">Conversas</h3>
+          <BotaoSom estado={som} />
+        </div>
 
         {/* Abas fixas de topo */}
         <div className="flex gap-1 rounded-2xl bg-muted/60 p-1">

@@ -1,19 +1,29 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { MessagesSquare } from "lucide-react";
-import { createClient, supabaseConfigured } from "@/lib/supabase/client";
 import { marcarCanalLido } from "@/lib/actions";
 import { ChatModal } from "@/components/chat/chat-modal";
+import { useAlertaDeMensagens } from "@/components/chat/chat-alerta";
+import { useSomDeAlerta, VOL_CELULAR } from "@/lib/alerta";
 import type { CanalChat } from "@/lib/chat";
 
 type Role = "admin" | "leader" | "volunteer";
 
 /**
  * Balão flutuante do chat interno (canto inferior direito, acima da bottom-nav).
- * Recebe os canais iniciais do servidor e assina o Realtime de `chat_messages`
- * pra manter o badge de não-lidas vivo — ignora as mensagens da própria pessoa
- * e o canal aberto no momento.
+ * Recebe os canais iniciais do servidor e vive de Realtime pra manter o badge de
+ * não-lidas vivo — ignora as mensagens da própria pessoa e o canal aberto.
+ *
+ * A vigilância do Realtime mudou de casa: agora é `useAlertaDeMensagens`, o mesmo
+ * hook da régia. Aqui ele também toca (baixinho) e trema o aparelho — a diferença
+ * é que o celular respeita o canal ABERTO na tela: apitar enquanto a pessoa lê a
+ * conversa seria avisar de algo que ela está vendo. Na régia não, e de propósito
+ * (ver a nota lá).
+ *
+ * App fechado continua com o push (VAPID) que já existia. Este alerta é pra
+ * quando o app está na mão — o caso em que o push some no meio das notificações
+ * do sistema e ninguém vê.
  */
 export function ChatBubble({
   canais: inicial,
@@ -30,37 +40,23 @@ export function ChatBubble({
 
   const total = canais.reduce((s, c) => s + c.unread, 0);
 
-  // Realtime global: incrementa o badge quando chega mensagem de outro canal.
-  useEffect(() => {
-    if (!supabaseConfigured) return;
-    const supabase = createClient();
-    const sub = supabase
-      .channel("chat-bubble")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "chat_messages" },
-        (payload) => {
-          const m = payload.new as {
-            sender_id: string;
-            channel_type: string;
-            channel_ref: string;
-            created_at: string;
-          };
-          if (m.sender_id === meId) return;
-          setCanais((prev) =>
-            prev.map((c) => {
-              if (c.type !== m.channel_type || c.ref !== m.channel_ref) return c;
-              const viewing = open && active?.type === c.type && active?.ref === c.ref;
-              return { ...c, lastAt: m.created_at, unread: viewing ? c.unread : c.unread + 1 };
-            }),
-          );
-        },
-      )
-      .subscribe();
-    return () => {
-      supabase.removeChannel(sub);
-    };
-  }, [meId, open, active]);
+  const som = useSomDeAlerta(VOL_CELULAR);
+  const { novas, reconhecer } = useAlertaDeMensagens({
+    canais,
+    meId,
+    volume: VOL_CELULAR,
+    somLigado: som.ligado,
+    comVibracao: true,
+    lendoAgora: (tipo, ref) => open && active?.type === tipo && active?.ref === ref,
+    aoChegar: (m) =>
+      setCanais((prev) =>
+        prev.map((c) =>
+          c.type === m.tipo && c.ref === m.ref
+            ? { ...c, lastAt: m.criadaEm, unread: c.unread + 1 }
+            : c,
+        ),
+      ),
+  });
 
   const openChannel = (c: CanalChat) => {
     setActive(c);
@@ -77,11 +73,19 @@ export function ChatBubble({
   return (
     <>
       <button
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          setOpen(true);
+          reconhecer();
+        }}
         aria-label={total > 0 ? `Chat (${total} não lidas)` : "Chat"}
         className="press fixed right-4 z-40 grid size-14 place-items-center rounded-full bg-primary text-primary-foreground shadow-lift"
         style={{ bottom: "calc(env(safe-area-inset-bottom) + 5.75rem)" }}
       >
+        {/* Anel batendo enquanto há mensagem não reconhecida. É o par visual do
+            apito: som sozinho falha no silencioso, no bolso e no barulho. */}
+        {novas.length > 0 && !open ? (
+          <span aria-hidden className="absolute inset-0 animate-ping rounded-full bg-primary/40" />
+        ) : null}
         <MessagesSquare className="size-6" />
         {total > 0 ? (
           <span className="absolute -right-0.5 -top-0.5 grid min-w-[20px] place-items-center rounded-full border-2 border-background bg-destructive px-1 text-[10px] font-extrabold text-white">
@@ -95,6 +99,7 @@ export function ChatBubble({
           canais={canais}
           meId={meId}
           role={role}
+          som={som}
           onOpenChannel={openChannel}
           onClose={() => {
             setOpen(false);
