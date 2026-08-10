@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { MessageSquare, X, Plus, Trash2, Settings2, Send } from "lucide-react";
+import { Monitor, MonitorDot, X, Plus, Trash2, Settings2, Send } from "lucide-react";
 import { Modal } from "@/components/modal";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
@@ -16,26 +16,32 @@ import {
 } from "@/lib/actions";
 
 /**
- * MENSAGEM NO TELÃO — o que a Produção fala com quem está no palco.
+ * MONITOR DE PALCO — o que a Produção fala com quem está no palco.
  *
  * O app escreve, a ponte (ponte-propresenter/) entrega ao ProPresenter via
  * `stageDisplaySendMessage`. Migration 0050.
+ *
+ * Chamava-se "telão" e o ícone era uma bolha de conversa. As duas coisas
+ * mentiam: telão é a tela que a IGREJA vê, e isto é o monitor de retorno que só
+ * quem está no palco lê; bolha de conversa é o símbolo do chat, que fica ao lado
+ * — quem via os dois juntos entendia "dois chats". Nome e símbolo agora dizem o
+ * que a coisa é: um MONITOR, com um ponto quando tem algo no ar.
  *
  * Duas regras de desenho que valem explicar, porque parecem detalhe e não são:
  *
  * 1. QUANDO APAGADO, ISTO NÃO OCUPA ESPAÇO. O acesso é um ícone junto dos
  *    outros do cabeçalho; a FAIXA só existe quando há mensagem no ar. Uma faixa
- *    permanente dizendo "nada no telão" seria ruído nas 99% do tempo em que não
+ *    permanente dizendo "nada no monitor" seria ruído nas 99% do tempo em que não
  *    há nada — e ruído constante é o que faz ninguém enxergar o aviso quando
  *    ele finalmente importa.
  *
  * 2. QUANDO ACESO, É IMPOSSÍVEL DE NÃO VER, e some sozinho. Mensagem esquecida
- *    morando no telão do pregador é o pior estado possível, então: faixa âmbar
+ *    morando no monitor do pregador é o pior estado possível, então: faixa âmbar
  *    com o texto, o autor, a contagem do que resta, e um ✕ que tira dali mesmo
  *    — sem abrir nada. A expiração é obrigatória (1/3/10 min, migration 0050).
  *
  * O toque num atalho MANDA na hora, não preenche o campo: sob pressão, dois
- * toques é um toque demais. Quem se arrepender tem o "Tirar do telão" logo ali.
+ * toques é um toque demais. Quem se arrepender tem o "Tirar do monitor" logo ali.
  */
 
 export type StageMsg = {
@@ -84,8 +90,8 @@ export function StageMessageButton({
   return (
     <button
       onClick={onClick}
-      aria-label={ligado ? "Mensagem no telão (ligada)" : "Mandar mensagem ao telão"}
-      title={ligado ? "Mensagem no telão (ligada)" : "Mandar mensagem ao telão"}
+      aria-label={ligado ? "Mensagem no monitor de palco (ligada)" : "Mandar mensagem ao monitor de palco"}
+      title={ligado ? "Mensagem no monitor de palco (ligada)" : "Mandar mensagem ao monitor de palco"}
       className={cn(
         "press-sm grid shrink-0 place-items-center rounded-full border",
         em ? "size-[2.4em]" : "size-9",
@@ -94,13 +100,19 @@ export function StageMessageButton({
           : "border-border text-muted-foreground",
       )}
     >
-      <MessageSquare className={em ? "size-[1.1em]" : "size-4"} />
+      {/* O ponto no monitor diz "tem algo no ar" em FORMA, não só em cor —
+          mesma regra do ponto pulsando do "ao vivo". */}
+      {ligado ? (
+        <MonitorDot className={em ? "size-[1.1em]" : "size-4"} />
+      ) : (
+        <Monitor className={em ? "size-[1.1em]" : "size-4"} />
+      )}
     </button>
   );
 }
 
 /**
- * A faixa "no telão agora". Mesma peça no celular e na régia — duas versões
+ * A faixa "no monitor agora". Mesma peça no celular e na régia — duas versões
  * divergiriam, e esta é justamente a informação que não pode discordar entre
  * a tela de quem manda e a tela de quem confere.
  */
@@ -124,7 +136,7 @@ export function StageMessageStrip({
   const restante = useRestante(msg.expiresAt);
 
   // Expirou com a tela aberta: o servidor já não devolve mais esta mensagem, mas
-  // ninguém recarregou. Puxa uma vez pra faixa sumir junto com o telão.
+  // ninguém recarregou. Puxa uma vez pra faixa sumir junto com o monitor.
   useEffect(() => {
     if (restante === 0 && msg.expiresAt) router.refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -146,7 +158,7 @@ export function StageMessageStrip({
     >
       <span className={cn("shrink-0 animate-pulse rounded-full bg-warning", em ? "size-[0.5em]" : "size-2.5")} />
       <span className={cn("shrink-0 font-extrabold uppercase tracking-wide", em ? "text-[0.62em]" : "text-[11px]")}>
-        no telão
+        no monitor
       </span>
       <button
         onClick={onAbrir}
@@ -167,8 +179,8 @@ export function StageMessageStrip({
         <button
           onClick={limpar}
           disabled={pendente}
-          aria-label="Tirar a mensagem do telão"
-          title="Tirar a mensagem do telão"
+          aria-label="Tirar a mensagem do monitor"
+          title="Tirar a mensagem do monitor"
           className={cn(
             "press-sm grid shrink-0 place-items-center rounded-full bg-warning/20 disabled:opacity-50",
             em ? "size-[1.5em]" : "size-6",
@@ -232,11 +244,11 @@ export function StageMessageSheet({
   const noLimite = atalhos.length >= STAGE_MAX_ATALHOS;
 
   return (
-    <Modal open={open} onClose={onClose} sheet title="Mensagem no telão" liftY={keyboard}>
+    <Modal open={open} onClose={onClose} sheet title="Monitor de palco" liftY={keyboard}>
       <div className="space-y-4">
         {msg ? (
           <div className="rounded-[14px] bg-warning/12 px-3 py-2.5 text-warning-ink">
-            <p className="text-[11px] font-extrabold uppercase tracking-wide">No telão agora</p>
+            <p className="text-[11px] font-extrabold uppercase tracking-wide">No monitor agora</p>
             <p className="mt-0.5 text-[15px] font-bold leading-snug">{msg.texto}</p>
             <p className="mt-0.5 text-xs opacity-80">
               apaga em {mmss(restante)}
@@ -247,12 +259,12 @@ export function StageMessageSheet({
               disabled={pendente}
               className="press mt-2 inline-flex h-9 items-center gap-1.5 rounded-full bg-warning/20 px-3 text-[13px] font-extrabold disabled:opacity-50"
             >
-              <X className="size-4" /> Tirar do telão
+              <X className="size-4" /> Tirar do monitor
             </button>
           </div>
         ) : (
           <p className="rounded-[14px] border border-dashed border-border px-3 py-2.5 text-sm text-muted-foreground">
-            Nada no telão agora. O que você mandar aparece na tela de quem está no palco.
+            Nada no monitor agora. O que você mandar aparece no monitor de quem está no palco.
           </p>
         )}
 
@@ -335,7 +347,7 @@ export function StageMessageSheet({
             rows={2}
             maxLength={MAX_TEXTO}
             className="w-full resize-none rounded-[12px] border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary"
-            placeholder="O que aparece no telão do palco…"
+            placeholder="O que aparece no monitor do palco…"
             value={texto}
             onChange={(e) => setTexto(e.target.value)}
           />
@@ -367,7 +379,7 @@ export function StageMessageSheet({
             disabled={pendente || !texto.trim()}
             className="press mt-2.5 inline-flex h-11 w-full items-center justify-center gap-2 rounded-[14px] bg-primary text-[15px] font-extrabold text-primary-foreground disabled:opacity-40"
           >
-            <Send className="size-4" /> Mandar pro telão
+            <Send className="size-4" /> Mandar pro monitor
           </button>
         </div>
       </div>

@@ -1702,7 +1702,7 @@ export async function reabrirCronograma(eventId: string): Promise<ActionResult> 
   return ok;
 }
 
-// --- Mensagem no telão (migration 0050) -------------------------------------
+// --- Mensagem no monitor de palco (migration 0050) -------------------------
 
 /**
  * A Produção falando com quem está no palco. O app grava, a ponte do

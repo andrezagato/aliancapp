@@ -4,7 +4,7 @@ import { TopBar } from "@/components/app-shell/top-bar";
 import { Card } from "@/components/ui/card";
 import { RundownGrid } from "@/components/rundown-grid";
 import { getSession } from "@/lib/auth";
-import { listarCandidatosDeRoteiro, escolherCulto, ehDeHoje, getEventRundown, listRundownKinds, listRundownTemplates, estouEscaladoNoEvento, getPastaEvento, getStageMessage, listStageShortcuts } from "@/lib/data";
+import { listarCandidatosDeRoteiro, escolherCulto, jaPassou, getEventRundown, listRundownKinds, listRundownTemplates, estouEscaladoNoEvento, getPastaEvento, getStageMessage, listStageShortcuts } from "@/lib/data";
 import { fmtWeekdayShort, fmtDayMonthShort } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -24,13 +24,17 @@ export default async function CronogramaPage({ searchParams }: { searchParams: P
     ? await Promise.all([getEventRundown(ev.id), listRundownKinds(), listRundownTemplates()])
     : [[], await listRundownKinds(), []];
 
-  // O ENCERRADO DE HOJE FICA. Até 09/08 o seletor descartava todo culto
-  // encerrado, e no dia em que a Produção encerrou o culto por engano ele
+  // O ENCERRADO QUE AINDA NÃO PASSOU FICA. Até 09/08 o seletor descartava todo
+  // culto encerrado, e no dia em que a Produção encerrou o culto por engano ele
   // evaporou da tela inteira — de onde saiu o "apagaram o culto" e, logo em
-  // seguida, o trabalho em cima do roteiro do domingo seguinte. Some só o que já
-  // passou de verdade; o de hoje continua à mão, com a faixa de reabrir.
-  const visiveis = candidatos.filter((c) => !c.endedAt || ehDeHoje(c.ev.starts_at) || c.ev.id === ev?.id);
-  const encerradosAntigos = candidatos.filter((c) => c.endedAt && !ehDeHoje(c.ev.starts_at));
+  // seguida, o trabalho em cima do roteiro do domingo seguinte. O remendo de
+  // 09/08 salvou só o culto DE HOJE, e em 10/08 o mesmo buraco engoliu o Culto
+  // de Oração do dia 14: encerrado numa terça, sem ser "de hoje", sumiu — e sem
+  // chip na tela ninguém consegue reabrir. Some só o que o CALENDÁRIO já deixou
+  // pra trás (esse mora em Finalizados); daqui pra frente fica, com a faixa de
+  // reabrir à mão.
+  const visiveis = candidatos.filter((c) => !c.endedAt || !jaPassou(c.ev.starts_at) || c.ev.id === ev?.id);
+  const encerradosAntigos = candidatos.filter((c) => c.endedAt && jaPassou(c.ev.starts_at));
   const activePos = ev ? visiveis.findIndex((c) => c.ev.id === ev.id) : -1;
   const prevEv = activePos > 0 ? visiveis[activePos - 1].ev : null;
   const nextEv = activePos >= 0 && activePos < visiveis.length - 1 ? visiveis[activePos + 1].ev : null;
@@ -39,8 +43,9 @@ export default async function CronogramaPage({ searchParams }: { searchParams: P
   const canEdit = session.role === "admin" || session.profile.teams.some((t) => t.manages_rundown);
   const canContribute = ev ? await estouEscaladoNoEvento(session, ev.id) : false;
   const filesUrl = ev ? await getPastaEvento(ev.id) : null;
-  // Mensagem no telão (0050): é por IGREJA, não por bloco nem por culto — quem
-  // manda pode estar olhando um roteiro e a mensagem valer pro palco de agora.
+  // Mensagem no monitor de palco (0050): é por IGREJA, não por bloco nem por
+  // culto — quem manda pode estar olhando um roteiro e a mensagem valer pro
+  // palco de agora.
   const [stageMsg, stageAtalhos] = await Promise.all([
     getStageMessage(session.profile.church_id),
     canEdit ? listStageShortcuts(session.profile.church_id) : Promise.resolve([]),
@@ -51,9 +56,16 @@ export default async function CronogramaPage({ searchParams }: { searchParams: P
       <TopBar title="Roteiro" subtitle="A ordem do próximo culto" userName={session.profile.full_name || "?"} />
       <div className="animate-fade-in space-y-3 py-3">
         {ev ? (
-          <div className="overflow-hidden rounded-2xl border border-border bg-card">
+          <div className="rounded-2xl border border-border bg-card">
+            {/* SEM `overflow-hidden` neste card. Ele existia só pra arredondar o
+                canto do cabeçalho, e cobrava caro: o menu do culto abre alinhado
+                à direita do gatilho e, com 15rem de largura, sua borda esquerda
+                cai EXATAMENTE na borda do card — que então cortava a margem
+                interna do menu e deixava os ícones grudados na quina. Popover não
+                pode depender da caixa que o ancora. O arredondamento passou pro
+                próprio cabeçalho (`rounded-t-2xl`, logo abaixo). */}
             {/* Cabeçalho = seletor de eventos (desliza na horizontal + setas) */}
-            <div className="flex items-center gap-1 border-b border-border bg-primary/[0.06] p-2">
+            <div className="flex items-center gap-1 rounded-t-2xl border-b border-border bg-primary/[0.06] p-2">
               {prevEv ? (
                 <Link
                   href={`/cronograma?ev=${prevEv.id}`}

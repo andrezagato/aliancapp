@@ -47,7 +47,7 @@ export function clock(ms: number): string {
  * rundown de TV), e aqui ela corrigia três desencontros nossos: a cor já era
  * calculada pelo tempo que FALTA (ver `heatOf` logo abaixo) enquanto o número
  * mostrava o que já tinha passado; a ponte manda `clockType: 0` — regressiva —
- * pro telão do palco, então o pregador lia "faltam 4:32" e a régia lia "20:28
+ * pro monitor do palco, então o pregador lia "faltam 4:32" e a régia lia "20:28
  * corridos" do MESMO bloco; e eram dois números ("corrido" + "passou") onde um
  * só resolve.
  *

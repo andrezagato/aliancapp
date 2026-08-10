@@ -41,7 +41,11 @@ export type ItemMenuCulto = {
   /** Exige pressão longa mesmo dentro do menu. */
   segurar?: boolean;
   desabilitado?: boolean;
-  /** Linha miúda embaixo do rótulo — diz a consequência, não repete o rótulo. */
+  /**
+   * Linha miúda embaixo do rótulo — diz a consequência, não repete o rótulo.
+   * Em item de pressão longa ela entra DEPOIS do "Aperte e segure", que é a
+   * instrução e vem primeiro (ver `linhaDeApoio`).
+   */
   detalhe?: string;
   /** Fio separando o que navega do que muda o estado do culto. */
   separadorAntes?: boolean;
@@ -59,9 +63,56 @@ export function MenuCulto({
 }) {
   const [aberto, setAberto] = useState(false);
   const [focado, setFocado] = useState<string | null>(null);
+  // Quem está sendo segurado agora, e quem foi solto antes do fim. É o que
+  // transforma "dei um tapinha e não aconteceu nada" numa frase na tela.
+  const [segurando, setSegurando] = useState<string | null>(null);
+  const [faltou, setFaltou] = useState<string | null>(null);
+  const timerFaltou = useRef<ReturnType<typeof setTimeout> | null>(null);
   const caixa = useRef<HTMLDivElement>(null);
   const arrastando = useRef(false);
   const vazio = itens.length === 0;
+
+  useEffect(
+    () => () => {
+      if (timerFaltou.current) clearTimeout(timerFaltou.current);
+    },
+    [],
+  );
+
+  // Menu fechado zera os avisos: reabrir tem que ser começo de conversa, não a
+  // repescagem de um erro de dez minutos atrás.
+  useEffect(() => {
+    if (aberto) return;
+    setSegurando(null);
+    setFaltou(null);
+    if (timerFaltou.current) clearTimeout(timerFaltou.current);
+  }, [aberto]);
+
+  const avisarQueFaltou = (id: string) => {
+    setSegurando(null);
+    setFaltou(id);
+    if (timerFaltou.current) clearTimeout(timerFaltou.current);
+    timerFaltou.current = setTimeout(() => setFaltou(null), 3000);
+  };
+
+  /**
+   * A LINHA DE APOIO — e por que a instrução vem antes da consequência.
+   *
+   * O André viu os mais velhos dando um tapinha no "Encerrar" e nada acontecer:
+   * o botão pede pressão longa e não dizia isso em lugar nenhum. Ali embaixo
+   * morava a consequência ("O relógio para. Dá pra reabrir depois."), que é
+   * informação útil e resposta pra pergunta ERRADA — quem está com o dedo no
+   * botão quer saber COMO fazer, não o que vai acontecer.
+   *
+   * Então a mesma linha muda de papel conforme o gesto: instrução antes, "não
+   * solte" durante, e "faltou segurar" quando a tentativa morre no meio.
+   */
+  const linhaDeApoio = (item: ItemMenuCulto): { texto: string; alerta?: boolean } | null => {
+    if (!item.segurar) return item.detalhe ? { texto: item.detalhe } : null;
+    if (segurando === item.id) return { texto: "Segurando… não solte" };
+    if (faltou === item.id) return { texto: "Faltou segurar até o fim", alerta: true };
+    return { texto: item.detalhe ? `Aperte e segure · ${item.detalhe}` : "Aperte e segure" };
+  };
 
   useEffect(() => {
     if (!aberto) return;
@@ -112,8 +163,13 @@ export function MenuCulto({
     const item = itens.find((i) => i.id === alvo);
     if (!item || item.desabilitado) return;
     // Item de pressão longa não aceita deslizar: fica só destacado, e a pessoa
-    // segura em seguida. Deslizar num "apaga tudo" seria fácil demais.
-    if (item.segurar) return;
+    // segura em seguida. Deslizar num "apaga tudo" seria fácil demais. Mas o
+    // silêncio aqui era o mesmo do tapinha — soltar em cima e nada acontecer.
+    // Então a linha de apoio acende avisando o que faltou.
+    if (item.segurar) {
+      avisarQueFaltou(item.id);
+      return;
+    }
     // Item de navegação não dispara por deslize: seguir link sem soltar em cima
     // do texto confunde, e o link já é barato de tocar.
     if (item.href) return;
@@ -161,8 +217,12 @@ export function MenuCulto({
       {aberto ? (
         <div
           role="menu"
+          // `max-w` amarrado à viewport: em tela estreita o menu encolhe em vez
+          // de sair pela esquerda. As duas linhas de apoio ("Aperte e segure ·
+          // apaga início, fim e os checks") quebram em duas, o que é melhor que
+          // texto cortado.
           className={cn(
-            "absolute right-0 top-full z-30 mt-2 w-60 rounded-2xl border border-border bg-card p-1.5 shadow-lift",
+            "absolute right-0 top-full z-30 mt-2 w-60 max-w-[calc(100vw-1.5rem)] rounded-2xl border border-border bg-card p-1.5 shadow-lift",
             em && "mt-[0.4em] w-[16em] rounded-[0.8em] p-[0.3em]",
           )}
         >
@@ -172,21 +232,24 @@ export function MenuCulto({
               em && "gap-[0.5em] rounded-[0.6em] px-[0.7em] py-[0.5em] text-[0.95em]",
               item.destrutivo ? "text-destructive-ink" : "text-foreground",
               item.desabilitado && "opacity-40",
-              focado === item.id && (item.destrutivo ? "bg-destructive/12" : "bg-muted"),
+              (focado === item.id || segurando === item.id) &&
+                (item.destrutivo ? "bg-destructive/12" : "bg-muted"),
             );
+            const apoio = linhaDeApoio(item);
             const miolo = (
               <>
                 {item.icone}
                 <span className="min-w-0 flex-1">
                   {item.rotulo}
-                  {item.detalhe ? (
+                  {apoio ? (
                     <span
                       className={cn(
-                        "block text-[0.78em] font-semibold text-muted-foreground",
+                        "block text-[0.78em] font-semibold",
                         em && "text-[0.8em]",
+                        apoio.alerta ? "text-warning-ink" : "text-muted-foreground",
                       )}
                     >
-                      {item.detalhe}
+                      {apoio.texto}
                     </span>
                   ) : null}
                 </span>
@@ -197,7 +260,15 @@ export function MenuCulto({
               <BotaoSegurar
                 data-item-menu={item.id}
                 role="menuitem"
-                aoConfirmar={() => escolher(item)}
+                aoConfirmar={() => {
+                  setSegurando(null);
+                  escolher(item);
+                }}
+                aoComecar={() => {
+                  setSegurando(item.id);
+                  setFaltou(null);
+                }}
+                aoDesistir={() => avisarQueFaltou(item.id)}
                 textoTeclado={`${item.rotulo}?`}
                 desabilitado={item.desabilitado}
                 className={comum}

@@ -9,7 +9,6 @@ import {
   UserPlus,
   Clock,
   CheckCircle2,
-  AlertTriangle,
   CalendarPlus,
 } from "lucide-react";
 import { HomeShell } from "@/components/app-shell/home-shell";

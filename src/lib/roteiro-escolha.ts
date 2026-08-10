@@ -72,3 +72,21 @@ export function escolherCulto<T extends CultoDecidivel>(candidatos: T[], evParam
 export function ehDeHoje(startsAt: string): boolean {
   return churchDateISO(startsAt) === churchDateISO(new Date().toISOString());
 }
+
+/**
+ * O culto já ficou pra trás no CALENDÁRIO (data da igreja, não hora)?
+ *
+ * É esta a pergunta que decide se um culto encerrado pode sair do seletor — e
+ * não `ehDeHoje`, como era até 10/08/2026. Naquele dia o Culto de Oração de
+ * QUINTA (dia 14) foi encerrado por engano numa terça e evaporou da aba Roteiro:
+ * encerrado ✔, de hoje ✘ — sumiu. Sem o chip na tela não havia como reabrir, e o
+ * "encerrado" ficou de pé num culto que ainda nem aconteceu.
+ *
+ * A regra certa é a do calendário: encerrado só desaparece depois que o dia
+ * passou (aí ele mora em Finalizados, na aba Escalas). Culto de hoje ou de
+ * qualquer dia à frente FICA, encerrado ou não — porque encerramento em culto
+ * que não passou é acidente até prova em contrário, e acidente precisa de porta.
+ */
+export function jaPassou(startsAt: string): boolean {
+  return churchDateISO(startsAt) < churchDateISO(new Date().toISOString());
+}

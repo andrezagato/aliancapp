@@ -67,6 +67,8 @@ export function useCarencia(ms = CARENCIA_MS): [boolean, () => void] {
  */
 export function BotaoSegurar({
   aoConfirmar,
+  aoComecar,
+  aoDesistir,
   textoTeclado,
   children,
   className,
@@ -75,6 +77,14 @@ export function BotaoSegurar({
   ...resto
 }: {
   aoConfirmar: () => void;
+  /** O dedo desceu e a varredura começou. */
+  aoComecar?: () => void;
+  /**
+   * O dedo SAIU antes do fim. É o evento que faltava: "dei um tapinha e não
+   * aconteceu nada" é justamente isto acontecendo em silêncio, e quem toca de
+   * leve não descobre sozinho que o botão pedia pressão longa.
+   */
+  aoDesistir?: () => void;
   /** Pergunta do confirm no caminho de teclado. */
   textoTeclado: string;
   children: React.ReactNode;
@@ -100,6 +110,7 @@ export function BotaoSegurar({
   const comecar = () => {
     if (desabilitado || quadro.current !== null) return;
     inicio.current = performance.now();
+    aoComecar?.();
     const passo = (agora: number) => {
       const p = Math.min(1, (agora - inicio.current) / duracaoMs);
       setProgresso(p);
@@ -113,6 +124,17 @@ export function BotaoSegurar({
     quadro.current = requestAnimationFrame(passo);
   };
 
+  /**
+   * Soltar antes do fim. Diferente de `parar` (que também roda no sucesso e na
+   * limpeza), este caminho SABE que houve uma tentativa frustrada — e é por ele
+   * que quem chamou consegue dizer "faltou segurar" em vez de nada.
+   */
+  const soltar = () => {
+    const tentou = quadro.current !== null;
+    parar();
+    if (tentou) aoDesistir?.();
+  };
+
   return (
     <button
       type="button"
@@ -121,9 +143,9 @@ export function BotaoSegurar({
         e.preventDefault();
         comecar();
       }}
-      onPointerUp={parar}
-      onPointerLeave={parar}
-      onPointerCancel={parar}
+      onPointerUp={soltar}
+      onPointerLeave={soltar}
+      onPointerCancel={soltar}
       onKeyDown={(e) => {
         if (e.key !== "Enter" && e.key !== " ") return;
         e.preventDefault();

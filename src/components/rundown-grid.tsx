@@ -180,7 +180,7 @@ export function RundownGrid({
   /** Pasta de arquivos do culto (OneDrive/Drive), quando vinculada. */
   filesUrl?: string | null;
   escalaHref?: string;
-  /** Mensagem no telão do palco (0050): quem pode conduzir manda, todos veem. */
+  /** Mensagem no monitor de palco (0050): quem pode conduzir manda, todos veem. */
   stageMsg?: StageMsg | null;
   stageAtalhos?: StageAtalho[];
 }) {
@@ -337,9 +337,32 @@ export function RundownGrid({
     });
   };
 
+  /**
+   * PRENDE A TELA NESTE CULTO antes de mexer no estado dele.
+   *
+   * Sem `?ev=` na URL, cada `router.refresh()` faz o servidor reperguntar "qual
+   * culto abrir?" — e a resposta MUDA no instante em que se encerra. Foi assim
+   * que o Culto de Oração do dia 14 sumiu debaixo do dedo em 10/08/2026: no
+   * quadro seguinte ao "Encerrar", a escolha caiu no Culto de Domingo do dia 16 e
+   * a tela deslizou sozinha pra outro culto — a mesma teleportação de 09/08, só
+   * que numa data futura, onde o remendo daquele dia não alcançava.
+   *
+   * Fixar a URL torna a pergunta desnecessária: quem agiu num culto continua
+   * nele, aconteça o que acontecer com a heurística.
+   */
+  const fixarNesteCulto = useCallback(() => {
+    if (typeof window === "undefined") return;
+    if (new URLSearchParams(window.location.search).get("ev") === eventId) return;
+    const url = new URL(window.location.href);
+    url.searchParams.set("ev", eventId);
+    router.replace(`${url.pathname}${url.search}`, { scroll: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventId]);
+
   const start = () => {
     setStarted(new Date().toISOString());
     armarCarencia();
+    fixarNesteCulto();
     startTx(async () => {
       const r = await iniciarCronograma(eventId);
       if (r.ok) router.refresh();
@@ -351,6 +374,7 @@ export function RundownGrid({
     setEnded(null);
     setList((prev) => prev.map((x) => ({ ...x, doneAt: null })));
     armarCarencia();
+    fixarNesteCulto();
     startTx(async () => {
       await reiniciarCronograma(eventId);
       router.refresh();
@@ -359,6 +383,7 @@ export function RundownGrid({
   const encerrar = () => {
     setEnded(new Date().toISOString());
     armarCarencia();
+    fixarNesteCulto();
     startTx(async () => {
       const r = await encerrarCronograma(eventId);
       if (r.ok) {
@@ -373,6 +398,7 @@ export function RundownGrid({
   const reabrir = () => {
     setEnded(null);
     armarCarencia();
+    fixarNesteCulto();
     startTx(async () => {
       const r = await reabrirCronograma(eventId);
       if (r.ok) {
@@ -447,7 +473,7 @@ export function RundownGrid({
           {
             id: "encerrar",
             rotulo: "Encerrar culto",
-            detalhe: "O relógio para. Dá pra reabrir depois.",
+            detalhe: "dá pra reabrir depois",
             icone: <Square className="size-4 shrink-0 fill-current" />,
             destrutivo: true,
             segurar: true,
@@ -462,7 +488,7 @@ export function RundownGrid({
           {
             id: "reiniciar",
             rotulo: "Reiniciar roteiro",
-            detalhe: "Apaga início, fim e todos os checks",
+            detalhe: "apaga início, fim e os checks",
             icone: <RotateCcw className="size-4 shrink-0" />,
             segurar: true,
             desabilitado: emCarencia,
@@ -494,7 +520,7 @@ export function RundownGrid({
         <div className="flex flex-wrap items-center justify-end gap-2">
           {/* O ícone fica no cabeçalho GRUDADO de propósito: é o sinal que
               sobrevive à rolagem. A faixa com o texto vem abaixo e rola junto,
-              mas o ícone âmbar continua à vista dizendo "tem algo no telão".
+              mas o ícone âmbar continua à vista dizendo "tem algo no monitor".
               É o ÚNICO que sobrou solto aqui — escala, arquivos e pasta viraram
               linhas com rótulo dentro do menu (pedido do André: "fica mais
               limpo"), o que de quebra aposenta a engrenagem, ícone que ninguém
@@ -569,7 +595,7 @@ export function RundownGrid({
       ) : null}
 
       {/* A faixa só existe quando há mensagem no ar. Uma faixa permanente
-          dizendo "nada no telão" seria ruído em 99% do tempo — e ruído
+          dizendo "nada no monitor" seria ruído em 99% do tempo — e ruído
           constante é o que faz ninguém ver o aviso quando ele importa. */}
       {stageMsg ? (
         <div className="mb-3">
@@ -688,7 +714,7 @@ export function RundownGrid({
                     {live ? (
                       /* AO VIVO: UM número, contando pra baixo. Antes eram dois
                          ("corrido" + "passou"), e nenhum deles era o que a régia
-                         fala no ponto nem o que o telão do palco mostra. Aqui o
+                         fala no ponto nem o que o monitor do palco mostra. Aqui o
                          rótulo carrega o sinal — "estourou 1:23" lê melhor que
                          "restam −1:23"; na régia, que não tem espaço pra rótulo,
                          quem carrega é o menos. */

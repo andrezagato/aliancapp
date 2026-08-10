@@ -359,7 +359,7 @@ function Linha({
 
       {/* Duração planejada; ao vivo, a CONTAGEM REGRESSIVA ocupa o lugar e ganha
           a cor. Aqui não cabe rótulo, então o sinal de menos é quem diz que o
-          bloco estourou — e é o mesmo número que o pregador está lendo no telão,
+          bloco estourou — e é o mesmo número que o pregador está lendo no monitor,
           que a ponte sempre mandou regressivo. */}
       <span className={cn("tabular-nums", live && HEAT_TEXT[heat])}>
         {live ? contagemRegressiva(durMs - decorridoMs) : `${it.durationMin}m`}
@@ -493,7 +493,7 @@ export function RundownColumns({
   cultos?: CultoOpcao[];
   /** Calculado no servidor, no fuso da igreja (ver a nota em control/page.tsx). */
   deHoje?: boolean;
-  /** Mensagem no telão do palco (0050). */
+  /** Mensagem no monitor de palco (0050). */
   stageMsg?: StageMsg | null;
   stageAtalhos?: StageAtalho[];
 }) {
@@ -563,6 +563,20 @@ export function RundownColumns({
     });
 
   /**
+   * PRENDE A RÉGIA NESTE CULTO antes de mexer no estado dele. Sem `?ev=`, o
+   * `router.refresh()` faz o servidor reperguntar "qual culto abrir?" — e a
+   * resposta muda no instante do encerramento, deslizando a tela pra outro culto
+   * (o acidente de 09/08 em versão futura, visto em 10/08 com o culto do dia 14).
+   */
+  const fixarNesteCulto = () => {
+    if (typeof window === "undefined") return;
+    if (new URLSearchParams(window.location.search).get("ev") === eventId) return;
+    const url = new URL(window.location.href);
+    url.searchParams.set("ev", eventId);
+    router.replace(`${url.pathname}${url.search}`, { scroll: false });
+  };
+
+  /**
    * Transição do modo ao vivo: igual a `agir`, mas arma a carência. Aqui era o
    * pior caso do app — "Iniciar" saía do flex e "Encerrar" entrava no MESMO
    * lugar, mesma altura, mesma largura, e sem confirmação nenhuma. Dois toques
@@ -570,6 +584,7 @@ export function RundownColumns({
    */
   const transicionar = (fn: () => Promise<ActionResult>, sucesso?: string) => {
     armarCarencia();
+    fixarNesteCulto();
     agir(fn, sucesso);
   };
 
@@ -577,6 +592,7 @@ export function RundownColumns({
   const iniciar = () => {
     setIniciando(true);
     armarCarencia();
+    fixarNesteCulto();
     startTx(async () => {
       const r = await iniciarCronograma(eventId);
       setIniciando(false);
@@ -695,7 +711,7 @@ export function RundownColumns({
               {/* Mesmo menu do celular: o gatilho fica parado no lugar onde
                   antes o "Encerrar" nascia sozinho, e as opções abrem pra baixo.
                   Na régia isso também tira dois alvos da barra, que já estava
-                  disputando espaço com fonte, telão e blocos. */}
+                  disputando espaço com fonte, monitor e blocos. */}
               {startedMs != null ? (
                 <MenuCulto
                   em
@@ -705,7 +721,7 @@ export function RundownColumns({
                           {
                             id: "encerrar",
                             rotulo: "Encerrar culto",
-                            detalhe: "O relógio para. Dá pra reabrir depois.",
+                            detalhe: "dá pra reabrir depois",
                             icone: <Square className="size-[1.1em] shrink-0" />,
                             destrutivo: true,
                             // Decisão do André depois de experimentar: o encerrar
@@ -720,7 +736,7 @@ export function RundownColumns({
                     {
                       id: "reiniciar",
                       rotulo: "Reiniciar roteiro",
-                      detalhe: "Apaga início, fim e todos os checks",
+                      detalhe: "apaga início, fim e os checks",
                       icone: <RotateCcw className="size-[1.1em] shrink-0" />,
                       segurar: true,
                       desabilitado: ocupado || emCarencia,
@@ -751,7 +767,7 @@ export function RundownColumns({
         ) : null}
 
         {/* Dentro do sticky de propósito: numa régia, a mensagem que está no
-            telão do palco não pode sair de vista ao rolar a grade. */}
+            monitor do palco não pode sair de vista ao rolar a grade. */}
         {stageMsg ? (
           <div className="mb-[0.7em]">
             <StageMessageStrip

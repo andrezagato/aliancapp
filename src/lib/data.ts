@@ -1197,7 +1197,7 @@ export type CandidatoRoteiro = {
 // A DECISÃO de qual culto abrir mora em `roteiro-escolha.ts` (pura, testável
 // sem Supabase). Aqui fica só a BUSCA. Reexportado pra que as páginas continuem
 // importando tudo de um lugar só.
-export { escolherCulto, ehDeHoje } from "@/lib/roteiro-escolha";
+export { escolherCulto, ehDeHoje, jaPassou } from "@/lib/roteiro-escolha";
 
 /**
  * Os cultos que a aba Roteiro e a régia podem mostrar, com o estado do modo ao
@@ -1219,12 +1219,12 @@ export async function listarCandidatosDeRoteiro(
 }
 
 
-// --- Mensagem no telão (migration 0050) -------------------------------------
+// --- Mensagem no monitor de palco (migration 0050) -------------------------
 
 export type StageMessageData = { id: string; texto: string; autor: string | null; expiresAt: string };
 
 /**
- * A mensagem que está NO TELÃO agora — uma por igreja, viva e não expirada.
+ * A mensagem que está NO MONITOR agora — uma por igreja, viva e não expirada.
  *
  * A expiração é filtrada aqui e não por rotina de limpeza: a linha vira
  * histórico sozinha quando o `expires_at` passa, então não existe estado
