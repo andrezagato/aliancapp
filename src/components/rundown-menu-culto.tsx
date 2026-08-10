@@ -31,14 +31,20 @@ export type ItemMenuCulto = {
   id: string;
   rotulo: string;
   icone: React.ReactNode;
-  aoEscolher: () => void;
+  /** Ação. Itens de navegação usam `href` no lugar. */
+  aoEscolher?: () => void;
+  /** Navegação: vira link de verdade (abre em aba nova quando `externo`). */
+  href?: string;
+  externo?: boolean;
   /** Telha: é o que muda o estado do culto. */
   destrutivo?: boolean;
-  /** Exige pressão longa mesmo dentro do menu (só pro que não tem desfazer). */
+  /** Exige pressão longa mesmo dentro do menu. */
   segurar?: boolean;
   desabilitado?: boolean;
   /** Linha miúda embaixo do rótulo — diz a consequência, não repete o rótulo. */
   detalhe?: string;
+  /** Fio separando o que navega do que muda o estado do culto. */
+  separadorAntes?: boolean;
 };
 
 export function MenuCulto({
@@ -55,6 +61,7 @@ export function MenuCulto({
   const [focado, setFocado] = useState<string | null>(null);
   const caixa = useRef<HTMLDivElement>(null);
   const arrastando = useRef(false);
+  const vazio = itens.length === 0;
 
   useEffect(() => {
     if (!aberto) return;
@@ -107,14 +114,19 @@ export function MenuCulto({
     // Item de pressão longa não aceita deslizar: fica só destacado, e a pessoa
     // segura em seguida. Deslizar num "apaga tudo" seria fácil demais.
     if (item.segurar) return;
+    // Item de navegação não dispara por deslize: seguir link sem soltar em cima
+    // do texto confunde, e o link já é barato de tocar.
+    if (item.href) return;
     setAberto(false);
-    item.aoEscolher();
+    item.aoEscolher?.();
   };
 
   const escolher = (item: ItemMenuCulto) => {
     setAberto(false);
-    item.aoEscolher();
+    item.aoEscolher?.();
   };
+
+  if (vazio) return null;
 
   return (
     <div ref={caixa} className="relative select-none [-webkit-touch-callout:none]">
@@ -181,10 +193,10 @@ export function MenuCulto({
               </>
             );
 
-            return item.segurar ? (
+            const corpo = item.segurar ? (
               <BotaoSegurar
-                key={item.id}
                 data-item-menu={item.id}
+                role="menuitem"
                 aoConfirmar={() => escolher(item)}
                 textoTeclado={`${item.rotulo}?`}
                 desabilitado={item.desabilitado}
@@ -192,9 +204,22 @@ export function MenuCulto({
               >
                 {miolo}
               </BotaoSegurar>
+            ) : item.href ? (
+              // Link de verdade: cmd-clique, "abrir em nova aba" e o prefetch do
+              // Next continuam funcionando — coisa que um botão com router.push
+              // jogaria fora.
+              <a
+                href={item.href}
+                {...(item.externo ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+                data-item-menu={item.id}
+                role="menuitem"
+                onClick={() => setAberto(false)}
+                className={comum}
+              >
+                {miolo}
+              </a>
             ) : (
               <button
-                key={item.id}
                 type="button"
                 role="menuitem"
                 data-item-menu={item.id}
@@ -204,6 +229,15 @@ export function MenuCulto({
               >
                 {miolo}
               </button>
+            );
+
+            return (
+              <div key={item.id}>
+                {item.separadorAntes ? (
+                  <div className={cn("mx-3 my-1.5 h-px bg-border", em && "mx-[0.7em] my-[0.3em]")} />
+                ) : null}
+                {corpo}
+              </div>
             );
           })}
         </div>

@@ -14,6 +14,9 @@ import {
   Settings2,
   LayoutTemplate,
   X,
+  CalendarDays,
+  FolderOpen,
+  FolderPlus,
 } from "lucide-react";
 import { Modal } from "@/components/modal";
 import { useToast } from "@/components/ui/toast";
@@ -57,7 +60,8 @@ import {
 } from "@/components/rundown-timing";
 import { useRundownRealtime } from "@/components/rundown-realtime";
 import { BotaoSegurar, FaixaEncerrado, useCarencia } from "@/components/rundown-salvaguardas";
-import { MenuCulto } from "@/components/rundown-menu-culto";
+import { MenuCulto, type ItemMenuCulto } from "@/components/rundown-menu-culto";
+import { PastaModal } from "@/components/pasta-evento-modal";
 
 const PX_PER_MIN = 6; // altura do bloco = duração × isto (arrastar 1min = 6px)
 const MIN_H = 72; // altura mínima pra caber os contadores/toque
@@ -136,7 +140,7 @@ function Stat({
       >
         {value}
       </span>
-      <span className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</span>
+      <span className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</span>
     </div>
   );
 }
@@ -157,7 +161,8 @@ export function RundownGrid({
   canEdit,
   canContribute,
   meId,
-  actions,
+  filesUrl = null,
+  escalaHref,
   stageMsg = null,
   stageAtalhos = [],
 }: {
@@ -172,7 +177,9 @@ export function RundownGrid({
   canContribute: boolean;
   /** Pra não avisar "você está editando" pra própria pessoa (trava da 0048). */
   meId: string;
-  actions?: React.ReactNode;
+  /** Pasta de arquivos do culto (OneDrive/Drive), quando vinculada. */
+  filesUrl?: string | null;
+  escalaHref?: string;
   /** Mensagem no telão do palco (0050): quem pode conduzir manda, todos veem. */
   stageMsg?: StageMsg | null;
   stageAtalhos?: StageAtalho[];
@@ -193,6 +200,7 @@ export function RundownGrid({
   const [manageKinds, setManageKinds] = useState(false);
   const [manageTpl, setManageTpl] = useState(false);
   const [abrirMsg, setAbrirMsg] = useState(false);
+  const [abrirPasta, setAbrirPasta] = useState(false);
   const [flashId, setFlashId] = useState<string | null>(null); // bloco recém-movido (destaque pós-drop)
 
   useEffect(() => setList(items), [items]);
@@ -399,6 +407,72 @@ export function RundownGrid({
       else showToast(r.error);
     });
 
+  /**
+   * O MENU DO CULTO — tudo que era ícone solto no cabeçalho, com rótulo.
+   *
+   * Primeiro o que só navega (escala, arquivos), depois, separado por um fio, o
+   * que muda o estado do culto. Os dois destrutivos pedem pressão longa: a do
+   * reiniciar porque ele não tem desfazer, e a do encerrar por decisão do André
+   * depois de experimentar — "achei que o encerrar pode ter essa salvaguarda
+   * também". Deslizar até eles destaca, mas não executa.
+   */
+  const itensMenu: ItemMenuCulto[] = [
+    ...(escalaHref
+      ? [{ id: "escala", rotulo: "Ver a escala", icone: <CalendarDays className="size-4 shrink-0" />, href: escalaHref }]
+      : []),
+    ...(filesUrl
+      ? [
+          {
+            id: "arquivos",
+            rotulo: "Arquivos do culto",
+            detalhe: "Abre a pasta compartilhada",
+            icone: <FolderOpen className="size-4 shrink-0" />,
+            href: filesUrl,
+            externo: true,
+          },
+        ]
+      : []),
+    ...(canEdit
+      ? [
+          {
+            id: "pasta",
+            rotulo: filesUrl ? "Trocar a pasta de arquivos" : "Vincular pasta de arquivos",
+            icone: <FolderPlus className="size-4 shrink-0" />,
+            aoEscolher: () => setAbrirPasta(true),
+          },
+        ]
+      : []),
+    ...(canEdit && started && !ended
+      ? [
+          {
+            id: "encerrar",
+            rotulo: "Encerrar culto",
+            detalhe: "O relógio para. Dá pra reabrir depois.",
+            icone: <Square className="size-4 shrink-0 fill-current" />,
+            destrutivo: true,
+            segurar: true,
+            desabilitado: emCarencia,
+            aoEscolher: encerrar,
+            separadorAntes: true,
+          },
+        ]
+      : []),
+    ...(canEdit && started
+      ? [
+          {
+            id: "reiniciar",
+            rotulo: "Reiniciar roteiro",
+            detalhe: "Apaga início, fim e todos os checks",
+            icone: <RotateCcw className="size-4 shrink-0" />,
+            segurar: true,
+            desabilitado: emCarencia,
+            aoEscolher: reset,
+            separadorAntes: !(started && !ended),
+          },
+        ]
+      : []),
+  ];
+
   return (
     <section>
       {/* Cabeçalho: início → fim + total + relógio ao vivo.
@@ -420,88 +494,61 @@ export function RundownGrid({
         <div className="flex flex-wrap items-center justify-end gap-2">
           {/* O ícone fica no cabeçalho GRUDADO de propósito: é o sinal que
               sobrevive à rolagem. A faixa com o texto vem abaixo e rola junto,
-              mas o ícone âmbar continua à vista dizendo "tem algo no telão". */}
+              mas o ícone âmbar continua à vista dizendo "tem algo no telão".
+              É o ÚNICO que sobrou solto aqui — escala, arquivos e pasta viraram
+              linhas com rótulo dentro do menu (pedido do André: "fica mais
+              limpo"), o que de quebra aposenta a engrenagem, ícone que ninguém
+              decifra sozinho. */}
           {canEdit ? <StageMessageButton ligado={!!stageMsg} onClick={() => setAbrirMsg(true)} /> : null}
-          {actions}
-          {list.length > 0 ? (
-            started ? (
-              // `select-none` no grupo todo: a seleção do iOS não respeita o
-              // limite do botão — ela pegava o relógio ao lado junto.
-              <div className="flex select-none items-center gap-1.5">
-                <div className={cn("flex items-center gap-1.5 rounded-full px-3 py-1.5", ended ? "bg-success/12" : "bg-destructive/10")}>
-                  {ended ? null : <span className="size-2.5 shrink-0 animate-pulse rounded-full bg-destructive" />}
-                  {/* "Ao vivo" some no celular: o ponto pulsando já diz isso, e a
-                      palavra custa ~65px — que faltam justamente quando o culto
-                      passa de 1h e o relógio vira 1:02:34. Encerrado mantém o
-                      rótulo, porque aí não há ponto pra falar por ele. */}
-                  <span
-                    className={cn(
-                      "text-[11px] font-extrabold uppercase tracking-wide",
-                      ended ? "text-success-ink" : "hidden text-destructive-ink sm:inline",
-                    )}
-                  >
-                    {ended ? "Encerrado" : "Ao vivo"}
-                  </span>
-                  <span
-                    className={cn(
-                      "text-xl font-extrabold tabular-nums leading-none sm:text-2xl",
-                      ended ? "text-success-ink" : "text-destructive-ink",
-                    )}
-                  >
-                    {clock((liveNow ?? startedMs ?? 0) - (startedMs ?? 0))}
-                  </span>
-                </div>
-                {/* O destrutivo mora AQUI DENTRO, não solto na barra. O gatilho
-                    fica no lugar e as opções abrem pra baixo — longe do polegar
-                    (onde a varredura de progresso ficava escondida) e fora da
-                    coordenada do toque anterior. A carência ainda vale pros
-                    itens, de graça, como cinto extra. */}
-                {canEdit ? (
-                  <MenuCulto
-                    itens={[
-                      ...(ended
-                        ? []
-                        : [
-                            {
-                              id: "encerrar",
-                              rotulo: "Encerrar culto",
-                              detalhe: "O relógio para. Dá pra reabrir depois.",
-                              icone: <Square className="size-4 shrink-0 fill-current" />,
-                              destrutivo: true,
-                              desabilitado: emCarencia,
-                              aoEscolher: encerrar,
-                            },
-                          ]),
-                      {
-                        id: "reiniciar",
-                        rotulo: "Reiniciar roteiro",
-                        detalhe: "Apaga início, fim e todos os checks",
-                        icone: <RotateCcw className="size-4 shrink-0" />,
-                        // O único sem desfazer — por isso continua exigindo
-                        // pressão longa, mesmo já estando dentro do menu.
-                        segurar: true,
-                        desabilitado: emCarencia,
-                        aoEscolher: reset,
-                      },
-                    ]}
-                  />
-                ) : null}
+          {list.length > 0 && started ? (
+            // `select-none` no grupo todo: a seleção do iOS não respeita o
+            // limite do botão — ela pegava o relógio ao lado junto.
+            <div className="flex select-none items-center gap-1.5">
+              <div className={cn("flex items-center gap-1.5 rounded-full px-3 py-1.5", ended ? "bg-success/12" : "bg-destructive/10")}>
+                {ended ? null : <span className="size-2.5 shrink-0 animate-pulse rounded-full bg-destructive" />}
+                {/* "Ao vivo" some no celular: o ponto pulsando já diz isso, e a
+                    palavra custa ~65px — que faltam justamente quando o culto
+                    passa de 1h e o relógio vira 1:02:34. Encerrado mantém o
+                    rótulo, porque aí não há ponto pra falar por ele. */}
+                <span
+                  className={cn(
+                    "text-[11px] font-extrabold uppercase tracking-wide",
+                    ended ? "text-success-ink" : "hidden text-destructive-ink sm:inline",
+                  )}
+                >
+                  {ended ? "Encerrado" : "Ao vivo"}
+                </span>
+                <span
+                  className={cn(
+                    "text-xl font-extrabold tabular-nums leading-none sm:text-2xl",
+                    ended ? "text-success-ink" : "text-destructive-ink",
+                  )}
+                >
+                  {clock((liveNow ?? startedMs ?? 0) - (startedMs ?? 0))}
+                </span>
               </div>
-            ) : canEdit ? (
-              // Sem `window.confirm`: o diálogo nativo aqui só treinava o dedo a
-              // tocar "OK" sem ler, e não impediu nada em 09/08. Aqui o retorno
-              // já é imediato por outro caminho — o `setStarted` otimista troca
-              // este botão pelo relógio no mesmo quadro do toque, então não há
-              // janela de "não aconteceu nada" pra pessoa querer tocar de novo.
-              <button
-                onClick={start}
-                disabled={pendente || emCarencia}
-                className="press inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-base font-extrabold text-primary-foreground disabled:opacity-60"
-              >
-                <Play className="size-5 fill-current" /> Iniciar culto
-              </button>
-            ) : null
+            </div>
           ) : null}
+          {list.length > 0 && !started && canEdit ? (
+            // Sem `window.confirm`: o diálogo nativo aqui só treinava o dedo a
+            // tocar "OK" sem ler, e não impediu nada em 09/08. Aqui o retorno
+            // já é imediato por outro caminho — o `setStarted` otimista troca
+            // este botão pelo relógio no mesmo quadro do toque, então não há
+            // janela de "não aconteceu nada" pra pessoa querer tocar de novo.
+            <button
+              onClick={start}
+              disabled={pendente || emCarencia}
+              className="press inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-base font-extrabold text-primary-foreground disabled:opacity-60"
+            >
+              <Play className="size-5 fill-current" /> Iniciar culto
+            </button>
+          ) : null}
+          {/* O menu existe SEMPRE — escala e arquivos não dependem do culto ter
+              começado. O destrutivo mora aqui dentro, não solto na barra: o
+              gatilho fica no lugar e as opções abrem pra baixo, longe do polegar
+              (onde a varredura de progresso ficava escondida) e fora da
+              coordenada do toque anterior. */}
+          <MenuCulto itens={itensMenu} />
         </div>
       </div>
 
@@ -572,7 +619,7 @@ export function RundownGrid({
                   >
                     {fmt(startMs)}
                   </span>
-                  {live ? <span className="mt-1 text-[9px] font-extrabold uppercase tracking-wide text-primary">agora</span> : null}
+                  {live ? <span className="mt-1 text-[11px] font-extrabold uppercase tracking-wide text-primary">agora</span> : null}
                 </div>
 
                 {/* Trilha do tempo (linha + nó) */}
@@ -765,6 +812,10 @@ export function RundownGrid({
       ) : null}
 
       {manageKinds ? <KindsManager kinds={kinds} onClose={() => setManageKinds(false)} /> : null}
+
+      {abrirPasta ? (
+        <PastaModal eventId={eventId} url={filesUrl} onClose={() => setAbrirPasta(false)} />
+      ) : null}
 
       <StageMessageSheet
         open={abrirMsg}

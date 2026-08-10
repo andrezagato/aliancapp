@@ -2,66 +2,22 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
-import { FolderOpen, ClipboardList, Settings } from "lucide-react";
 import { Modal } from "@/components/modal";
 import { useToast } from "@/components/ui/toast";
 import { definirPastaArquivos } from "@/lib/actions";
-import { cn } from "@/lib/utils";
 
 const inputCls = "w-full rounded-[12px] border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary";
-const btnCls = "press-sm grid size-9 shrink-0 place-items-center rounded-full border border-border";
 
 /**
- * Ações compactas do cronograma (mesma linha do cabeçalho "Ordem do culto"):
- *  - pasta: abre a pasta de arquivos do culto (OneDrive/Drive), se vinculada;
- *  - escala: vai pra escala do evento;
- *  - engrenagem: config (hoje só vincula/edita a pasta; no futuro, mais).
+ * Vincula a pasta de arquivos do culto (OneDrive/Drive).
+ *
+ * Era o miolo do `EventFilesCard` — uma fileira de três ícones redondos (pasta,
+ * escala, engrenagem) grudada no cabeçalho "Ordem do culto". A fileira morreu em
+ * 09/08: os três viraram linhas COM RÓTULO dentro do menu do culto, que era o
+ * pedido do André ("fica mais limpo") e de quebra resolve a engrenagem — ícone
+ * que ninguém decifra sozinho e que ele achava ruim. Sobrou só o modal.
  */
-export function EventFilesCard({
-  eventId,
-  url,
-  canEdit,
-  escalaHref,
-}: {
-  eventId: string;
-  url: string | null;
-  canEdit: boolean;
-  escalaHref: string;
-}) {
-  const [editing, setEditing] = useState(false);
-
-  return (
-    <div className="flex items-center gap-1.5">
-      {url ? (
-        <a
-          href={url}
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label="Abrir pasta de arquivos do culto"
-          className={cn(btnCls, "text-primary")}
-        >
-          <FolderOpen className="size-[18px]" />
-        </a>
-      ) : null}
-      <Link href={escalaHref} aria-label="Ver a escala do evento" className={cn(btnCls, "text-primary")}>
-        <ClipboardList className="size-[18px]" />
-      </Link>
-      {canEdit ? (
-        <button
-          onClick={() => setEditing(true)}
-          aria-label={url ? "Configurar cronograma / pasta" : "Vincular pasta de arquivos"}
-          className={cn(btnCls, "text-muted-foreground")}
-        >
-          <Settings className="size-[18px]" />
-        </button>
-      ) : null}
-      {editing ? <EditModal eventId={eventId} url={url} onClose={() => setEditing(false)} /> : null}
-    </div>
-  );
-}
-
-function EditModal({ eventId, url, onClose }: { eventId: string; url: string | null; onClose: () => void }) {
+export function PastaModal({ eventId, url, onClose }: { eventId: string; url: string | null; onClose: () => void }) {
   const router = useRouter();
   const { showToast } = useToast();
   const [pending, startTx] = useTransition();

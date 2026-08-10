@@ -704,6 +704,9 @@ export function RundownColumns({
                             detalhe: "O relógio para. Dá pra reabrir depois.",
                             icone: <Square className="size-[1.1em] shrink-0" />,
                             destrutivo: true,
+                            // Decisão do André depois de experimentar: o encerrar
+                            // ganha a mesma salvaguarda do reiniciar.
+                            segurar: true,
                             desabilitado: ocupado || emCarencia,
                             aoEscolher: () =>
                               transicionar(() => encerrarCronograma(eventId), warm("cultoEncerrado")),

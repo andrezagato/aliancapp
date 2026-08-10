@@ -3,7 +3,6 @@ import { CalendarDays, ChevronRight, ChevronLeft } from "lucide-react";
 import { TopBar } from "@/components/app-shell/top-bar";
 import { Card } from "@/components/ui/card";
 import { RundownGrid } from "@/components/rundown-grid";
-import { EventFilesCard } from "@/components/event-files-card";
 import { getSession } from "@/lib/auth";
 import { listarCandidatosDeRoteiro, escolherCulto, ehDeHoje, getEventRundown, listRundownKinds, listRundownTemplates, estouEscaladoNoEvento, getPastaEvento, getStageMessage, listStageShortcuts } from "@/lib/data";
 import { fmtWeekdayShort, fmtDayMonthShort } from "@/lib/format";
@@ -128,9 +127,8 @@ export default async function CronogramaPage({ searchParams }: { searchParams: P
                 meId={session.userId}
                 stageMsg={stageMsg}
                 stageAtalhos={stageAtalhos}
-                actions={
-                  <EventFilesCard eventId={ev.id} url={filesUrl} canEdit={canEdit} escalaHref={`/escalas/${ev.id}`} />
-                }
+                filesUrl={filesUrl}
+                escalaHref={`/escalas/${ev.id}`}
               />
             </div>
           </div>
