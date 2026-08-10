@@ -88,6 +88,7 @@ export const getSession = cache(async (): Promise<Session | null> => {
       status: "pendente",
       created_at: new Date(0).toISOString(),
       updated_at: new Date(0).toISOString(),
+      whatsapp_opt_in_at: null,
       teams: [],
     };
     return { userId: user.id, email: user.email ?? null, profile: pending, role: "volunteer" };

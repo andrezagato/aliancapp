@@ -2,6 +2,7 @@ import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendPushToUserAsAdmin } from "@/lib/push";
+import { comVia, registrarEntregaAdmin } from "@/lib/delivery";
 import { sendEmail, lembreteEmail, siteUrl } from "@/lib/email";
 import { fmtEventWhen } from "@/lib/format";
 
@@ -221,36 +222,72 @@ export async function rodarCobranca({ dry = false }: { dry?: boolean } = {}): Pr
       if (dry) continue;
 
       const prefs = await lerPrefs(admin, profileId, "lembrete");
+      // TELEMETRIA (0052) — o cron é justamente o caminho mais cego que existia:
+      // roda sem ninguém olhando, e até aqui só deixava rastro de que TENTOU
+      // (`reminder_log`), nunca do que aconteceu.
+      const ctx = {
+        profileId,
+        kind: "lembrete" as const,
+        eventId: ev.id,
+        assignmentId: a.id,
+        teamId: a.team_id,
+      };
       if (prefs.in_app) {
         await admin.from("notifications").insert({
           recipient_id: profileId,
           kind: "lembrete",
           title: texto.title,
           body: texto.body,
-          link,
+          link: comVia(link, "in_app"),
           event_id: ev.id,
           team_id: a.team_id,
         });
+      }
+      await registrarEntregaAdmin(admin, {
+        ...ctx,
+        channel: "in_app",
+        outcome: prefs.in_app ? "enviado" : "desligado",
+      });
+      if (!prefs.push) {
+        await registrarEntregaAdmin(admin, { ...ctx, channel: "push", outcome: "desligado" });
       }
       if (prefs.push) {
         await sendPushToUserAsAdmin(admin, profileId, {
           title: texto.title,
           body: texto.body,
-          url: link,
+          url: comVia(link, "push"),
           // o toque abre a ESCALA do culto: a pessoa vê com quem vai servir e em
           // que posição antes de aceitar — decidido assim com o André, e o botão
           // dentro da notificação não existiria no iPhone de qualquer jeito
           tag: `escala-${a.id}`,
-        });
+        }, ctx);
       }
       // E-mail só na véspera: é o degrau em que ainda dá pra remanejar, e evita
       // encher a caixa (e o limite diário do Resend) nos outros dias.
-      if (step === 1 && prefs.email && pessoa?.email) {
-        try {
-          const em = lembreteEmail({ evento: titulo, quando, href: `${siteUrl()}${link}` });
-          await sendEmail({ to: pessoa.email, subject: em.subject, html: em.html });
-        } catch {
-          /* best-effort */
+      if (step === 1) {
+        if (!pessoa?.email) {
+          await registrarEntregaAdmin(admin, { ...ctx, channel: "email", outcome: "sem_destino" });
+        } else if (!prefs.email) {
+          await registrarEntregaAdmin(admin, { ...ctx, channel: "email", outcome: "desligado" });
+        } else {
+          try {
+            const em = lembreteEmail({
+              evento: titulo,
+              quando,
+              href: `${siteUrl()}${comVia(link, "email")}`,
+            });
+            await sendEmail({ to: pessoa.email, subject: em.subject, html: em.html });
+            await registrarEntregaAdmin(admin, { ...ctx, channel: "email", outcome: "enviado" });
+          } catch (e) {
+            // Aqui o catch deixou de ser mudo: um e-mail que morre no Resend é
+            // exatamente o tipo de falha que sumia sem deixar rastro.
+            await registrarEntregaAdmin(admin, {
+              ...ctx,
+              channel: "email",
+              outcome: "falhou",
+              detail: e instanceof Error ? e.message.slice(0, 200) : "erro desconhecido",
+            });
+          }
         }
       }
     }

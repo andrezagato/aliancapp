@@ -1,5 +1,7 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { getSession, isActive } from "@/lib/auth";
+import { RegistrarVia } from "@/lib/use-via";
 import { BottomNav } from "@/components/app-shell/bottom-nav";
 import { ToastProvider } from "@/components/ui/toast";
 import { AchievementWatcher } from "@/components/achievement-watcher";
@@ -30,6 +32,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           {/* Sem UI: reassina o push quando a inscrição do aparelho não confere
               mais com a chave VAPID atual (ver src/lib/push-client.ts) */}
           <PushSync />
+          {/* Sem UI: guarda o `?via=` do link de aviso na chegada, antes que o
+              router.replace do EscalasView leve a query embora (0052) */}
+          <Suspense fallback={null}>
+            <RegistrarVia />
+          </Suspense>
         </div>
       </EventModalProvider>
     </ToastProvider>

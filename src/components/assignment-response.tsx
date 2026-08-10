@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Users } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
@@ -8,7 +8,14 @@ import { Modal } from "@/components/modal";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 import { warm } from "@/lib/toasts";
-import { confirmarEscalacao, recusarEscalacao, pedirTroca, listMembrosParaTroca } from "@/lib/actions";
+import {
+  confirmarEscalacao,
+  recusarEscalacao,
+  pedirTroca,
+  listMembrosParaTroca,
+  marcarVistoEscalacao,
+} from "@/lib/actions";
+import { useVia } from "@/lib/use-via";
 import type { AssignmentStatus } from "@/lib/supabase/database.types";
 
 const REASONS = ["Viajando", "Trabalho", "Saúde", "Compromisso", "Outro"];
@@ -30,6 +37,11 @@ export function AssignmentResponse({
 }) {
   const router = useRouter();
   const { showToast } = useToast();
+  // De qual canal a pessoa veio (0052). NÃO dá pra ler a URL aqui: este botão
+  // só existe depois que o `router.replace("/escalas")` do EscalasView já
+  // apagou a query. O `useVia` lê o que foi capturado na chegada — ver
+  // src/lib/use-via.tsx, que documenta como isso gravou null no primeiro teste.
+  const via = useVia();
   const [pending, start] = useTransition();
   const [open, setOpen] = useState(false);
   const [motivo, setMotivo] = useState("");
@@ -37,6 +49,17 @@ export function AssignmentResponse({
   const [subOpen, setSubOpen] = useState(false);
   const [members, setMembers] = useState<Sub[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // "Ela viu" = o botão de responder chegou a existir na tela dela, com a
+  // escalação ainda pendente. O ref impede repetir a cada re-render; o banco é
+  // idempotente de qualquer jeito (o primeiro carimbo vale), e a RPC só aceita
+  // a própria escalação — chamada errada é no-op, não erro.
+  const jaAvisouVisto = useRef(false);
+  useEffect(() => {
+    if (status !== "convidado" || jaAvisouVisto.current) return;
+    jaAvisouVisto.current = true;
+    void marcarVistoEscalacao(assignmentId);
+  }, [assignmentId, status]);
 
   const openSheet = () => {
     setError(null);
@@ -54,7 +77,7 @@ export function AssignmentResponse({
   const confirmar = () => {
     setError(null);
     start(async () => {
-      const r = await confirmarEscalacao(assignmentId);
+      const r = await confirmarEscalacao(assignmentId, via);
       if (!r.ok) {
         setError(r.error);
         return;
@@ -71,7 +94,7 @@ export function AssignmentResponse({
     start(async () => {
       const r = chosen
         ? await pedirTroca(assignmentId, motivo, chosen)
-        : await recusarEscalacao(assignmentId, motivo);
+        : await recusarEscalacao(assignmentId, motivo, via);
       if (!r.ok) {
         setError(r.error);
         return;

@@ -49,6 +49,8 @@ import {
   type MyInterest,
   type TeamWithPositions,
 } from "@/lib/data";
+import { getCanaisPanel, souInalcancavel } from "@/lib/canais";
+import { AlcanceAvisos } from "@/components/canais-panel";
 import { fmtEventWhen, fmtWeekdayShort, fmtDayMonthShort, fmtTime, fmtBirthday, churchDateISO } from "@/lib/format";
 import { CheckinButton } from "@/components/slot-controls";
 import { SwapInbox } from "@/components/swap-inbox";
@@ -109,11 +111,12 @@ export default async function InicioPage({
   // Voluntário: experiência "Aconchego" completa (cabeçalho reativo,
   // pull-to-refresh, herói, swipe). Os blocos extras entram como children.
   if (session.role === "volunteer") {
-    const [mine, pendingFeedback] = await Promise.all([
+    const p = session.profile;
+    const [mine, pendingFeedback, semCanal] = await Promise.all([
       getMyUpcomingAssignments(session),
       getPendingFeedback(session),
+      souInalcancavel(session.userId, p.phone),
     ]);
-    const p = session.profile;
     const missingProfile = [
       !p.avatar_url ? "sua foto" : null,
       !p.phone ? "o telefone" : null,
@@ -122,7 +125,7 @@ export default async function InicioPage({
     return (
       <VolunteerHome title={`${greeting()}, ${first}`} subtitle={roleLabel} userName={userName} assignments={mine}>
         {cardAoVivo}
-        <ProfilePrompt meId={session.userId} missing={missingProfile} />
+        <ProfilePrompt meId={session.userId} missing={missingProfile} semCanal={semCanal} />
         {respHero}
         <SwapInbox items={swaps} />
         <ResponsibleConfirm events={respEvents} />
@@ -138,10 +141,21 @@ export default async function InicioPage({
   // com o responsável de cada um. Admin também lidera equipes → recebe o aviso
   // de avaliação do culto (senão só apareceria no ramo "líder").
   if (session.role === "admin") {
-    const pendingReviews = await getPendingTeamReviews(session);
+    const [pendingReviews, semCanal, canais] = await Promise.all([
+      getPendingTeamReviews(session),
+      souInalcancavel(session.userId, session.profile.phone),
+      getCanaisPanel(),
+    ]);
     return (
       <HomeShell title={`${greeting()}, ${first}`} subtitle={roleLabel} userName={userName}>
         {cardAoVivo}
+        {/* `missing` vazio: gestor não recebe cobrança de foto/aniversário na
+            home, mas ficar inalcançável vale aviso pra qualquer um — gestor
+            também é escalado. */}
+        <ProfilePrompt meId={session.userId} missing={[]} semCanal={semCanal} />
+        {/* Só aparece se alguém ESCALADO não recebe aviso nenhum — se aparecesse
+            sempre, viraria paisagem e pararia de ser alerta (0052) */}
+        <AlcanceAvisos dados={canais} variant="alerta" meId={session.userId} />
         {respHero}
         <TeamReviewPrompt pending={pendingReviews} />
         <AdminSection swaps={swaps} respEvents={respEvents} mes={sp.m} />
@@ -151,10 +165,16 @@ export default async function InicioPage({
   }
 
   // Líder: foco no próximo culto da equipe e nas próximas escalas.
-  const pendingReviews = await getPendingTeamReviews(session);
+  const [pendingReviews, semCanalLider, canaisLider] = await Promise.all([
+    getPendingTeamReviews(session),
+    souInalcancavel(session.userId, session.profile.phone),
+    getCanaisPanel(),
+  ]);
   return (
     <HomeShell title={`${greeting()}, ${first}`} subtitle={roleLabel} userName={userName}>
       {cardAoVivo}
+      <ProfilePrompt meId={session.userId} missing={[]} semCanal={semCanalLider} />
+      <AlcanceAvisos dados={canaisLider} variant="alerta" meId={session.userId} />
       {respHero}
       <TeamReviewPrompt pending={pendingReviews} />
       <SwapInbox items={swaps} />
@@ -204,7 +224,7 @@ function MyScheduleList({ mine, title }: { mine: MyAssignment[]; title: string }
                     <span className="text-lg font-semibold leading-none">
                       {fmtDayMonthShort(a.startsAt).split(" ")[0]}
                     </span>
-                    <span className="text-[10px] text-muted-foreground">{fmtTime(a.startsAt)}</span>
+                    <span className="text-[11px] text-muted-foreground">{fmtTime(a.startsAt)}</span>
                   </div>
                   <div className="min-w-0 flex-1">
                     <AbrirEscala eventId={a.eventId} className="text-left font-medium hover:underline">

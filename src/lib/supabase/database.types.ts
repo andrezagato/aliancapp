@@ -128,11 +128,13 @@ export type Database = {
           created_at: string
           decline_reason: string | null
           event_id: string
+          first_seen_at: string | null
           id: string
           position_id: string
           profile_id: string | null
           requirement_id: string | null
           responded_at: string | null
+          responded_via: Database["public"]["Enums"]["delivery_channel"] | null
           status: Database["public"]["Enums"]["assignment_status"]
           team_id: string
           updated_at: string
@@ -142,11 +144,13 @@ export type Database = {
           created_at?: string
           decline_reason?: string | null
           event_id: string
+          first_seen_at?: string | null
           id?: string
           position_id: string
           profile_id?: string | null
           requirement_id?: string | null
           responded_at?: string | null
+          responded_via?: Database["public"]["Enums"]["delivery_channel"] | null
           status?: Database["public"]["Enums"]["assignment_status"]
           team_id: string
           updated_at?: string
@@ -156,11 +160,13 @@ export type Database = {
           created_at?: string
           decline_reason?: string | null
           event_id?: string
+          first_seen_at?: string | null
           id?: string
           position_id?: string
           profile_id?: string | null
           requirement_id?: string | null
           responded_at?: string | null
+          responded_via?: Database["public"]["Enums"]["delivery_channel"] | null
           status?: Database["public"]["Enums"]["assignment_status"]
           team_id?: string
           updated_at?: string
@@ -1319,6 +1325,7 @@ export type Database = {
           status: Database["public"]["Enums"]["profile_status"]
           system_role: Database["public"]["Enums"]["system_role"]
           updated_at: string
+          whatsapp_opt_in_at: string | null
         }
         Insert: {
           avatar_url?: string | null
@@ -1334,6 +1341,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["profile_status"]
           system_role?: Database["public"]["Enums"]["system_role"]
           updated_at?: string
+          whatsapp_opt_in_at?: string | null
         }
         Update: {
           avatar_url?: string | null
@@ -1349,6 +1357,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["profile_status"]
           system_role?: Database["public"]["Enums"]["system_role"]
           updated_at?: string
+          whatsapp_opt_in_at?: string | null
         }
         Relationships: [
           {
@@ -1398,6 +1407,77 @@ export type Database = {
             columns: ["profile_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      delivery_log: {
+        Row: {
+          assignment_id: string | null
+          channel: Database["public"]["Enums"]["delivery_channel"]
+          detail: string | null
+          event_id: string | null
+          id: string
+          kind: Database["public"]["Enums"]["notification_kind"]
+          outcome: Database["public"]["Enums"]["delivery_outcome"]
+          profile_id: string
+          provider_id: string | null
+          sent_at: string
+          team_id: string | null
+        }
+        Insert: {
+          assignment_id?: string | null
+          channel: Database["public"]["Enums"]["delivery_channel"]
+          detail?: string | null
+          event_id?: string | null
+          id?: string
+          kind: Database["public"]["Enums"]["notification_kind"]
+          outcome: Database["public"]["Enums"]["delivery_outcome"]
+          profile_id: string
+          provider_id?: string | null
+          sent_at?: string
+          team_id?: string | null
+        }
+        Update: {
+          assignment_id?: string | null
+          channel?: Database["public"]["Enums"]["delivery_channel"]
+          detail?: string | null
+          event_id?: string | null
+          id?: string
+          kind?: Database["public"]["Enums"]["notification_kind"]
+          outcome?: Database["public"]["Enums"]["delivery_outcome"]
+          profile_id?: string
+          provider_id?: string | null
+          sent_at?: string
+          team_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "delivery_log_assignment_id_fkey"
+            columns: ["assignment_id"]
+            isOneToOne: false
+            referencedRelation: "assignments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "delivery_log_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "delivery_log_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "delivery_log_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
             referencedColumns: ["id"]
           },
         ]
@@ -1938,7 +2018,7 @@ export type Database = {
         }[]
       }
       confirmar_escalacao: {
-        Args: { p_assignment: string }
+        Args: { p_assignment: string; p_via?: Database["public"]["Enums"]["delivery_channel"] | null }
         Returns: undefined
       }
       confirmar_evento: {
@@ -2046,7 +2126,65 @@ export type Database = {
       primeiro_no_local_count: { Args: never; Returns: number }
       reconciliar_onboarding: { Args: never; Returns: undefined }
       recusar_escalacao: {
-        Args: { p_assignment: string; p_motivo: string }
+        Args: {
+          p_assignment: string
+          p_motivo: string
+          p_via?: Database["public"]["Enums"]["delivery_channel"] | null
+        }
+        Returns: undefined
+      }
+      // migration 0052 — telemetria de canal
+      canais_alcance: {
+        Args: never
+        Returns: {
+          nome: string
+          profile_id: string
+          tem_push: boolean
+          tem_telefone: boolean
+          zap_liberado: boolean
+        }[]
+      }
+      canais_eficacia: {
+        Args: { p_dias?: number }
+        Returns: {
+          canal: Database["public"]["Enums"]["delivery_channel"]
+          compareceram: number
+          desligado: number
+          enviados: number
+          falhou: number
+          horas_mediana: number | null
+          respostas: number
+          sem_destino: number
+        }[]
+      }
+      canais_resumo: {
+        Args: { p_dias?: number }
+        Returns: {
+          atribuidos: number
+          escalados: number
+          horas_ate_confirmar: number | null
+          horas_ate_recusar: number | null
+          pendentes: number
+          respondidos: number
+          sem_atribuicao: number
+        }[]
+      }
+      marcar_visto: {
+        Args: { p_assignment: string }
+        Returns: undefined
+      }
+      registrar_entrega: {
+        Args: {
+          p_assignment?: string | null
+          p_channel: Database["public"]["Enums"]["delivery_channel"]
+          p_detail?: string | null
+          p_event?: string | null
+          p_kind: Database["public"]["Enums"]["notification_kind"]
+          p_outcome: Database["public"]["Enums"]["delivery_outcome"]
+          p_profile: string
+          p_provider_id?: string | null
+          p_team?: string | null
+        }
         Returns: undefined
       }
       solicitar_entrada: {
@@ -2067,6 +2205,8 @@ export type Database = {
         | "recusado"
         | "vaga_aberta"
         | "presente"
+      delivery_channel: "push" | "whatsapp" | "email" | "in_app"
+      delivery_outcome: "enviado" | "falhou" | "sem_destino" | "desligado"
       event_request_status: "pendente" | "aprovado" | "recusado"
       interest_status: "aberto" | "atendido" | "arquivado"
       invite_status: "pendente" | "aceito" | "expirado" | "cancelado"
@@ -2230,6 +2370,8 @@ export const Constants = {
         "vaga_aberta",
         "presente",
       ],
+      delivery_channel: ["push", "whatsapp", "email", "in_app"],
+      delivery_outcome: ["enviado", "falhou", "sem_destino", "desligado"],
       event_request_status: ["pendente", "aprovado", "recusado"],
       interest_status: ["aberto", "atendido", "arquivado"],
       invite_status: ["pendente", "aceito", "expirado", "cancelado"],
@@ -2279,6 +2421,8 @@ export type EventRequestStatus = Enums<"event_request_status">
 export type InterestStatus = Enums<"interest_status">
 export type ProfileStatus = Enums<"profile_status">
 export type NotificationKind = Enums<"notification_kind">
+export type DeliveryChannel = Enums<"delivery_channel">
+export type DeliveryOutcome = Enums<"delivery_outcome">
 
 export type Church = Tables<"churches">
 export type Profile = Tables<"profiles">
@@ -2295,3 +2439,4 @@ export type ServiceInterest = Tables<"service_interests">
 export type Notification = Tables<"notifications">
 export type ChatMessage = Tables<"chat_messages">
 export type ChatRead = Tables<"chat_reads">
+export type DeliveryLog = Tables<"delivery_log">

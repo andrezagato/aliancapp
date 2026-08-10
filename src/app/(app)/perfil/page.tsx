@@ -7,21 +7,26 @@ import { ProfileEditableField } from "@/components/profile-field";
 import { ChurchLocationCard } from "@/components/church-location-card";
 import { PushSetup } from "@/components/push-setup";
 import { NotificationPrefs } from "@/components/notification-prefs";
+import { AlcanceAvisos } from "@/components/canais-panel";
+import { WhatsAppOptIn } from "@/components/whatsapp-optin";
 import { atualizarNome, atualizarApelido, atualizarTelefone, atualizarAniversario } from "@/lib/actions";
 import { cn, displayName } from "@/lib/utils";
 import { getSession } from "@/lib/auth";
 import { getChurchLocation, getMyNotificationPrefs } from "@/lib/data";
+import { getCanaisPanel, temTelefoneValido } from "@/lib/canais";
 import { fmtBirthday } from "@/lib/format";
 
 export default async function PerfilPage() {
   const session = await getSession();
   if (!session) return null;
   const p = session.profile;
-  const [churchLoc, notifPrefs] = await Promise.all([
+  const isGestor = session.role === "admin" || session.profile.teams.some((t) => t.role === "leader");
+  const [churchLoc, notifPrefs, canais] = await Promise.all([
     session.role === "admin" ? getChurchLocation(session) : Promise.resolve(null),
     getMyNotificationPrefs(session),
+    // as RPCs de canais dão raise pra quem não é gestor — nem chama.
+    isGestor ? getCanaisPanel() : Promise.resolve(null),
   ]);
-  const isGestor = session.role === "admin" || session.profile.teams.some((t) => t.role === "leader");
 
   const roleLabel =
     session.role === "admin" ? "Administrador" : session.role === "leader" ? "Líder" : "Voluntário";
@@ -89,6 +94,19 @@ export default async function PerfilPage() {
           <div className="mt-1 w-full border-t border-border/70 pt-2.5">
             <NotificationPrefs initial={notifPrefs} isGestor={isGestor} />
           </div>
+          <div className="w-full border-t border-border/70 pt-2.5">
+            <WhatsAppOptIn
+              inicial={!!p.whatsapp_opt_in_at}
+              temTelefone={temTelefoneValido(p.phone)}
+            />
+          </div>
+          {/* Só gestor: é a leitura de quem PODE agir (pedir o telefone, ligar
+              pra quem nenhum canal alcança). Volunteer não veria o que fazer. */}
+          {canais ? (
+            <div className="w-full border-t border-border/70 pt-2.5">
+              <AlcanceAvisos dados={canais} />
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 

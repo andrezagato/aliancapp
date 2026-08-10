@@ -23,9 +23,11 @@ import { nextCategoryColor } from "@/lib/palette";
 import { TOPIC_BY_ID, type TopicId, type TopicChannel } from "@/lib/notification-topics";
 import { logActivity } from "@/lib/activity";
 import { notify, notifyMany, teamLeaderIds, avisoPrefs, quemAceitaEmail } from "@/lib/notify";
+import { comVia, registrarEntrega } from "@/lib/delivery";
 import { sendPushToSubs } from "@/lib/push";
 import { sendEmail, conviteEmail, escaladoEmail, lembreteEmail, siteUrl } from "@/lib/email";
 import { churchDateISO, fmtEventWhen } from "@/lib/format";
+import type { DeliveryChannel } from "@/lib/supabase/database.types";
 import type {
   ActionResult,
   CriarConviteInput,
@@ -38,6 +40,16 @@ import type {
 
 const ok: ActionResult = { ok: true };
 const fail = (error: string): ActionResult => ({ ok: false, error });
+
+/**
+ * `via` chega do `?via=` da URL — entrada de usuário. Um valor fora do enum
+ * faria a RPC lançar e a CONFIRMAÇÃO falhar por causa de telemetria, que é
+ * exatamente a inversão de prioridade a evitar: medir nunca pode custar a ação.
+ * Na dúvida, joga a medição fora e confirma.
+ */
+const CANAIS: readonly DeliveryChannel[] = ["push", "whatsapp", "email", "in_app"];
+const canalSeguro = (v?: DeliveryChannel | null): DeliveryChannel | undefined =>
+  v && CANAIS.includes(v) ? v : undefined;
 
 /**
  * Sincroniza as conquistas do usuário e notifica os desbloqueios novos.
@@ -228,6 +240,40 @@ export async function atualizarTelefone(
   return { ok: true, unlocked };
 }
 
+/**
+ * Consentimento de receber avisos no WhatsApp (0052).
+ *
+ * Guarda QUANDO, não um sim/não: a Meta exige opt-in demonstrável antes do
+ * primeiro template e a LGPD pede a data. Telefone cadastrado NÃO é permissão —
+ * são duas coisas separadas de propósito, e é por isso que existe esta coluna
+ * em vez de tratar "tem telefone" como "pode mandar".
+ *
+ * Passa pela política `profiles_update_self` (id = auth.uid()), sem RPC. As
+ * duas direções entram no activity_log: a coluna sozinha só conta a última, e
+ * "tirou o consentimento" é justamente o que precisa ser auditável.
+ */
+export async function definirOptInWhatsApp(on: boolean): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  const digitos = (session.profile.phone ?? "").replace(/\D/g, "");
+  if (on && digitos.length < 10) {
+    return fail("Adicione seu telefone com DDD antes de liberar o WhatsApp.");
+  }
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("profiles")
+    .update({ whatsapp_opt_in_at: on ? new Date().toISOString() : null })
+    .eq("id", session.userId);
+  if (error) return fail(error.message);
+  await logActivity({
+    profileId: session.userId,
+    actorId: session.userId,
+    kind: on ? "liberou_whatsapp" : "revogou_whatsapp",
+  });
+  revalidatePath("/perfil");
+  return ok;
+}
+
 // Aniversário: a própria pessoa define o próprio (aceita vazio pra limpar).
 export async function atualizarAniversario(
   birth: string,
@@ -413,13 +459,38 @@ export async function marcarNotificacoesLidas(): Promise<ActionResult> {
 // =============================================================================
 // VOLUNTÁRIO: confirmar / recusar (via RPC security definer)
 // =============================================================================
+/**
+ * Carimba que a pessoa VIU a escalação (0052). Separa "o aviso não chegou" de
+ * "chegou e ela demorou pra decidir" — a pergunta real dos silenciosos que já
+ * têm push instalado. Idempotente no banco: o primeiro olhar é o que vale.
+ *
+ * Não devolve nada e não revalida: é medição, e não pode fazer a tela piscar.
+ */
+export async function marcarVistoEscalacao(assignmentId: string): Promise<void> {
+  const session = await getSession();
+  if (!session) return;
+  try {
+    const supabase = await createClient();
+    await supabase.rpc("marcar_visto", { p_assignment: assignmentId });
+  } catch {
+    /* medir nunca atrapalha */
+  }
+}
+
 export async function confirmarEscalacao(
   assignmentId: string,
+  via?: DeliveryChannel | null,
 ): Promise<ActionResult & { unlocked?: UnlockedBadge[] }> {
   const session = await getSession();
   if (!session) return fail("Sessão expirada.");
   const supabase = await createClient();
-  const { error } = await supabase.rpc("confirmar_escalacao", { p_assignment: assignmentId });
+  // `via` vai DENTRO da RPC (0052) e não num update aqui: a RLS de
+  // `assignments` só dá UPDATE a admin/líder, então um update do próprio
+  // voluntário casaria com zero linhas e a atribuição nasceria vazia sem erro.
+  const { error } = await supabase.rpc("confirmar_escalacao", {
+    p_assignment: assignmentId,
+    p_via: canalSeguro(via),
+  });
   if (error) return fail(error.message);
   const { data: ca } = await supabase.from("assignments").select("team_id, event_id").eq("id", assignmentId).maybeSingle();
   if (ca?.team_id) {
@@ -445,7 +516,11 @@ export async function confirmarEscalacao(
   return { ok: true, unlocked };
 }
 
-export async function recusarEscalacao(assignmentId: string, motivo: string): Promise<ActionResult> {
+export async function recusarEscalacao(
+  assignmentId: string,
+  motivo: string,
+  via?: DeliveryChannel | null,
+): Promise<ActionResult> {
   const session = await getSession();
   if (!session) return fail("Sessão expirada.");
   const reason = motivo.trim();
@@ -454,6 +529,7 @@ export async function recusarEscalacao(assignmentId: string, motivo: string): Pr
   const { error } = await supabase.rpc("recusar_escalacao", {
     p_assignment: assignmentId,
     p_motivo: reason,
+    p_via: canalSeguro(via),
   });
   if (error) return fail(error.message);
   const { data: ra } = await supabase.from("assignments").select("team_id, event_id").eq("id", assignmentId).maybeSingle();
@@ -733,16 +809,25 @@ export async function escalarVoluntario(
     }
   }
 
-  const { error } = await supabase.from("assignments").insert({
-    event_id: input.eventId,
-    requirement_id: input.requirementId,
-    team_id: input.teamId,
-    position_id: input.positionId,
-    profile_id: input.profileId,
-    status: "convidado",
-    assigned_by: session.userId,
-  });
+  // O `.select("id")` é só pela telemetria (0052): é o que liga cada entrega à
+  // escalação que ela cobra, e sem isso não dá pra medir "convite entregue por
+  // este canal → respondido em quanto tempo". Se a leitura de volta falhar, o
+  // aviso sai igual — só perde a amarração.
+  const { data: criada, error } = await supabase
+    .from("assignments")
+    .insert({
+      event_id: input.eventId,
+      requirement_id: input.requirementId,
+      team_id: input.teamId,
+      position_id: input.positionId,
+      profile_id: input.profileId,
+      status: "convidado",
+      assigned_by: session.userId,
+    })
+    .select("id")
+    .maybeSingle();
   if (error) return fail(error.message);
+  const assignmentId = criada?.id ?? null;
 
   await logActivity({
     profileId: input.profileId,
@@ -752,32 +837,52 @@ export async function escalarVoluntario(
     teamId: input.teamId,
   });
 
+  const link = `/escalas/${input.eventId}`;
   await notify({
     recipientId: input.profileId,
     kind: "escalado",
     title: "Você foi escalado",
     body: "Toque para confirmar sua presença.",
-    link: `/escalas/${input.eventId}`,
+    link,
     teamId: input.teamId,
     eventId: input.eventId,
+    assignmentId,
   });
 
   // E-mail (best-effort) — canal garantido no iPhone, complementa o sino.
+  const ctxEmail = {
+    profileId: input.profileId,
+    kind: "escalado" as const,
+    eventId: input.eventId,
+    teamId: input.teamId,
+    assignmentId,
+  };
   try {
     const [{ data: prof }, { data: evInfo }] = await Promise.all([
       supabase.from("profiles").select("email").eq("id", input.profileId).maybeSingle(),
       supabase.from("events").select("title, starts_at").eq("id", input.eventId).maybeSingle(),
     ]);
-    if (prof?.email && (await avisoPrefs(input.profileId, "escalado")).email) {
+    if (!prof?.email) {
+      await registrarEntrega({ ...ctxEmail, channel: "email", outcome: "sem_destino" });
+    } else if (!(await avisoPrefs(input.profileId, "escalado")).email) {
+      await registrarEntrega({ ...ctxEmail, channel: "email", outcome: "desligado" });
+    } else {
       const esc = escaladoEmail({
         evento: evInfo?.title ?? "um evento",
         quando: fmtEventWhen(evInfo?.starts_at),
-        href: `${siteUrl()}/escalas/${input.eventId}`,
+        href: `${siteUrl()}${comVia(link, "email")}`,
       });
       await sendEmail({ to: prof.email, subject: esc.subject, html: esc.html });
+      await registrarEntrega({ ...ctxEmail, channel: "email", outcome: "enviado" });
     }
-  } catch {
-    /* best-effort — falha de e-mail não derruba a escalação */
+  } catch (e) {
+    /* best-effort — falha de e-mail não derruba a escalação, mas deixa rastro */
+    await registrarEntrega({
+      ...ctxEmail,
+      channel: "email",
+      outcome: "falhou",
+      detail: e instanceof Error ? e.message.slice(0, 200) : "erro desconhecido",
+    });
   }
 
   revalidatePath(`/escalas/${input.eventId}`);

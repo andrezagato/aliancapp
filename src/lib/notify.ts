@@ -2,6 +2,7 @@ import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
 import { sendPushToUser } from "@/lib/push";
+import { comVia, registrarEntrega, type EntregaCtx } from "@/lib/delivery";
 import type { Database } from "@/lib/supabase/database.types";
 
 type Kind = Database["public"]["Enums"]["notification_kind"];
@@ -14,6 +15,8 @@ type NotifyInput = {
   link?: string;
   teamId?: string | null;
   eventId?: string | null;
+  /** Só pra telemetria: liga a entrega à escalação que ela cobra (0052). */
+  assignmentId?: string | null;
 };
 
 /**
@@ -58,6 +61,23 @@ export async function quemAceitaEmail(recipientIds: string[], kind: Kind): Promi
 export async function notify(input: NotifyInput): Promise<void> {
   const recipientId = input.recipientId;
   if (!recipientId) return;
+
+  // TELEMETRIA (0052): só os avisos de escala são medidos — são os que a
+  // pergunta "a pessoa foi alcançada e respondeu?" trata. E a preferência do
+  // destinatário já era buscada aqui pro push, então medir não acrescentou
+  // nenhuma ida ao banco: é a MESMA chamada, agora aproveitada pelos dois canais.
+  const medido = PUSH_KINDS.has(input.kind);
+  const prefs = medido ? await avisoPrefs(recipientId, input.kind) : null;
+  const ctx: EntregaCtx | null = medido
+    ? {
+        profileId: recipientId,
+        kind: input.kind,
+        eventId: input.eventId ?? null,
+        assignmentId: input.assignmentId ?? null,
+        teamId: input.teamId ?? null,
+      }
+    : null;
+
   try {
     const supabase = await createClient();
     // o sino é filtrado DENTRO do `notificar` (respeita in_app lá, com o
@@ -67,22 +87,40 @@ export async function notify(input: NotifyInput): Promise<void> {
       p_kind: input.kind,
       p_title: input.title,
       p_body: input.body,
-      p_link: input.link,
+      // cada canal carrega a própria origem no link: é assim que a resposta
+      // volta atribuída ao canal que a provocou.
+      p_link: comVia(input.link, "in_app"),
       p_team: input.teamId ?? undefined,
       p_event: input.eventId ?? undefined,
     });
   } catch {
     /* silencioso de propósito */
   }
-  // Push (best-effort, separado do sino) — só pros kinds priorizados E se a
-  // pessoa quer ser interrompida no aparelho por esse assunto.
-  if (PUSH_KINDS.has(input.kind) && (await avisoPrefs(recipientId, input.kind)).push) {
-    await sendPushToUser(recipientId, {
-      title: input.title,
-      body: input.body,
-      url: input.link,
-      tag: input.eventId ?? undefined,
+
+  if (ctx && prefs) {
+    await registrarEntrega({
+      ...ctx,
+      channel: "in_app",
+      outcome: prefs.in_app ? "enviado" : "desligado",
     });
+    // Push (best-effort, separado do sino) — só se a pessoa quer ser
+    // interrompida no aparelho por esse assunto. Quem desligou vira
+    // 'desligado', não 'sem_destino': é escolha dela, não falha nossa, e
+    // misturar as duas faria o painel pedir suporte técnico pra quem só quer paz.
+    if (prefs.push) {
+      await sendPushToUser(
+        recipientId,
+        {
+          title: input.title,
+          body: input.body,
+          url: comVia(input.link, "push"),
+          tag: input.eventId ?? undefined,
+        },
+        ctx,
+      );
+    } else {
+      await registrarEntrega({ ...ctx, channel: "push", outcome: "desligado" });
+    }
   }
 }
 

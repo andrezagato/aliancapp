@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { BellRing, ChevronRight, Smartphone, Mail } from "lucide-react";
 import { Modal } from "@/components/modal";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/toast";
 import { definirPreferenciaAviso } from "@/lib/actions";
 import {
@@ -11,7 +12,6 @@ import {
   type TopicId,
   type TopicPrefs,
 } from "@/lib/notification-topics";
-import { cn } from "@/lib/utils";
 
 /**
  * "O que te avisar" — um interruptor por ASSUNTO, não por tipo de aviso (são 19
@@ -98,28 +98,5 @@ export function NotificationPrefs({ initial, isGestor }: { initial: TopicPrefs; 
         </p>
       </Modal>
     </>
-  );
-}
-
-function Switch({ on, onToggle, label }: { on: boolean; onToggle: () => void; label: string }) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={on}
-      aria-label={label}
-      onClick={onToggle}
-      className={cn(
-        "relative h-6 w-10 shrink-0 rounded-full transition-colors duration-150",
-        on ? "bg-primary" : "bg-muted",
-      )}
-    >
-      <span
-        className={cn(
-          "absolute top-0.5 size-5 rounded-full bg-card shadow-soft transition-transform duration-150",
-          on ? "translate-x-[1.125rem]" : "translate-x-0.5",
-        )}
-      />
-    </button>
   );
 }
