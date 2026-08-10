@@ -41,6 +41,7 @@ import {
   useRundownTiming,
   fmtHora,
   clock,
+  contagemRegressiva,
   heatOf,
   HEAT_TEXT,
   type RundownRow,
@@ -356,9 +357,12 @@ function Linha({
       <span className="tabular-nums">{fmtHora(startMs)}</span>
       <span className={cn("tabular-nums", live && "text-muted-foreground")}>{fmtHora(endMs)}</span>
 
-      {/* duração planejada; ao vivo, o cronômetro ocupa o lugar e ganha a cor */}
+      {/* Duração planejada; ao vivo, a CONTAGEM REGRESSIVA ocupa o lugar e ganha
+          a cor. Aqui não cabe rótulo, então o sinal de menos é quem diz que o
+          bloco estourou — e é o mesmo número que o pregador está lendo no telão,
+          que a ponte sempre mandou regressivo. */}
       <span className={cn("tabular-nums", live && HEAT_TEXT[heat])}>
-        {live ? clock(Math.max(0, decorridoMs)) : `${it.durationMin}m`}
+        {live ? contagemRegressiva(durMs - decorridoMs) : `${it.durationMin}m`}
       </span>
 
       <span className="min-w-0 break-words" title={it.title}>

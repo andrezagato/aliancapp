@@ -39,6 +39,25 @@ export function clock(ms: number): string {
   return h > 0 ? `${h}:${pad(m)}:${pad(s % 60)}` : `${m}:${pad(s % 60)}`;
 }
 
+/**
+ * Contagem REGRESSIVA do bloco ao vivo: `4:32` e `−1:23` depois de estourar.
+ *
+ * O bloco conta pra baixo; o culto continua contando pra cima. É a convenção de
+ * todo software de régia (ProPresenter, Ontime, Stage Timer, e os sistemas de
+ * rundown de TV), e aqui ela corrigia três desencontros nossos: a cor já era
+ * calculada pelo tempo que FALTA (ver `heatOf` logo abaixo) enquanto o número
+ * mostrava o que já tinha passado; a ponte manda `clockType: 0` — regressiva —
+ * pro telão do palco, então o pregador lia "faltam 4:32" e a régia lia "20:28
+ * corridos" do MESMO bloco; e eram dois números ("corrido" + "passou") onde um
+ * só resolve.
+ *
+ * Sinal de menos de verdade (U+2212), não hífen: ele tem a largura de dígito das
+ * `tabular-nums` e não faz o cronômetro pular de largura ao cruzar o zero.
+ */
+export function contagemRegressiva(ms: number): string {
+  return (ms < 0 ? "−" : "") + clock(Math.abs(ms));
+}
+
 /** Escala de cor do contador conforme o tempo restante do bloco (ao vivo). */
 export type Heat = "normal" | "amber" | "orange" | "red";
 export function heatOf(remainingMs: number): Heat {

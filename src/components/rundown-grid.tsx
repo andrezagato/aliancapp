@@ -598,7 +598,9 @@ export function RundownGrid({
             const durMs = it.durationMin * 60000;
             const elapsedMs = live ? (now != null ? now - startMs : 0) : done ? endMs - startMs : durMs;
             const overMs = Math.max(0, elapsedMs - durMs);
-            const h: Heat = live ? heatOf(durMs - elapsedMs) : done && overMs > 0 ? "red" : "normal";
+            // Negativo depois de estourar — é o que o bloco ao vivo mostra agora.
+            const restanteMs = durMs - elapsedMs;
+            const h: Heat = live ? heatOf(restanteMs) : done && overMs > 0 ? "red" : "normal";
             const liveRed = live && h === "red";
             return (
               <li
@@ -683,16 +685,27 @@ export function RundownGrid({
 
                   {/* Contadores + textos */}
                   <div className="my-2.5 ml-3 min-w-0 flex-1 pr-1">
-                    {live || done ? (
+                    {live ? (
+                      /* AO VIVO: UM número, contando pra baixo. Antes eram dois
+                         ("corrido" + "passou"), e nenhum deles era o que a régia
+                         fala no ponto nem o que o telão do palco mostra. Aqui o
+                         rótulo carrega o sinal — "estourou 1:23" lê melhor que
+                         "restam −1:23"; na régia, que não tem espaço pra rótulo,
+                         quem carrega é o menos. */
+                      <Stat
+                        label={restanteMs >= 0 ? "restam" : "estourou"}
+                        value={clock(Math.abs(restanteMs))}
+                        big
+                        className={HEAT_TEXT[h]}
+                      />
+                    ) : done ? (
+                      /* CONCLUÍDO segue progressivo: contagem regressiva de um
+                         bloco que acabou não quer dizer nada — o que interessa
+                         ali é quanto ele realmente levou. */
                       <div className="flex items-end gap-5">
-                        <Stat
-                          label="corrido"
-                          value={clock(elapsedMs)}
-                          big={live}
-                          className={live ? HEAT_TEXT[h] : "text-muted-foreground"}
-                        />
+                        <Stat label="corrido" value={clock(elapsedMs)} className="text-muted-foreground" />
                         {overMs > 0 ? (
-                          <Stat label="passou" value={`+${clock(overMs)}`} big={live} className="text-destructive-ink" />
+                          <Stat label="passou" value={`+${clock(overMs)}`} className="text-destructive-ink" />
                         ) : null}
                       </div>
                     ) : (
