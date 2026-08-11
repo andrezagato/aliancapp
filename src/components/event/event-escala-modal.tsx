@@ -1,19 +1,23 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Settings2 } from "lucide-react";
+import Link from "next/link";
+import { ChevronRight } from "lucide-react";
 import { Modal } from "@/components/modal";
 import { EventTeams } from "@/components/event/event-teams";
-import { GerenciarEventoSheet } from "@/components/event/gerenciar-evento-sheet";
+import { AjustesPanel } from "@/components/event/gerenciar-evento-sheet";
 import { carregarEventoParaModal, type EventoModalData } from "@/lib/actions";
 import { fmtEventWhen } from "@/lib/format";
+import type { RundownItem } from "@/lib/data";
+import { cn } from "@/lib/utils";
+
+type Tab = "equipes" | "roteiro" | "ajustes";
 
 /**
- * Modal ÚNICO da escala de um evento (não há mais página). Carrega tudo por id.
- * Mostra todas as equipes da visão do usuário; quem está escalado responde ali.
- * Admin gerencia o culto (editar/responsável/arquivar/excluir) num sheet por
- * cima — sem sair do modal. Recarrega quando `revalidateKey` muda ou após uma
- * edição interna.
+ * Modal ÚNICO da escala de um evento (não há mais página, e não há mais
+ * sheet-sobre-sheet: "Gerenciar culto" é uma aba deste mesmo sheet, não um
+ * segundo Modal por cima). Carrega tudo por id. Recarrega quando
+ * `revalidateKey` muda ou após uma edição interna.
  */
 export function EventEscalaModal({
   eventId,
@@ -28,14 +32,14 @@ export function EventEscalaModal({
   // espelho do detail pra decidir "é primeira carga?" sem virar dependência do efeito
   const detailRef = useRef<EventoModalData | null>(null);
   const [loading, setLoading] = useState(false);
-  const [manage, setManage] = useState(false);
+  const [tab, setTab] = useState<Tab>("equipes");
   const [reload, setReload] = useState(0);
 
   useEffect(() => {
     if (!eventId) {
       setDetail(null);
       detailRef.current = null;
-      setManage(false);
+      setTab("equipes");
       return;
     }
     let alive = true;
@@ -58,70 +62,117 @@ export function EventEscalaModal({
   }, [eventId, revalidateKey, reload]);
 
   const isAdmin = detail?.ok && detail.role === "admin";
+  const tabs: [Tab, string][] = isAdmin
+    ? [["equipes", "Equipes"], ["roteiro", "Roteiro"], ["ajustes", "Ajustes"]]
+    : [["equipes", "Equipes"], ["roteiro", "Roteiro"]];
 
   return (
     <Modal open={!!eventId} onClose={onClose} sheet title={detail?.title ?? "Escala"}>
       {eventId ? (
         <div className="pt-1">
-          <div className="mb-3 flex items-center justify-between gap-2">
-            <p className="text-sm capitalize text-muted-foreground">
-              {detail?.startsAt ? fmtEventWhen(detail.startsAt) : ""}
-              {detail?.archivedAt ? " · arquivado" : ""}
-            </p>
-            {isAdmin ? (
-              <button
-                onClick={() => setManage(true)}
-                aria-label="Gerenciar culto"
-                className="press-sm inline-flex shrink-0 items-center gap-1 rounded-full border border-border px-2.5 py-1 text-[13px] font-bold text-primary"
-              >
-                <Settings2 className="size-4" /> Gerenciar
-              </button>
-            ) : null}
-          </div>
+          <p className="mb-3 text-sm capitalize text-muted-foreground">
+            {detail?.startsAt ? fmtEventWhen(detail.startsAt) : ""}
+            {detail?.responsibleName ? ` · responsável: ${detail.responsibleName}` : ""}
+            {detail?.archivedAt ? " · arquivado" : ""}
+          </p>
 
           {loading || !detail ? (
             <p className="py-8 text-center text-sm text-muted-foreground">Carregando…</p>
           ) : !detail.ok || !detail.teams ? (
             <p className="py-8 text-center text-sm text-destructive-ink">{detail.error ?? "Não foi possível carregar."}</p>
-          ) : detail.teams.length === 0 ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">Nenhuma equipe da sua visão neste evento.</p>
           ) : (
-            <EventTeams
-              eventId={eventId}
-              startsAt={detail.startsAt!}
-              canCheckin={!!detail.canCheckin}
-              teams={detail.teams}
-              availableTeams={detail.availableTeams ?? []}
-            />
-          )}
+            <>
+              {tabs.length > 1 ? (
+                <div className="mb-3 flex rounded-full bg-muted/60 p-1 text-[13px] font-bold">
+                  {tabs.map(([key, label]) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setTab(key)}
+                      className={cn(
+                        "flex-1 rounded-full py-1.5 text-center transition-colors",
+                        tab === key ? "bg-card text-foreground shadow-sm" : "text-muted-foreground",
+                      )}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
 
-          {isAdmin && detail ? (
-            <GerenciarEventoSheet
-              open={manage}
-              onClose={() => setManage(false)}
-              onChanged={() => setReload((n) => n + 1)}
-              onDeleted={() => {
-                setManage(false);
-                onClose();
-              }}
-              eventId={eventId}
-              startsAt={detail.startsAt!}
-              endsAt={detail.endsAt ?? null}
-              callTimeIso={detail.callTime ?? null}
-              location={detail.location ?? null}
-              lat={detail.latitude ?? null}
-              lng={detail.longitude ?? null}
-              churchLat={detail.churchLat ?? null}
-              churchLng={detail.churchLng ?? null}
-              archived={!!detail.archivedAt}
-              isResponsible={!!detail.isResponsible}
-              responsibleName={detail.responsibleName ?? null}
-              confirmedAt={detail.confirmedAt ?? null}
-              profiles={detail.profiles ?? []}
-            />
-          ) : null}
+              {tab === "equipes" ? (
+                detail.teams.length === 0 ? (
+                  <p className="py-8 text-center text-sm text-muted-foreground">Nenhuma equipe da sua visão neste evento.</p>
+                ) : (
+                  <EventTeams
+                    eventId={eventId}
+                    startsAt={detail.startsAt!}
+                    canCheckin={!!detail.canCheckin}
+                    teams={detail.teams}
+                    availableTeams={detail.availableTeams ?? []}
+                  />
+                )
+              ) : null}
+
+              {tab === "roteiro" ? <RoteiroPreview eventId={eventId} items={detail.rundown ?? []} /> : null}
+
+              {tab === "ajustes" && isAdmin ? (
+                <AjustesPanel
+                  onChanged={() => setReload((n) => n + 1)}
+                  onDeleted={() => {
+                    onClose();
+                  }}
+                  eventId={eventId}
+                  startsAt={detail.startsAt!}
+                  endsAt={detail.endsAt ?? null}
+                  callTimeIso={detail.callTime ?? null}
+                  location={detail.location ?? null}
+                  lat={detail.latitude ?? null}
+                  lng={detail.longitude ?? null}
+                  churchLat={detail.churchLat ?? null}
+                  churchLng={detail.churchLng ?? null}
+                  archived={!!detail.archivedAt}
+                  isResponsible={!!detail.isResponsible}
+                  responsibleName={detail.responsibleName ?? null}
+                  confirmedAt={detail.confirmedAt ?? null}
+                  profiles={detail.profiles ?? []}
+                />
+              ) : null}
+            </>
+          )}
         </div>
       ) : null}
     </Modal>
+  );
+}
+
+/** Prévia só-leitura do roteiro deste evento — o roteiro de verdade (rodando,
+ * editável, ao vivo) continua em /cronograma; aqui é atalho de contexto. */
+function RoteiroPreview({ eventId, items }: { eventId: string; items: RundownItem[] }) {
+  return (
+    <div className="space-y-3">
+      {items.length === 0 ? (
+        <p className="py-8 text-center text-sm text-muted-foreground">Nenhum bloco no roteiro ainda.</p>
+      ) : (
+        <ol className="space-y-2.5">
+          {items.map((it, i) => (
+            <li key={it.id} className="flex items-baseline gap-3">
+              <span className="w-5 shrink-0 text-right font-display text-[15px] font-bold text-muted-foreground">{i + 1}</span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-foreground">{it.title}</p>
+                {it.responsible ? <p className="truncate text-[12.5px] text-muted-foreground">{it.responsible}</p> : null}
+              </div>
+              {it.durationMin ? <span className="shrink-0 text-[12.5px] text-muted-foreground">{it.durationMin} min</span> : null}
+            </li>
+          ))}
+        </ol>
+      )}
+      <Link
+        href={`/cronograma?ev=${eventId}`}
+        className="press-sm flex items-center justify-center gap-1.5 rounded-full border border-border py-2.5 text-sm font-bold text-primary"
+      >
+        Abrir roteiro completo <ChevronRight className="size-4" />
+      </Link>
+    </div>
   );
 }
