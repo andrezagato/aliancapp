@@ -239,7 +239,9 @@ export function TeamManager({
           </div>
 
           {viewMode === "equipe" ? (
-            <div className="grid gap-4 lg:grid-cols-2">
+            // Líder tem 2-3 equipes só — grade de 2 colunas no desktop não ajuda,
+            // é lista mesmo. Admin, com muitas equipes, ganha com a grade.
+            <div className={cn("grid gap-4", isAdmin && "lg:grid-cols-2")}>
               {teams.map((team) => (
                 <TeamCard
                   key={team.id}

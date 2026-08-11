@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { UserPlus, Check, X } from "lucide-react";
+import { UserPlus, Check, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Avatar } from "@/components/ui/avatar";
 import { TeamDot } from "@/components/coverage-badge";
 import { Modal } from "@/components/modal";
 import { cn } from "@/lib/utils";
@@ -136,23 +136,13 @@ export function ConvidarForm({ teams }: { teams: TeamOpt[] }) {
     });
   }
 
-  if (!open) {
-    return (
-      <Button className="w-full" onClick={() => setOpen(true)}>
-        <UserPlus className="size-4" /> Convidar pessoa
-      </Button>
-    );
-  }
-
   return (
-    <Card>
-      <CardContent className="space-y-4 p-5">
-        <div className="flex items-center justify-between">
-          <h3 className="text-base font-semibold">Convidar pessoa</h3>
-          <button onClick={() => setOpen(false)} aria-label="Fechar" className="text-muted-foreground hover:text-foreground">
-            <X className="size-5" />
-          </button>
-        </div>
+    <>
+      <Button size="sm" onClick={() => setOpen(true)}>
+        <UserPlus className="size-4" /> Convidar
+      </Button>
+      <Modal open={open} onClose={() => setOpen(false)} sheet title="Convidar pessoa">
+        <div className="space-y-4">
         <label className="block space-y-1.5">
           <span className="text-sm font-medium">Nome completo</span>
           <input className={inputClass} value={fullName} onChange={(e) => setFullName(e.target.value)} />
@@ -189,8 +179,9 @@ export function ConvidarForm({ teams }: { teams: TeamOpt[] }) {
         <p className="text-xs text-muted-foreground">
           A pessoa entra direto ao logar com o Google usando este email.
         </p>
-      </CardContent>
-    </Card>
+        </div>
+      </Modal>
+    </>
   );
 }
 
@@ -396,5 +387,73 @@ export function CancelInviteButton({ inviteId }: { inviteId: string }) {
     >
       Cancelar
     </Button>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// Linha unificada de "Entrando na igreja" (pedido de entrada, perfil pendente
+// ou convite) — mesma origem visual, email/telefone/recado atrás do toque.
+// -----------------------------------------------------------------------------
+export function EntradaRow({
+  fullName,
+  avatarUrl,
+  email,
+  phone,
+  message,
+  teamDot,
+  line2,
+  actions,
+}: {
+  fullName: string;
+  avatarUrl?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  message?: string | null;
+  teamDot?: string | null;
+  line2: string;
+  actions: ReactNode;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const hasDetail = !!(email || phone || message);
+
+  return (
+    <div className="p-3.5">
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => hasDetail && setExpanded((v) => !v)}
+          className={cn("flex min-w-0 flex-1 items-center gap-3 text-left", !hasDetail && "cursor-default")}
+        >
+          <Avatar name={fullName} src={avatarUrl} className="size-9" />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-bold text-foreground">{fullName}</span>
+            <span className="mt-0.5 flex items-center gap-1.5 truncate text-[12px] text-muted-foreground">
+              {teamDot ? <TeamDot color={teamDot} /> : null}
+              {line2}
+            </span>
+          </span>
+        </button>
+        <div className="flex shrink-0 items-center gap-1">
+          {actions}
+          {hasDetail ? (
+            <button
+              type="button"
+              onClick={() => setExpanded((v) => !v)}
+              aria-label={expanded ? "Recolher contato" : "Ver contato"}
+              className="press-sm grid size-7 shrink-0 place-items-center rounded-full text-muted-foreground"
+            >
+              <ChevronDown className={cn("size-4 transition-transform", expanded && "rotate-180")} />
+            </button>
+          ) : null}
+        </div>
+      </div>
+      {expanded ? (
+        <div className="mt-2 space-y-1 border-t border-border/60 pt-2 text-[13px] text-muted-foreground">
+          {email ? <p className="truncate">{email}</p> : null}
+          {phone ? <p>{phone}</p> : null}
+          {message ? <p className="italic">“{message}”</p> : null}
+        </div>
+      ) : null}
+    </div>
   );
 }
