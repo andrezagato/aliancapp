@@ -1,6 +1,6 @@
 import { TopBar } from "@/components/app-shell/top-bar";
 import {
-  ConvidarForm,
+  AdminAddSheet,
   JoinRequestActions,
   PendingProfileActions,
   CancelInviteButton,
@@ -124,7 +124,7 @@ export default async function EquipesPage() {
         title="Equipes"
         subtitle={isAdmin ? "Gente, equipes e convites" : "Sua equipe"}
         userName={session.profile.full_name || "?"}
-        action={isAdmin ? <ConvidarForm teams={teamOpts} /> : null}
+        action={isAdmin ? <AdminAddSheet teams={teamOpts} /> : null}
       />
       <div className="animate-fade-in space-y-6 py-3">
         {entradaRows.length > 0 ? (
