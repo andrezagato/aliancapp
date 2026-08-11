@@ -2241,6 +2241,13 @@ export async function aprovarJoinRequest(joinId: string, teams: InviteTeamInput[
 
   await supabase.from("join_requests").update({ status: "aprovado", resolved_by: session.userId }).eq("id", joinId);
 
+  // E-mail de convite (best-effort) — mesmo motivo do convite direto
+  // (criarConvite): a pessoa ainda não é usuária, o sino não alcança, só o
+  // e-mail chega sozinho. Faltava aqui — quem pedia entrada pelo formulário e
+  // era aprovado não recebia AVISO NENHUM de que podia entrar.
+  const convite = conviteEmail({ nome: jr.full_name, href: `${siteUrl()}/entrar` });
+  await sendEmail({ to: email, subject: convite.subject, html: convite.html });
+
   revalidatePath("/equipes");
   revalidatePath("/inicio");
   return ok;
