@@ -43,6 +43,30 @@ function relativeTime(iso: string): string {
   return `há ${Math.round(d / 7)}sem`;
 }
 
+const GROUP_ORDER = ["Hoje", "Ontem", "Esta semana", "Antes"] as const;
+
+function groupFor(iso: string): (typeof GROUP_ORDER)[number] {
+  const startOfDay = (t: number) => {
+    const x = new Date(t);
+    return new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  };
+  const diffDays = Math.round((startOfDay(Date.now()) - startOfDay(new Date(iso).getTime())) / 86_400_000);
+  if (diffDays <= 0) return "Hoje";
+  if (diffDays === 1) return "Ontem";
+  if (diffDays <= 7) return "Esta semana";
+  return "Antes";
+}
+
+type Notif = {
+  id: string;
+  kind: NotificationKind;
+  title: string;
+  body: string | null;
+  link: string | null;
+  read_at: string | null;
+  created_at: string;
+};
+
 export default async function NotificacoesPage() {
   const session = await getSession();
   if (!session) return null;
@@ -55,6 +79,13 @@ export default async function NotificacoesPage() {
     .limit(50);
   const notifs = data ?? [];
   const hasUnread = notifs.some((n) => !n.read_at);
+
+  const groups = new Map<string, Notif[]>();
+  for (const n of notifs) {
+    const key = groupFor(n.created_at);
+    (groups.get(key) ?? groups.set(key, []).get(key)!).push(n);
+  }
+  const visibleGroups = GROUP_ORDER.filter((g) => groups.has(g));
 
   return (
     <div className="pb-4">
@@ -70,8 +101,7 @@ export default async function NotificacoesPage() {
         </div>
       </header>
 
-      <div className="space-y-2.5 py-4">
-        {hasUnread ? <MarkAllRead /> : null}
+      <div className="space-y-4 py-4">
         {notifs.length === 0 ? (
           <EmptyState
             icon={<Bell className="size-7" />}
@@ -80,39 +110,49 @@ export default async function NotificacoesPage() {
           />
         ) : (
           <>
-            {notifs.map((n) => {
-              const { Icon, tone } = iconFor(n.kind);
-              const unread = !n.read_at;
-              const inner = (
-                <div className="flex items-start gap-3 p-3.5">
-                  <span className={cn("grid size-10 shrink-0 place-items-center rounded-[11px]", tone)}>
-                    <Icon className="size-5" />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className={cn("text-sm leading-snug", unread ? "font-semibold text-foreground" : "text-foreground/80")}>
-                      {n.title}
-                    </p>
-                    {n.body ? <p className="mt-0.5 text-sm text-muted-foreground">{n.body}</p> : null}
-                    <p className="mt-1 text-xs text-muted-foreground/80">{relativeTime(n.created_at)}</p>
-                  </div>
-                  {unread ? <span className="mt-1.5 size-2.5 shrink-0 rounded-full bg-accent" aria-label="Não lida" /> : null}
+            {visibleGroups.map((group, idx) => (
+              <section key={group} className="space-y-1.5">
+                <div className="flex items-center justify-between px-1">
+                  <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-muted-foreground">{group}</p>
+                  {idx === 0 && hasUnread ? <MarkAllRead /> : null}
                 </div>
-              );
-              const shell = cn(
-                "block rounded-2xl border",
-                unread ? "border-accent/40 bg-card shadow-soft" : "border-border/70 bg-background/50",
-              );
-              return n.link ? (
-                <Link key={n.id} href={n.link} className={cn(shell, "press-sm")}>
-                  {inner}
-                </Link>
-              ) : (
-                <div key={n.id} className={shell}>
-                  {inner}
+                <div className="overflow-hidden rounded-2xl border border-border/70 bg-card shadow-soft">
+                  <ul className="divide-y divide-border/70">
+                    {groups.get(group)!.map((n) => {
+                      const { Icon, tone } = iconFor(n.kind);
+                      const unread = !n.read_at;
+                      const inner = (
+                        <div className="flex items-start gap-3 p-3.5">
+                          <span className={cn("grid size-10 shrink-0 place-items-center rounded-[11px]", tone)}>
+                            <Icon className="size-5" />
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <p className={cn("text-sm leading-snug", unread ? "font-semibold text-foreground" : "text-foreground/80")}>
+                              {n.title}
+                            </p>
+                            {n.body ? <p className="mt-0.5 text-sm text-muted-foreground">{n.body}</p> : null}
+                            <p className="mt-1 text-xs text-muted-foreground/80">{relativeTime(n.created_at)}</p>
+                          </div>
+                          {unread ? <span className="mt-1.5 size-2.5 shrink-0 rounded-full bg-accent" aria-label="Não lida" /> : null}
+                        </div>
+                      );
+                      return (
+                        <li key={n.id}>
+                          {n.link ? (
+                            <Link href={n.link} className="press-sm block">
+                              {inner}
+                            </Link>
+                          ) : (
+                            <div>{inner}</div>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
                 </div>
-              );
-            })}
-            <p className="flex items-center justify-center gap-2 pt-3 text-center text-xs text-muted-foreground">
+              </section>
+            ))}
+            <p className="flex items-center justify-center gap-2 pt-1 text-center text-xs text-muted-foreground">
               <Bell className="size-3.5" /> Avisos compartimentados por equipe
             </p>
           </>
