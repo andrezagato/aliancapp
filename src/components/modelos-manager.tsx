@@ -13,6 +13,7 @@ type TeamOpt = { id: string; name: string; color: string };
 
 const inputClass =
   "w-full rounded-2xl border border-input bg-card px-4 py-2.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring";
+const timeInputClass = cn(inputClass, "text-[15px] font-bold tabular-nums");
 
 const STEPS = ["Nome", "Horário", "Equipes"] as const;
 
@@ -199,16 +200,14 @@ function TemplateWizard({
 
       {step === 1 ? (
         <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <label className="block space-y-1.5">
-              <span className="text-sm font-medium">Horário padrão</span>
-              <input type="time" className={inputClass} value={time} onChange={(e) => setTime(e.target.value)} />
-            </label>
-            <label className="block space-y-1.5">
-              <span className="text-sm font-medium">Chegada da equipe</span>
-              <input type="time" className={inputClass} value={callTime} onChange={(e) => setCallTime(e.target.value)} />
-            </label>
-          </div>
+          <label className="block space-y-1.5">
+            <span className="text-sm font-medium">Horário padrão</span>
+            <input type="time" className={timeInputClass} value={time} onChange={(e) => setTime(e.target.value)} />
+          </label>
+          <label className="block space-y-1.5">
+            <span className="text-sm font-medium">Chegada da equipe</span>
+            <input type="time" className={timeInputClass} value={callTime} onChange={(e) => setCallTime(e.target.value)} />
+          </label>
           <label className="block space-y-1.5">
             <span className="text-sm font-medium">Local padrão</span>
             <input className={inputClass} value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Ex.: Templo" />
