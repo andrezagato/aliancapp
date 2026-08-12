@@ -51,14 +51,15 @@ export async function listarCanais(session: Session): Promise<CanalChat[]> {
     bases.push({ type: "equipe", ref: t.id, label: t.name, color: t.color });
   }
 
-  // Eventos onde estou ESCALADO ou LIDERO uma equipe do evento; janela = futuros
-  // + últimos 7 dias (a RLS do canal 'evento', migration 0037, usa a mesma regra).
-  const leadIds = session.profile.teams.filter((t) => t.role === "leader").map((t) => t.id);
+  // Eventos onde estou ESCALADO; ou, se sou líder (de qualquer equipe) ou
+  // admin, TODOS os eventos — líder é quase admin pra evento (migration 0053).
+  // Janela = futuros + últimos 7 dias (a RLS do canal 'evento' usa a mesma regra).
+  const isLeaderOrAdmin = session.role === "admin" || session.profile.teams.some((t) => t.role === "leader");
   const windowStart = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
   const nowMinus12h = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString();
   type Ev = { id: string; title: string; starts_at: string; archived_at: string | null };
 
-  const [assignsRes, ledRes] = await Promise.all([
+  const [assignsRes, allRes] = await Promise.all([
     supabase
       .from("assignments")
       .select("events!inner ( id, title, starts_at, archived_at )")
@@ -66,23 +67,22 @@ export async function listarCanais(session: Session): Promise<CanalChat[]> {
       .neq("status", "recusado")
       .gte("events.starts_at", windowStart)
       .limit(200),
-    leadIds.length
+    isLeaderOrAdmin
       ? supabase
-          .from("event_requirements")
-          .select("events!inner ( id, title, starts_at, archived_at )")
-          .in("team_id", leadIds)
-          .gte("events.starts_at", windowStart)
+          .from("events")
+          .select("id, title, starts_at, archived_at")
+          .gte("starts_at", windowStart)
           .limit(200)
-      : Promise.resolve({ data: [] as { events: Ev | null }[] }),
+      : Promise.resolve({ data: [] as Ev[] }),
   ]);
 
   const evMap = new Map<string, Ev>();
-  for (const r of [
-    ...((assignsRes.data ?? []) as { events: Ev | null }[]),
-    ...((ledRes.data ?? []) as { events: Ev | null }[]),
-  ]) {
+  for (const r of (assignsRes.data ?? []) as { events: Ev | null }[]) {
     const e = r.events;
     if (e && !e.archived_at && !evMap.has(e.id)) evMap.set(e.id, e);
+  }
+  for (const e of (allRes.data ?? []) as Ev[]) {
+    if (!e.archived_at && !evMap.has(e.id)) evMap.set(e.id, e);
   }
 
   const eventos = [...evMap.values()].sort((a, b) => {

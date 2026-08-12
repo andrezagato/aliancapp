@@ -101,9 +101,11 @@ export function EventEscalaModal({
               ) : null}
 
               {tab === "equipes" ? (
-                detail.teams.length === 0 ? (
+                detail.teams.length === 0 && (detail.availableTeams?.length ?? 0) === 0 ? (
                   <p className="py-8 text-center text-sm text-muted-foreground">Nenhuma equipe da sua visão neste evento.</p>
                 ) : (
+                  // Mesmo sem equipe própria aqui ainda, líder/admin pode ter uma equipe
+                  // pra ADICIONAR (availableTeams) — EventTeams já mostra isso sozinho.
                   <EventTeams
                     eventId={eventId}
                     startsAt={detail.startsAt!}
