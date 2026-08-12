@@ -690,22 +690,14 @@ const QUICK_TILES = [
   { href: "/notificacoes", emoji: "🔔", label: "Avisos", sub: "Suas notificações" },
 ];
 
-/** Grid 2×2 de atalhos da home (Home Densa) — agrupa o que eram faixas soltas. */
+/** Atalhos da home como link de texto, não caixa (Fase 6 do pós-audit) — o
+ * conteúdo já existe em telas próprias, isso aqui é só a porta. */
 function QuickTiles() {
   return (
-    <div className="grid grid-cols-2 gap-2">
+    <div className="flex flex-wrap gap-x-4 gap-y-2 px-1">
       {QUICK_TILES.map((t) => (
-        <Link
-          key={t.href}
-          href={t.href}
-          className={cn(
-            "press rounded-2xl border p-3",
-            t.accent ? "border-accent/40 bg-gradient-to-br from-accent/10 to-accent/20" : "border-border bg-card",
-          )}
-        >
-          <div className="text-xl">{t.emoji}</div>
-          <p className="mt-1 text-[13.5px] font-bold leading-tight">{t.label}</p>
-          <p className="text-[11.5px] text-muted-foreground">{t.sub}</p>
+        <Link key={t.href} href={t.href} className="press-sm text-sm font-bold text-primary">
+          {t.emoji} {t.label}
         </Link>
       ))}
     </div>
