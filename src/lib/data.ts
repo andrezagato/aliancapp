@@ -1802,6 +1802,62 @@ export async function getSwapsAwaitingMe(session: Session): Promise<SwapInboxIte
 }
 
 // =============================================================================
+// "FALTA CONFIRMAR" — home de líder/admin (Fase 5 do pós-audit)
+// =============================================================================
+export type UnconfirmedPerson = {
+  assignmentId: string;
+  profileId: string;
+  name: string;
+  avatarUrl: string | null;
+  phone: string | null;
+  teamName: string;
+  positionName: string;
+  invitedAt: string;
+};
+
+/** Quem está `convidado` (ainda não confirmou) num evento — pro card "Falta
+ * confirmar" da home. Líder só vê as equipes que LIDERA (mesmo escopo do
+ * `awaitingConfirmation` de `getLeaderHome`, não o de membro comum); admin vê
+ * todas. */
+export async function listUnconfirmedForEvent(session: Session, eventId: string): Promise<UnconfirmedPerson[]> {
+  const isAdmin = session.role === "admin";
+  const leadIds = leadTeamIds(session.profile);
+  if (!isAdmin && leadIds.length === 0) return [];
+
+  const supabase = await createClient();
+  let query = supabase
+    .from("assignments")
+    .select(
+      "id, profile_id, created_at, team:teams ( name ), position:positions ( name ), profile:profiles!assignments_profile_id_fkey ( full_name, avatar_url, phone )",
+    )
+    .eq("event_id", eventId)
+    .eq("status", "convidado")
+    .not("profile_id", "is", null);
+  if (!isAdmin) query = query.in("team_id", leadIds);
+
+  const { data } = await query;
+  return ((data ?? []) as {
+    id: string;
+    profile_id: string | null;
+    created_at: string;
+    team: { name: string } | null;
+    position: { name: string } | null;
+    profile: { full_name: string; avatar_url: string | null; phone: string | null } | null;
+  }[])
+    .map((r) => ({
+      assignmentId: r.id,
+      profileId: r.profile_id!,
+      name: r.profile?.full_name || "Alguém",
+      avatarUrl: r.profile?.avatar_url ?? null,
+      phone: r.profile?.phone ?? null,
+      teamName: r.team?.name || "Equipe",
+      positionName: r.position?.name || "Posição",
+      invitedAt: r.created_at,
+    }))
+    .sort((a, b) => a.invitedAt.localeCompare(b.invitedAt));
+}
+
+// =============================================================================
 // HOME — LÍDER
 // =============================================================================
 export type LeaderHome = {
