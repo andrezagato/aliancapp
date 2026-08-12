@@ -13,10 +13,12 @@ import {
   syncAchievements,
   getEventReviewData,
   getPersonObservations,
+  getEventRundown,
   type EligibleMember,
   type DetailTeam,
   type EventReviewData,
   type PersonObservation,
+  type RundownItem,
 } from "@/lib/data";
 import { BADGE_BY_CODE, type UnlockedBadge } from "@/lib/achievements";
 import { nextCategoryColor } from "@/lib/palette";
@@ -2239,6 +2241,13 @@ export async function aprovarJoinRequest(joinId: string, teams: InviteTeamInput[
 
   await supabase.from("join_requests").update({ status: "aprovado", resolved_by: session.userId }).eq("id", joinId);
 
+  // E-mail de convite (best-effort) — mesmo motivo do convite direto
+  // (criarConvite): a pessoa ainda não é usuária, o sino não alcança, só o
+  // e-mail chega sozinho. Faltava aqui — quem pedia entrada pelo formulário e
+  // era aprovado não recebia AVISO NENHUM de que podia entrar.
+  const convite = conviteEmail({ nome: jr.full_name, href: `${siteUrl()}/entrar` });
+  await sendEmail({ to: email, subject: convite.subject, html: convite.html });
+
   revalidatePath("/equipes");
   revalidatePath("/inicio");
   return ok;
@@ -2589,6 +2598,7 @@ export type EventoModalData = {
   profiles?: { id: string; name: string; avatarUrl: string | null }[];
   teams?: DetailTeam[];
   availableTeams?: { id: string; name: string; color: string }[];
+  rundown?: RundownItem[];
 };
 
 export async function carregarEventoParaModal(eventId: string): Promise<EventoModalData> {
@@ -2599,10 +2609,11 @@ export async function carregarEventoParaModal(eventId: string): Promise<EventoMo
   const canCheckin = churchDateISO(ev.starts_at) <= churchDateISO(new Date().toISOString());
   const isAdmin = session.role === "admin";
   const isLeader = session.role === "leader";
-  const [churchLoc, profiles, allTeams] = await Promise.all([
+  const [churchLoc, profiles, allTeams, rundown] = await Promise.all([
     isAdmin ? getChurchLocation(session) : Promise.resolve(null),
     isAdmin ? listChurchProfiles() : Promise.resolve([]),
     isAdmin || isLeader ? listTeams() : Promise.resolve([]),
+    getEventRundown(eventId),
   ]);
   const inEvent = new Set((ev.teams ?? []).map((t) => t.teamId));
   const leadIds = new Set(leadTeamIds(session.profile));
@@ -2632,6 +2643,7 @@ export async function carregarEventoParaModal(eventId: string): Promise<EventoMo
     // Visão única: todas as equipes que o usuário enxerga (gerencia OU está escalado).
     teams: ev.teams,
     availableTeams,
+    rundown,
   };
 }
 

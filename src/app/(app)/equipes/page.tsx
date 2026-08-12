@@ -1,14 +1,10 @@
-import { Clock, Mail } from "lucide-react";
 import { TopBar } from "@/components/app-shell/top-bar";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Avatar } from "@/components/ui/avatar";
-import { TeamDot } from "@/components/coverage-badge";
 import {
-  ConvidarForm,
+  AdminAddSheet,
   JoinRequestActions,
   PendingProfileActions,
   CancelInviteButton,
+  EntradaRow,
   type TeamOpt,
 } from "@/components/people-controls";
 import { TeamManager } from "@/components/team-manager";
@@ -70,114 +66,75 @@ export default async function EquipesPage() {
   const teamById = new Map(approvalTeamOpts.map((t) => [t.id, t]));
   const pendingInvites = invites.filter((i) => i.status === "pendente");
 
+  // "Entrando na igreja" — pedido de entrada, perfil pendente e convite são a
+  // mesma coisa vista de fora (gente chegando); a origem vira texto na 2ª
+  // linha, não uma seção própria.
+  const entradaRows = [
+    ...joins.map((j) => {
+      const team = j.desiredTeamId ? teamById.get(j.desiredTeamId) : null;
+      return {
+        id: `j-${j.id}`,
+        fullName: j.fullName,
+        email: j.email,
+        phone: j.phone,
+        message: j.message,
+        teamDot: team?.color ?? null,
+        line2: [team ? `Quer ${team.name}` : null, "pelo formulário"].filter(Boolean).join(" · "),
+        actions: <JoinRequestActions joinId={j.id} teams={approvalTeamOpts} desiredTeamId={j.desiredTeamId} />,
+      };
+    }),
+    ...pendingProfiles.map((m) => {
+      const team = m.desiredTeamId ? teamById.get(m.desiredTeamId) : null;
+      return {
+        id: `p-${m.id}`,
+        fullName: m.fullName,
+        avatarUrl: m.avatarUrl,
+        email: m.email,
+        phone: null as string | null,
+        message: null as string | null,
+        teamDot: team?.color ?? null,
+        line2: [team ? `Quer ${team.name}` : null, "já logou · aguardando"].filter(Boolean).join(" · "),
+        actions: (
+          <PendingProfileActions profileId={m.id} teams={approvalTeamOpts} allowReject={isAdmin} desiredTeamId={m.desiredTeamId} />
+        ),
+      };
+    }),
+    ...(isAdmin
+      ? pendingInvites.map((i) => {
+          const teamsText = i.teams.length > 0 ? i.teams.map((t) => t.name).join(", ") : null;
+          const origem =
+            i.diasEsperando === 0 ? "convidado hoje" : `convidado há ${i.diasEsperando} ${i.diasEsperando === 1 ? "dia" : "dias"}`;
+          return {
+            id: `i-${i.id}`,
+            fullName: i.fullName || i.email,
+            email: i.email,
+            phone: null as string | null,
+            message: null as string | null,
+            teamDot: i.teams[0]?.color ?? null,
+            line2: [teamsText, i.systemRole === "admin" ? "admin" : null, origem].filter(Boolean).join(" · "),
+            actions: <CancelInviteButton inviteId={i.id} />,
+          };
+        })
+      : []),
+  ];
+
   return (
     <>
       <TopBar
         title="Equipes"
         subtitle={isAdmin ? "Gente, equipes e convites" : "Sua equipe"}
         userName={session.profile.full_name || "?"}
+        action={isAdmin ? <AdminAddSheet teams={teamOpts} /> : null}
       />
       <div className="animate-fade-in space-y-6 py-3">
-        {isAdmin ? <ConvidarForm teams={teamOpts} /> : null}
-
-        {canApprove && joins.length + pendingProfiles.length > 0 ? (
+        {entradaRows.length > 0 ? (
           <section>
-            <h3 className="mb-2 px-1 text-base font-semibold">
-              Querem entrar · {joins.length + pendingProfiles.length}
-            </h3>
-            <div className="grid gap-3 lg:grid-cols-2">
-              {joins.map((j) => (
-                <Card key={`j-${j.id}`}>
-                  <CardContent className="p-4">
-                    <div className="flex items-start gap-3">
-                      <Avatar name={j.fullName} />
-                      <div className="min-w-0 flex-1">
-                        <p className="font-medium">{j.fullName}</p>
-                        <Badge variant="neutral" className="mt-0.5">Pediu pelo formulário</Badge>
-                        {j.desiredTeamId && teamById.get(j.desiredTeamId) ? (
-                          <p className="mt-1 inline-flex items-center gap-1.5 text-sm font-medium text-primary">
-                            <TeamDot color={teamById.get(j.desiredTeamId)!.color} />
-                            Quer servir em {teamById.get(j.desiredTeamId)!.name}
-                          </p>
-                        ) : null}
-                        {j.email ? <p className="mt-1 truncate text-sm text-muted-foreground">{j.email}</p> : null}
-                        {j.phone ? <p className="text-sm text-muted-foreground">{j.phone}</p> : null}
-                        {j.message ? <p className="mt-1 text-sm text-muted-foreground">“{j.message}”</p> : null}
-                      </div>
-                    </div>
-                    <div className="mt-3 flex justify-end border-t border-border/70 pt-3">
-                      <JoinRequestActions joinId={j.id} teams={approvalTeamOpts} desiredTeamId={j.desiredTeamId} />
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-              {pendingProfiles.map((m) => (
-                <Card key={`p-${m.id}`}>
-                  <CardContent className="p-4">
-                    <div className="flex items-center gap-3">
-                      <Avatar name={m.fullName} src={m.avatarUrl} />
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate font-medium">{m.fullName}</p>
-                        <Badge variant="neutral" className="mt-0.5">Já logou · aguardando</Badge>
-                        {m.desiredTeamId && teamById.get(m.desiredTeamId) ? (
-                          <p className="mt-1 inline-flex items-center gap-1.5 text-sm font-medium text-primary">
-                            <TeamDot color={teamById.get(m.desiredTeamId)!.color} />
-                            Quer servir em {teamById.get(m.desiredTeamId)!.name}
-                          </p>
-                        ) : null}
-                        {m.email ? <p className="mt-1 truncate text-sm text-muted-foreground">{m.email}</p> : null}
-                      </div>
-                    </div>
-                    <div className="mt-3 flex justify-end border-t border-border/70 pt-3">
-                      <PendingProfileActions
-                        profileId={m.id}
-                        teams={approvalTeamOpts}
-                        allowReject={isAdmin}
-                        desiredTeamId={m.desiredTeamId}
-                      />
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+            <h3 className="mb-2 px-1 text-base font-semibold">Entrando na igreja · {entradaRows.length}</h3>
+            <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-soft">
+              <div className="divide-y divide-border/70">
+                {entradaRows.map((row) => <EntradaRow key={row.id} {...row} />)}
+              </div>
             </div>
-          </section>
-        ) : null}
-
-        {isAdmin && pendingInvites.length > 0 ? (
-          <section>
-            <h3 className="mb-2 px-1 text-base font-semibold">Convites pendentes</h3>
-            <Card>
-              <ul className="divide-y divide-border">
-                {pendingInvites.map((i) => (
-                  <li key={i.id} className="flex items-center gap-3 p-4">
-                    <span className="inline-flex size-10 items-center justify-center rounded-full bg-warning/12 text-warning-ink">
-                      <Clock className="size-5" />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate font-medium">{i.fullName || i.email}</p>
-                      <p className="inline-flex items-center gap-1 truncate text-sm text-muted-foreground">
-                        <Mail className="size-3" /> {i.email}
-                      </p>
-                      <p className="text-[12.5px] text-muted-foreground">
-                        {i.diasEsperando === 0
-                          ? "convidado hoje · ainda não entrou"
-                          : `convidado há ${i.diasEsperando} ${i.diasEsperando === 1 ? "dia" : "dias"} · ainda não entrou`}
-                      </p>
-                      <div className="mt-1 flex flex-wrap gap-1.5">
-                        {i.systemRole === "admin" ? <Badge variant="primary">Admin</Badge> : null}
-                        {i.teams.map((t, idx) => (
-                          <span key={idx} className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                            <TeamDot color={t.color} /> {t.name}
-                            {t.role === "leader" ? " (líder)" : ""}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                    <CancelInviteButton inviteId={i.id} />
-                  </li>
-                ))}
-              </ul>
-            </Card>
           </section>
         ) : null}
 

@@ -41,6 +41,7 @@ import {
   listTeamsWithPositions,
   listEventsInRange,
   listUpcomingEvents,
+  listUnconfirmedForEvent,
   type MyAssignment,
   type EventListItem,
   type MyResponsibleEvent,
@@ -62,6 +63,8 @@ import { TeamReviewPrompt } from "@/components/team-review";
 import { NextEventHero } from "@/components/home/next-event-hero";
 import { AdminMonthOverview } from "@/components/home/admin-month-overview";
 import { TeamCalendar } from "@/components/home/team-calendar";
+import { FaltaConfirmarCard } from "@/components/home/falta-confirmar";
+import { EscalaHojeCard } from "@/components/home/escala-hoje";
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
@@ -311,10 +314,17 @@ async function LeaderSection({
 
   const rawNext = home.events[0] ?? null;
   const nextTeamEvent = rawNext && rawNext.id !== hideHeroForEventId ? rawNext : null;
+  // "Falta confirmar" e "Escala de hoje" (Fase 5 do pós-audit) — acima da
+  // dobra, sempre sobre o PRÓXIMO culto da equipe, mesmo quando o herói acima
+  // está escondido por já aparecer como "Confirme como responsável".
+  const unconfirmed = rawNext ? await listUnconfirmedForEvent(session, rawNext.id) : [];
 
   return (
     <>
       {nextTeamEvent ? <NextEventHero ev={nextTeamEvent} kicker="Próximo da sua equipe" caption="confirmados" /> : null}
+
+      <FaltaConfirmarCard people={unconfirmed} />
+      {rawNext ? <EscalaHojeCard event={rawNext} isToday={churchDateISO(rawNext.starts_at) === todayISO} /> : null}
 
       <section>
         <div className="mb-2 flex items-center gap-1">
@@ -525,9 +535,17 @@ async function AdminSection({
   const eventDayISO: Record<string, string> = Object.fromEntries(
     monthEvents.map((e) => [e.id, churchDateISO(e.starts_at)]),
   );
+  // "Falta confirmar" e "Escala de hoje" (Fase 5 do pós-audit) — acima da
+  // dobra, sobre o próximo culto da igreja (admin não tem equipe própria).
+  const unconfirmed = home.nextEvent ? await listUnconfirmedForEvent(session, home.nextEvent.id) : [];
 
   return (
     <>
+      <FaltaConfirmarCard people={unconfirmed} />
+      {home.nextEvent ? (
+        <EscalaHojeCard event={home.nextEvent} isToday={churchDateISO(home.nextEvent.starts_at) === todayISO} />
+      ) : null}
+
       {/* Calendário do mês — navegável, com "+" pra novo evento */}
       <section>
         <AdminMonthOverview
@@ -672,22 +690,14 @@ const QUICK_TILES = [
   { href: "/notificacoes", emoji: "🔔", label: "Avisos", sub: "Suas notificações" },
 ];
 
-/** Grid 2×2 de atalhos da home (Home Densa) — agrupa o que eram faixas soltas. */
+/** Atalhos da home como link de texto, não caixa (Fase 6 do pós-audit) — o
+ * conteúdo já existe em telas próprias, isso aqui é só a porta. */
 function QuickTiles() {
   return (
-    <div className="grid grid-cols-2 gap-2">
+    <div className="flex flex-wrap gap-x-4 gap-y-2 px-1">
       {QUICK_TILES.map((t) => (
-        <Link
-          key={t.href}
-          href={t.href}
-          className={cn(
-            "press rounded-2xl border p-3",
-            t.accent ? "border-accent/40 bg-gradient-to-br from-accent/10 to-accent/20" : "border-border bg-card",
-          )}
-        >
-          <div className="text-xl">{t.emoji}</div>
-          <p className="mt-1 text-[13.5px] font-bold leading-tight">{t.label}</p>
-          <p className="text-[11.5px] text-muted-foreground">{t.sub}</p>
+        <Link key={t.href} href={t.href} className="press-sm text-sm font-bold text-primary">
+          {t.emoji} {t.label}
         </Link>
       ))}
     </div>

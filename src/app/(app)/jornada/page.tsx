@@ -1,9 +1,15 @@
+import { ChevronDown } from "lucide-react";
 import { getSession } from "@/lib/auth";
 import { getMyJourney, type JourneyBadge } from "@/lib/data";
 import { BADGES, BADGE_BY_CODE } from "@/lib/achievements";
-import { cn } from "@/lib/utils";
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+
+function monthLabel(iso: string): string {
+  const d = new Date(iso);
+  return `${MESES[d.getMonth()]}/${String(d.getFullYear()).slice(2)}`;
+}
 
 export default async function JornadaPage() {
   const session = await getSession();
@@ -11,8 +17,13 @@ export default async function JornadaPage() {
   const journey = await getMyJourney(session);
   const first = session.profile.full_name?.split(/\s+/)[0] || "Você";
   const m = journey.metrics;
-  const passos = journey.badges.filter((b) => BADGE_BY_CODE[b.code]?.group === "passos");
-  const jornada = journey.badges.filter((b) => BADGE_BY_CODE[b.code]?.group !== "passos");
+
+  // journey.badges já vem ordenado: desbloqueadas (mais recente primeiro), depois bloqueadas (mais perto de bater primeiro).
+  const unlocked = journey.badges.filter((b) => b.unlocked);
+  const featured = unlocked.slice(0, 2);
+  const featuredCodes = new Set(featured.map((b) => b.code));
+  const passos = journey.badges.filter((b) => BADGE_BY_CODE[b.code]?.group === "passos" && !featuredCodes.has(b.code));
+  const jornada = journey.badges.filter((b) => BADGE_BY_CODE[b.code]?.group !== "passos" && !featuredCodes.has(b.code));
 
   return (
     <div className="space-y-3 pb-6 pt-safe">
@@ -34,36 +45,28 @@ export default async function JornadaPage() {
         </div>
       </div>
 
-      {/* Números */}
-      <div className="grid grid-cols-2 gap-3">
-        <Stat emoji="🙌" value={m.servido} label={m.servido === 1 ? "culto servido" : "cultos servidos"} />
-        <Stat emoji="🌍" value={m.ministerios} label={m.ministerios === 1 ? "ministério" : "ministérios"} />
-        <Stat emoji="📅" value={m.meses} label={m.meses === 1 ? "mês servindo" : "meses servindo"} />
-        <Stat emoji="🔥" value={m.streak} label="na sequência" />
+      {/* Números — um papel só, quatro colunas */}
+      <div className="grid grid-cols-4 divide-x divide-border rounded-[18px] border border-border bg-card shadow-soft">
+        <StatCell emoji="🙌" value={m.servido} label={m.servido === 1 ? "culto" : "cultos"} />
+        <StatCell emoji="🌍" value={m.ministerios} label={m.ministerios === 1 ? "equipe" : "equipes"} />
+        <StatCell emoji="📅" value={m.meses} label={m.meses === 1 ? "mês" : "meses"} />
+        <StatCell emoji="🔥" value={m.streak} label="sequência" />
       </div>
 
-      {/* Primeiros passos — conquistas de onboarding, separadas de propósito:
-          medalha de 30 segundos não disputa espaço com "100 cultos servidos". */}
-      {passos.length > 0 ? (
-        <section>
-          <h3 className="mb-2 px-1 font-display text-lg font-bold">Primeiros passos</h3>
-          <div className="grid grid-cols-2 gap-3">
-            {passos.map((b) => (
-              <BadgeCard key={b.code} b={b} />
-            ))}
-          </div>
-        </section>
-      ) : null}
-
-      {/* Conquistas */}
-      <section>
-        <h3 className="mb-2 px-1 font-display text-lg font-bold">Minha jornada</h3>
+      {/* As duas conquistas mais recentes, de qualquer grupo — em destaque */}
+      {featured.length > 0 ? (
         <div className="grid grid-cols-2 gap-3">
-          {jornada.map((b) => (
+          {featured.map((b) => (
             <BadgeCard key={b.code} b={b} />
           ))}
         </div>
-      </section>
+      ) : null}
+
+      {/* Primeiros passos — conquistas de onboarding, separadas de propósito:
+          medalha de 30 segundos não disputa espaço com "100 cultos servidos". */}
+      {passos.length > 0 ? <BadgeGroupSection title="Primeiros passos" badges={passos} /> : null}
+
+      {jornada.length > 0 ? <BadgeGroupSection title="Minha jornada" badges={jornada} /> : null}
 
       <p className="text-center font-display text-xs italic text-muted-foreground/70">
         Servir é sobre gente e não sobre placar — mas comemorar a caminhada é gostoso. 💛
@@ -72,52 +75,108 @@ export default async function JornadaPage() {
   );
 }
 
-function Stat({ emoji, value, label }: { emoji: string; value: number; label: string }) {
+function StatCell({ emoji, value, label }: { emoji: string; value: number; label: string }) {
   return (
-    <div className="rounded-[18px] border border-border bg-card p-4 shadow-soft">
-      <div className="flex items-center gap-2">
-        <span className="text-2xl leading-none">{emoji}</span>
-        <span className="font-display text-3xl font-extrabold tabular-nums text-foreground">{value}</span>
-      </div>
-      <p className="mt-1 text-[13px] font-medium text-muted-foreground">{label}</p>
+    <div className="flex flex-col items-center gap-0.5 p-3 text-center">
+      <span className="text-lg leading-none">{emoji}</span>
+      <span className="font-display text-xl font-extrabold tabular-nums text-foreground">{value}</span>
+      <p className="text-[11px] font-medium leading-tight text-muted-foreground">{label}</p>
     </div>
   );
 }
 
 function BadgeCard({ b }: { b: JourneyBadge }) {
-  const isNew = b.unlocked && b.unlockedAt ? Date.now() - new Date(b.unlockedAt).getTime() < WEEK_MS : false;
-  const pct = Math.min(100, Math.round((b.current / b.target) * 100));
+  const isNew = b.unlockedAt ? Date.now() - new Date(b.unlockedAt).getTime() < WEEK_MS : false;
 
   return (
-    <div
-      className={cn(
-        "relative flex flex-col rounded-[18px] border p-4",
-        b.unlocked
-          ? "border-accent/50 bg-gradient-to-br from-accent/15 to-accent/25 shadow-soft"
-          : "border-border bg-muted/30",
-      )}
-    >
-      {isNew ? (
-        <span className="absolute right-2.5 top-2.5 rounded-full bg-primary px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-primary-foreground">
-          Novo!
-        </span>
-      ) : null}
-      <span className={cn("text-3xl leading-none", b.unlocked ? "" : "opacity-30 grayscale")}>{b.emoji}</span>
-      <p className={cn("mt-2 text-sm font-bold leading-tight", b.unlocked ? "text-foreground" : "text-muted-foreground")}>
-        {b.title}
-      </p>
+    <div className="relative flex flex-col rounded-[18px] border border-accent/50 bg-gradient-to-br from-accent/15 to-accent/25 p-4 shadow-soft">
+      <div className="flex items-center justify-between">
+        <span className="text-3xl leading-none">{b.emoji}</span>
+        {isNew ? (
+          <span className="rounded-full bg-primary px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-primary-foreground">
+            Novo!
+          </span>
+        ) : null}
+      </div>
+      <p className="mt-2 text-sm font-bold leading-tight text-foreground">{b.title}</p>
       <p className="mt-0.5 text-[12px] leading-snug text-muted-foreground">{b.desc}</p>
+    </div>
+  );
+}
 
-      {!b.unlocked && b.target > 1 ? (
-        <div className="mt-2.5">
-          <div className="h-1.5 overflow-hidden rounded-full bg-border">
-            <div className="h-full rounded-full bg-primary/60" style={{ width: `${pct}%` }} />
-          </div>
-          <p className="mt-1 text-[11px] font-medium text-muted-foreground tabular-nums">
-            {b.current}/{b.target}
-          </p>
+function BadgeGroupSection({ title, badges }: { title: string; badges: JourneyBadge[] }) {
+  const rowsUnlocked = badges.filter((b) => b.unlocked);
+  const rowsLocked = badges.filter((b) => !b.unlocked);
+  const visibleLocked = rowsLocked.slice(0, 3);
+  const restLocked = rowsLocked.slice(3);
+
+  return (
+    <section className="space-y-2">
+      <h3 className="px-1 font-display text-lg font-bold">{title}</h3>
+
+      {rowsUnlocked.length > 0 ? (
+        <div className="overflow-hidden rounded-[18px] border border-border bg-card shadow-soft">
+          <ul className="divide-y divide-border/70">
+            {rowsUnlocked.map((b) => (
+              <li key={b.code} className="flex items-center gap-3 p-3.5">
+                <span className="text-lg leading-none">{b.emoji}</span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-bold leading-tight text-foreground">{b.title}</p>
+                  <p className="truncate text-[12px] leading-snug text-muted-foreground">{b.desc}</p>
+                </div>
+                <span className="shrink-0 text-[11px] font-medium text-muted-foreground">
+                  {b.unlockedAt ? monthLabel(b.unlockedAt) : ""}
+                </span>
+              </li>
+            ))}
+          </ul>
         </div>
       ) : null}
-    </div>
+
+      {rowsLocked.length > 0 ? (
+        <div className="overflow-hidden rounded-[18px] border border-border bg-muted/30">
+          <ul className="divide-y divide-border/70">
+            {visibleLocked.map((b) => (
+              <LockedRow key={b.code} b={b} />
+            ))}
+          </ul>
+          {restLocked.length > 0 ? (
+            <details className="group border-t border-border/70">
+              <summary className="press-sm flex cursor-pointer list-none items-center justify-center gap-1 p-3 text-[13px] font-semibold text-primary">
+                Ver as outras {restLocked.length}
+                <ChevronDown className="size-4 transition-transform group-open:rotate-180" />
+              </summary>
+              <ul className="divide-y divide-border/70 border-t border-border/70">
+                {restLocked.map((b) => (
+                  <LockedRow key={b.code} b={b} />
+                ))}
+              </ul>
+            </details>
+          ) : null}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function LockedRow({ b }: { b: JourneyBadge }) {
+  const pct = Math.min(100, Math.round((b.current / b.target) * 100));
+  return (
+    <li className="flex items-center gap-3 p-3.5">
+      <span className="text-lg leading-none opacity-30 grayscale">{b.emoji}</span>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium leading-tight text-muted-foreground">{b.title}</p>
+        {b.target > 1 ? (
+          <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-border">
+            <div className="h-full rounded-full bg-primary/60" style={{ width: `${pct}%` }} />
+          </div>
+        ) : null}
+      </div>
+      {b.target > 1 ? (
+        <span className="shrink-0 text-[11px] font-medium tabular-nums text-muted-foreground">
+          {b.current}/{b.target}
+        </span>
+      ) : null}
+    </li>
   );
 }

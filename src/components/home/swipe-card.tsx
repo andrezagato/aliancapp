@@ -9,10 +9,14 @@ import { fmtWeekdayShort, fmtDayMonthShort, fmtTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 /**
- * Card de escala com swipe: arrastar → revela "Confirmar" (verde); arrastar ←
+ * Linha de escala com swipe: arrastar → revela "Confirmar" (verde); arrastar ←
  * revela "Não posso" (vermelho, abre o sheet). Discrimina swipe × scroll pela
  * dominância do eixo. Cards já resolvidos (não-convidado) limitam o arrasto à
  * direita — só o swipe pra recusar continua valendo. Toque abre o detalhe.
+ *
+ * Sem moldura própria de propósito (Fase 6 do pós-audit): o pai empilha várias
+ * dessas num único papel com `divide-y` ("Depois disso" deixou de ser um card
+ * por linha) — cor/borda/sombra são do papel, não da linha.
  */
 const THRESHOLD = 88;
 
@@ -73,7 +77,7 @@ export function SwipeCard({
   const rr = dx < 0 ? Math.min(1, -dx / 70) : 0;
 
   return (
-    <div data-swipe className="relative overflow-hidden rounded-[20px]" style={{ touchAction: "pan-y" }}>
+    <div data-swipe className="relative overflow-hidden" style={{ touchAction: "pan-y" }}>
       <div className="absolute inset-0 flex items-center justify-between" aria-hidden>
         <div
           style={{ opacity: rl }}
@@ -96,7 +100,7 @@ export function SwipeCard({
         onPointerCancel={onUp}
         style={{ transform: `translateX(${dx}px)` }}
         className={cn(
-          "relative flex items-center gap-3 rounded-[20px] border border-border bg-card p-3.5 shadow-soft",
+          "relative flex items-center gap-3 bg-card p-3.5",
           settling && "transition-transform duration-300 ease-out",
         )}
       >

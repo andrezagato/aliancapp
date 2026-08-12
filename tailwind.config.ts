@@ -132,6 +132,11 @@ const config: Config = {
           from: { transform: "translateX(100%)" },
           to: { transform: "none" },
         },
+        // pull da esquerda: voltar de um painel lateral (Escalar/Ajustes) pro sheet original
+        pull: {
+          from: { transform: "translateX(-100%)" },
+          to: { transform: "none" },
+        },
         // MENSAGEM CHEGOU NA RÉGIA: moldura piscando na tela inteira. Três
         // batidas, e não um fade só — piscada única se confunde com o vídeo
         // trocando de cena, e cabine olha pra tela de canto de olho. Não vai a
@@ -158,6 +163,7 @@ const config: Config = {
         glow: "glow 5s ease-in-out infinite",
         flame: "flame 1s linear infinite",
         push: "push 0.34s cubic-bezier(0.32, 0.72, 0.24, 1) both",
+        pull: "pull 0.34s cubic-bezier(0.32, 0.72, 0.24, 1) both",
         alerta: "alerta 2.5s ease-in-out both",
       },
     },

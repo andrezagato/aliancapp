@@ -1,15 +1,16 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { UserPlus, Check, X } from "lucide-react";
+import { Plus, Check, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Avatar } from "@/components/ui/avatar";
 import { TeamDot } from "@/components/coverage-badge";
 import { Modal } from "@/components/modal";
 import { cn } from "@/lib/utils";
 import {
   criarConvite,
+  criarEquipe,
   cancelarConvite,
   aprovarJoinRequest,
   recusarJoinRequest,
@@ -94,27 +95,52 @@ function TeamPicker({
 }
 
 // -----------------------------------------------------------------------------
-// Convidar pessoa
+// Adicionar (convidar pessoa OU criar equipe) — um "+" só no cabeçalho, com
+// abas dentro, no lugar de duas entradas separadas na tela.
 // -----------------------------------------------------------------------------
-export function ConvidarForm({ teams }: { teams: TeamOpt[] }) {
-  const router = useRouter();
+export function AdminAddSheet({ teams }: { teams: TeamOpt[] }) {
   const [open, setOpen] = useState(false);
+  const [tab, setTab] = useState<"pessoa" | "equipe">("pessoa");
+
+  return (
+    <>
+      <Button size="icon" onClick={() => setOpen(true)} aria-label="Convidar pessoa ou criar equipe">
+        <Plus className="size-5" />
+      </Button>
+      <Modal open={open} onClose={() => setOpen(false)} sheet title={tab === "pessoa" ? "Convidar pessoa" : "Nova equipe"}>
+        <div className="space-y-4">
+          <div className="flex overflow-hidden rounded-full border border-border text-[13px] font-semibold">
+            <button
+              type="button"
+              onClick={() => setTab("pessoa")}
+              className={cn("flex-1 px-3 py-1.5", tab === "pessoa" ? "bg-primary text-primary-foreground" : "text-muted-foreground")}
+            >
+              Convidar pessoa
+            </button>
+            <button
+              type="button"
+              onClick={() => setTab("equipe")}
+              className={cn("flex-1 px-3 py-1.5", tab === "equipe" ? "bg-primary text-primary-foreground" : "text-muted-foreground")}
+            >
+              Nova equipe
+            </button>
+          </div>
+          {tab === "pessoa" ? <ConvidarFields teams={teams} onDone={() => setOpen(false)} /> : <NovaEquipeFields onDone={() => setOpen(false)} />}
+        </div>
+      </Modal>
+    </>
+  );
+}
+
+function ConvidarFields({ teams, onDone }: { teams: TeamOpt[]; onDone: () => void }) {
+  const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
-
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [isAdmin, setIsAdmin] = useState(false);
   const [pickedTeams, setPickedTeams] = useState<InviteTeamInput[]>([]);
-
-  function reset() {
-    setFullName("");
-    setEmail("");
-    setPhone("");
-    setIsAdmin(false);
-    setPickedTeams([]);
-  }
 
   function submit() {
     setError(null);
@@ -130,67 +156,101 @@ export function ConvidarForm({ teams }: { teams: TeamOpt[] }) {
         setError(r.error);
         return;
       }
-      reset();
-      setOpen(false);
+      setFullName("");
+      setEmail("");
+      setPhone("");
+      setIsAdmin(false);
+      setPickedTeams([]);
+      onDone();
       router.refresh();
     });
   }
 
-  if (!open) {
-    return (
-      <Button className="w-full" onClick={() => setOpen(true)}>
-        <UserPlus className="size-4" /> Convidar pessoa
-      </Button>
-    );
+  return (
+    <div className="space-y-4">
+      <label className="block space-y-1.5">
+        <span className="text-sm font-medium">Nome completo</span>
+        <input className={inputClass} value={fullName} onChange={(e) => setFullName(e.target.value)} />
+      </label>
+      <label className="block space-y-1.5">
+        <span className="text-sm font-medium">Email (o mesmo do Google)</span>
+        <input type="email" className={inputClass} value={email} onChange={(e) => setEmail(e.target.value)} placeholder="pessoa@gmail.com" />
+      </label>
+      <label className="block space-y-1.5">
+        <span className="text-sm font-medium">Telefone (opcional)</span>
+        <input type="tel" className={inputClass} value={phone} onChange={(e) => setPhone(e.target.value)} />
+      </label>
+
+      <div className="space-y-2">
+        <span className="text-sm font-medium">Equipes</span>
+        <TeamPicker teams={teams} value={pickedTeams} onChange={setPickedTeams} />
+      </div>
+
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" checked={isAdmin} onChange={(e) => setIsAdmin(e.target.checked)} className="size-4 rounded" />
+        Tornar administrador da igreja
+      </label>
+
+      {error ? <p className="text-sm text-destructive-ink">{error}</p> : null}
+
+      <div className="flex gap-2">
+        <Button variant="ghost" className="flex-1" onClick={onDone} disabled={pending}>
+          Cancelar
+        </Button>
+        <Button className="flex-1" onClick={submit} disabled={pending || !email.trim()}>
+          {pending ? "Enviando…" : "Convidar"}
+        </Button>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        A pessoa entra direto ao logar com o Google usando este email.
+      </p>
+    </div>
+  );
+}
+
+function NovaEquipeFields({ onDone }: { onDone: () => void }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [name, setName] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  function add() {
+    setError(null);
+    start(async () => {
+      const r = await criarEquipe(name);
+      if (!r.ok) {
+        setError(r.error);
+        return;
+      }
+      setName("");
+      onDone();
+      router.refresh();
+    });
   }
 
   return (
-    <Card>
-      <CardContent className="space-y-4 p-5">
-        <div className="flex items-center justify-between">
-          <h3 className="text-base font-semibold">Convidar pessoa</h3>
-          <button onClick={() => setOpen(false)} aria-label="Fechar" className="text-muted-foreground hover:text-foreground">
-            <X className="size-5" />
-          </button>
-        </div>
-        <label className="block space-y-1.5">
-          <span className="text-sm font-medium">Nome completo</span>
-          <input className={inputClass} value={fullName} onChange={(e) => setFullName(e.target.value)} />
-        </label>
-        <label className="block space-y-1.5">
-          <span className="text-sm font-medium">Email (o mesmo do Google)</span>
-          <input type="email" className={inputClass} value={email} onChange={(e) => setEmail(e.target.value)} placeholder="pessoa@gmail.com" />
-        </label>
-        <label className="block space-y-1.5">
-          <span className="text-sm font-medium">Telefone (opcional)</span>
-          <input type="tel" className={inputClass} value={phone} onChange={(e) => setPhone(e.target.value)} />
-        </label>
-
-        <div className="space-y-2">
-          <span className="text-sm font-medium">Equipes</span>
-          <TeamPicker teams={teams} value={pickedTeams} onChange={setPickedTeams} />
-        </div>
-
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={isAdmin} onChange={(e) => setIsAdmin(e.target.checked)} className="size-4 rounded" />
-          Tornar administrador da igreja
-        </label>
-
-        {error ? <p className="text-sm text-destructive-ink">{error}</p> : null}
-
-        <div className="flex gap-2">
-          <Button variant="ghost" className="flex-1" onClick={() => setOpen(false)} disabled={pending}>
-            Cancelar
-          </Button>
-          <Button className="flex-1" onClick={submit} disabled={pending || !email.trim()}>
-            {pending ? "Enviando…" : "Convidar"}
-          </Button>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          A pessoa entra direto ao logar com o Google usando este email.
-        </p>
-      </CardContent>
-    </Card>
+    <div className="space-y-4">
+      <label className="block space-y-1.5">
+        <span className="text-sm font-medium">Nome da equipe</span>
+        <input
+          autoFocus
+          className={inputClass}
+          placeholder="Ex.: Louvor, Som, Kids…"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && name.trim() && add()}
+        />
+      </label>
+      {error ? <p className="text-sm text-destructive-ink">{error}</p> : null}
+      <div className="flex gap-2">
+        <Button variant="ghost" className="flex-1" onClick={onDone} disabled={pending}>
+          Cancelar
+        </Button>
+        <Button className="flex-1" onClick={add} disabled={pending || !name.trim()}>
+          {pending ? "Criando…" : "Criar equipe"}
+        </Button>
+      </div>
+    </div>
   );
 }
 
@@ -396,5 +456,73 @@ export function CancelInviteButton({ inviteId }: { inviteId: string }) {
     >
       Cancelar
     </Button>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// Linha unificada de "Entrando na igreja" (pedido de entrada, perfil pendente
+// ou convite) — mesma origem visual, email/telefone/recado atrás do toque.
+// -----------------------------------------------------------------------------
+export function EntradaRow({
+  fullName,
+  avatarUrl,
+  email,
+  phone,
+  message,
+  teamDot,
+  line2,
+  actions,
+}: {
+  fullName: string;
+  avatarUrl?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  message?: string | null;
+  teamDot?: string | null;
+  line2: string;
+  actions: ReactNode;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const hasDetail = !!(email || phone || message);
+
+  return (
+    <div className="p-3.5">
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => hasDetail && setExpanded((v) => !v)}
+          className={cn("flex min-w-0 flex-1 items-center gap-3 text-left", !hasDetail && "cursor-default")}
+        >
+          <Avatar name={fullName} src={avatarUrl} className="size-9" />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-bold text-foreground">{fullName}</span>
+            <span className="mt-0.5 flex items-center gap-1.5 truncate text-[12px] text-muted-foreground">
+              {teamDot ? <TeamDot color={teamDot} /> : null}
+              {line2}
+            </span>
+          </span>
+        </button>
+        <div className="flex shrink-0 items-center gap-1">
+          {actions}
+          {hasDetail ? (
+            <button
+              type="button"
+              onClick={() => setExpanded((v) => !v)}
+              aria-label={expanded ? "Recolher contato" : "Ver contato"}
+              className="press-sm grid size-7 shrink-0 place-items-center rounded-full text-muted-foreground"
+            >
+              <ChevronDown className={cn("size-4 transition-transform", expanded && "rotate-180")} />
+            </button>
+          ) : null}
+        </div>
+      </div>
+      {expanded ? (
+        <div className="mt-2 space-y-1 border-t border-border/60 pt-2 text-[13px] text-muted-foreground">
+          {email ? <p className="truncate">{email}</p> : null}
+          {phone ? <p>{phone}</p> : null}
+          {message ? <p className="italic">“{message}”</p> : null}
+        </div>
+      ) : null}
+    </div>
   );
 }

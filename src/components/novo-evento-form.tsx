@@ -14,6 +14,7 @@ import type { TeamWithPositions, EventTemplate } from "@/lib/data";
 
 const inputClass =
   "w-full rounded-2xl border border-input bg-card px-4 py-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring";
+const dateTimeInputClass = cn(inputClass, "text-[15px] font-bold tabular-nums");
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -127,16 +128,14 @@ export function NovoEventoForm({
             <Field label="Título">
               <input className={inputClass} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex.: Culto de Domingo" />
             </Field>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Data">
-                <input type="date" className={inputClass} value={date} onChange={(e) => setDate(e.target.value)} />
-              </Field>
-              <Field label="Horário">
-                <input type="time" className={inputClass} value={time} onChange={(e) => setTime(e.target.value)} />
-              </Field>
-            </div>
+            <Field label="Data">
+              <input type="date" className={dateTimeInputClass} value={date} onChange={(e) => setDate(e.target.value)} />
+            </Field>
+            <Field label="Horário">
+              <input type="time" className={dateTimeInputClass} value={time} onChange={(e) => setTime(e.target.value)} />
+            </Field>
             <Field label="Chegada da equipe (call) — opcional">
-              <input type="time" className={inputClass} value={callTime} onChange={(e) => setCallTime(e.target.value)} />
+              <input type="time" className={dateTimeInputClass} value={callTime} onChange={(e) => setCallTime(e.target.value)} />
             </Field>
             <Field label="Local">
               <input className={inputClass} value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Ex.: Templo" />

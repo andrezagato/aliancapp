@@ -200,10 +200,10 @@ export function VolunteerHome({
           {list.length > 0 ? (
             <section className="animate-fade-up" style={{ animationDelay: "150ms" }}>
               <div className="flex items-baseline justify-between px-1 pb-1.5">
-                <h3 className="font-display text-lg font-bold text-foreground">Suas escalas</h3>
+                <h3 className="font-display text-lg font-bold text-foreground">Depois disso</h3>
                 <span className="text-xs font-semibold text-muted-foreground">Arraste p/ responder</span>
               </div>
-              <div className="space-y-2">
+              <div className="divide-y divide-border overflow-hidden rounded-[20px] border border-border bg-card shadow-soft">
                 {list.map((a) => (
                   <SwipeCard
                     key={a.assignmentId}

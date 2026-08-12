@@ -54,23 +54,32 @@
   }
 
   .dark {
-    --background: 350 18% 9%;
-    --foreground: 40 30% 92%;
-    --card: 350 16% 12%;
-    --card-foreground: 40 30% 92%;
-    --primary: 349 55% 55%;
-    --primary-foreground: 350 30% 8%;
-    --accent: 42 72% 58%;
-    --accent-foreground: 32 70% 12%;
-    --muted: 350 12% 18%;
-    --muted-foreground: 38 14% 66%;
-    --border: 350 12% 22%;
-    --input: 350 12% 22%;
-    --ring: 42 72% 58%;
-    /* No escuro a tinta inverte o sentido: precisa CLAREAR pra ler sobre o fundo
-       vinho-quase-preto. Paleta reservada — nada no app aplica .dark ainda. */
+    /* Paleta escura — hoje só a régia (`/control`) aplica `.dark`, escopada ao
+       container daquela tela (Fase 7.4 do pós-audit); o resto do app continua
+       claro. Carvão QUENTE (hue ~20-24, puxa pro marrom), não cinza neutro, pra
+       manter vinho e dourado na mesma família. Dourado troca de papel: no claro
+       é ênfase (`--accent`), no escuro é a ÚNICA cor do sistema com contraste
+       natural sobre carvão, então assume `--primary` (ação); vinho desce pra
+       `--accent`. No escuro a tinta também inverte o sentido: precisa CLAREAR
+       pra ler sobre o fundo escuro, em vez de escurecer o creme. */
+    --background: 20 12% 10%;
+    --foreground: 40 32% 93%;
+    --card: 22 10% 14%;
+    --card-foreground: 40 32% 93%;
+    --primary: 42 78% 62%;
+    --primary-foreground: 32 70% 16%;
+    --accent: 349 60% 52%;
+    --accent-foreground: 36 78% 95%;
+    --muted: 24 8% 20%;
+    --muted-foreground: 35 9% 60%;
+    --border: 24 8% 24%;
+    --input: 24 8% 24%;
+    --ring: 42 78% 62%;
+    --success: 138 38% 50%;
     --success-ink: 138 40% 62%;
+    --warning: 36 76% 60%;
     --warning-ink: 36 70% 62%;
+    --destructive: 6 72% 58%;
     --destructive-ink: 6 70% 64%;
   }
 

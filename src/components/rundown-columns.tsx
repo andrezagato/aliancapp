@@ -14,9 +14,12 @@ import {
   ChevronDown,
   Pencil,
   TriangleAlert,
+  Moon,
+  Sun,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/toast";
+import { useControlTheme } from "@/lib/control-theme";
 import { warm } from "@/lib/toasts";
 import {
   iniciarCronograma,
@@ -85,9 +88,12 @@ const FONTE_PADRAO = 15;
 const FONTE_MIN = 12;
 const FONTE_MAX = 26;
 
-/** Larguras em `em` pra escalarem junto com o controle de fonte. */
-const COLS =
-  "grid-cols-[2.2em_4.6em_4.6em_4.6em_minmax(6em,0.7fr)_minmax(5em,0.7fr)_minmax(16em,3fr)_auto]";
+/** Larguras em `em` pra escalarem junto com o controle de fonte. Início e fim
+ * viram UMA faixa ("10:52 → 11:22" lê-se como intervalo, dois números soltos
+ * não); o filete de 1px que sobra separa o grupo QUANDO (horário/duração) do
+ * grupo O QUÊ (bloco/responsável/observação) — 7 faixas de conteúdo + 1 filete
+ * (Fase 7.3 do pós-audit). */
+const COLS = "grid-cols-[2.2em_9.4em_4.6em_1px_minmax(6em,0.7fr)_minmax(5em,0.7fr)_minmax(16em,3fr)_auto]";
 
 const TZ = "America/Sao_Paulo";
 /** "seg · 3 ago · 17:15" — a régia não precisa de "Segunda-Feira, 3 De Agosto". */
@@ -266,9 +272,9 @@ function Cabecalho() {
       )}
     >
       <span className="text-center">#</span>
-      <span>Início</span>
-      <span>Fim</span>
+      <span>Início → Fim</span>
       <span>Dur.</span>
+      <span />
       <span>Bloco</span>
       <span>Responsável</span>
       <span>Observação</span>
@@ -282,8 +288,6 @@ function Linha({
   idx,
   cor,
   now,
-  podeAvancar,
-  onAvancar,
   ocupado,
   canEdit,
   primeiro,
@@ -297,8 +301,6 @@ function Linha({
   idx: number;
   cor: string;
   now: number | null;
-  podeAvancar: boolean;
-  onAvancar: () => void;
   ocupado: boolean;
   canEdit: boolean;
   primeiro: boolean;
@@ -354,8 +356,9 @@ function Linha({
         )}
       </span>
 
-      <span className="tabular-nums">{fmtHora(startMs)}</span>
-      <span className={cn("tabular-nums", live && "text-muted-foreground")}>{fmtHora(endMs)}</span>
+      <span className="tabular-nums">
+        {fmtHora(startMs)} <span className={cn(live && "text-muted-foreground")}>→ {fmtHora(endMs)}</span>
+      </span>
 
       {/* Duração planejada; ao vivo, a CONTAGEM REGRESSIVA ocupa o lugar e ganha
           a cor. Aqui não cabe rótulo, então o sinal de menos é quem diz que o
@@ -365,10 +368,15 @@ function Linha({
         {live ? contagemRegressiva(durMs - decorridoMs) : `${it.durationMin}m`}
       </span>
 
+      {/* Filete: separa o grupo QUANDO (horário/duração) do grupo O QUÊ (bloco/
+          responsável/observação). Célula vazia — precisa de `self-stretch`
+          porque a linha usa `items-start`, que colapsaria a altura a zero. */}
+      <span className="w-px self-stretch bg-border" />
+
       <span className="min-w-0 break-words" title={it.title}>
         {it.title}
         {done && estourouMs > 0 ? (
-          <span className="ml-[0.4em] text-[0.8em] font-semibold text-destructive-ink">
+          <span className="ml-[0.4em] rounded-full bg-destructive/15 px-[0.5em] py-[0.05em] text-[0.78em] font-bold text-destructive-ink">
             +{clock(estourouMs)}
           </span>
         ) : null}
@@ -376,78 +384,69 @@ function Linha({
 
       <span className="min-w-0 break-words text-muted-foreground">{it.responsible || "—"}</span>
 
-      <span className="flex min-w-0 items-start gap-[0.6em]">
-        <span className="min-w-0 flex-1">
-          {note ? (
-            <>
-              {/* `whitespace-pre-wrap` preserva as quebras de quem colou o texto;
-                  4 linhas é o teto pra uma linha não empurrar o resto da grade
-                  pra fora da tela. */}
-              {/* `block` e `line-clamp-4` disputam a mesma propriedade
-                  (`display`), e quem vence depende da ordem interna do Tailwind,
-                  não da ordem aqui — por isso um OU outro, nunca os dois. */}
-              <span
-                className={cn(
-                  "whitespace-pre-wrap break-words",
-                  !aberto && longo ? "line-clamp-4" : "block",
-                )}
-              >
-                {note}
-              </span>
-              {longo ? (
-                <button
-                  type="button"
-                  onClick={() => setAberto((v) => !v)}
-                  className="press-sm mt-[0.2em] text-[0.8em] font-bold text-primary"
-                >
-                  {aberto ? "ver menos" : "ver tudo"}
-                </button>
-              ) : null}
-            </>
-          ) : (
-            <span className="text-muted-foreground">—</span>
-          )}
-          {editandoNome ? (
-            <span className="ml-[0.4em] inline-block rounded-full bg-warning/15 px-[0.5em] py-[0.1em] align-middle text-[0.72em] font-semibold text-warning-ink">
-              {editandoNome} editando
+      <span className="min-w-0">
+        {note ? (
+          <>
+            {/* `whitespace-pre-wrap` preserva as quebras de quem colou o texto;
+                4 linhas é o teto pra uma linha não empurrar o resto da grade
+                pra fora da tela. */}
+            {/* `block` e `line-clamp-4` disputam a mesma propriedade
+                (`display`), e quem vence depende da ordem interna do Tailwind,
+                não da ordem aqui — por isso um OU outro, nunca os dois. */}
+            <span
+              className={cn("whitespace-pre-wrap break-words", !aberto && longo ? "line-clamp-4" : "block")}
+            >
+              {note}
             </span>
-          ) : null}
-        </span>
-
-        {podeAvancar && live ? (
-          <button
-            onClick={onAvancar}
-            disabled={ocupado}
-            className="press-sm inline-flex shrink-0 items-center gap-[0.4em] rounded-full bg-primary px-[0.8em] py-[0.35em] text-[0.85em] font-bold text-primary-foreground disabled:opacity-60"
-          >
-            <Check className="size-[1.1em]" /> Encerrar bloco
-          </button>
+            {longo ? (
+              <button
+                type="button"
+                onClick={() => setAberto((v) => !v)}
+                className="press-sm mt-[0.2em] text-[0.8em] font-bold text-primary"
+              >
+                {aberto ? "ver menos" : "ver tudo"}
+              </button>
+            ) : null}
+          </>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        )}
+        {editandoNome ? (
+          <span className="ml-[0.4em] inline-block rounded-full bg-warning/15 px-[0.5em] py-[0.1em] align-middle text-[0.72em] font-semibold text-warning-ink">
+            {editandoNome} editando
+          </span>
         ) : null}
       </span>
 
       {/* Reordenar por SETAS, não por arraste: num monitor de sala de controle,
           durante o culto, um arraste acidental reescreveria a ordem do culto sem
-          ninguém perceber. Duas setas exigem intenção e não têm meio-termo. */}
+          ninguém perceber. Duas setas exigem intenção e não têm meio-termo. O
+          que já passou não reordena (as setas somem — não se reordena o que já
+          aconteceu), mas continua editável (o pente, pra corrigir depois). */}
       {canEdit ? (
         <span className="flex shrink-0 items-center gap-[0.15em]">
-          <button
-            onClick={onSubir}
-            disabled={ocupado || primeiro}
-            aria-label={`Mover "${it.title}" para cima`}
-            title="Mover para cima"
-            className="press-sm grid size-[1.9em] place-items-center rounded-full text-muted-foreground disabled:opacity-25"
-          >
-            <ChevronUp className="size-[1.1em]" />
-          </button>
-          <button
-            onClick={onDescer}
-            disabled={ocupado || ultimo}
-            aria-label={`Mover "${it.title}" para baixo`}
-            title="Mover para baixo"
-            className="press-sm grid size-[1.9em] place-items-center rounded-full text-muted-foreground disabled:opacity-25"
-          >
-            <ChevronDown className="size-[1.1em]" />
-          </button>
+          {done ? null : (
+            <>
+              <button
+                onClick={onSubir}
+                disabled={ocupado || primeiro}
+                aria-label={`Mover "${it.title}" para cima`}
+                title="Mover para cima"
+                className="press-sm grid size-[1.9em] place-items-center rounded-full text-muted-foreground disabled:opacity-25"
+              >
+                <ChevronUp className="size-[1.1em]" />
+              </button>
+              <button
+                onClick={onDescer}
+                disabled={ocupado || ultimo}
+                aria-label={`Mover "${it.title}" para baixo`}
+                title="Mover para baixo"
+                className="press-sm grid size-[1.9em] place-items-center rounded-full text-muted-foreground disabled:opacity-25"
+              >
+                <ChevronDown className="size-[1.1em]" />
+              </button>
+            </>
+          )}
           <button
             onClick={onEditar}
             disabled={ocupado}
@@ -461,6 +460,76 @@ function Linha({
       ) : (
         <span />
       )}
+    </div>
+  );
+}
+
+/**
+ * FAIXA "AGORA / A SEGUIR" (Fase 7.3 do pós-audit) — o número mais importante
+ * da sala (a regressiva) e o botão que encerra o bloco ganham lugar FIXO,
+ * fora da grade. Antes o "Encerrar bloco" nascia dentro da linha que estivesse
+ * ao vivo — ou seja, mudava de lugar a cada bloco; e "o que vem" era pergunta
+ * sem resposta na tela (o operador tinha que contar linhas).
+ */
+function AgoraCard({
+  row,
+  now,
+  podeAvancar,
+  ocupado,
+  onAvancar,
+}: {
+  row: RundownRow;
+  now: number | null;
+  podeAvancar: boolean;
+  ocupado: boolean;
+  onAvancar: () => void;
+}) {
+  const { it, startMs, durMs } = row;
+  const decorridoMs = now != null ? now - startMs : 0;
+  const restanteMs = durMs - decorridoMs;
+  const heat = heatOf(restanteMs);
+  return (
+    <div className="flex min-w-0 flex-[2] items-center gap-[0.9em] rounded-[0.9em] border border-border bg-card px-[1em] py-[0.8em] shadow-soft">
+      <div className="min-w-0 flex-1">
+        <span className="inline-flex items-center gap-[0.4em] rounded-full bg-destructive/12 px-[0.6em] py-[0.15em] text-[0.72em] font-extrabold uppercase text-destructive-ink">
+          <span className="size-[0.5em] animate-pulse rounded-full bg-destructive" /> Agora
+        </span>
+        <p className="mt-[0.15em] truncate font-display text-[1.8em] font-extrabold leading-tight text-foreground">
+          {it.title}
+        </p>
+        <p className="mt-[0.1em] truncate text-[0.85em] text-muted-foreground">
+          {it.responsible || "—"} · previsto até {fmtHora(startMs + durMs)}
+        </p>
+      </div>
+      <span
+        className={cn(
+          "shrink-0 font-display text-[3.2em] font-extrabold leading-none tabular-nums",
+          HEAT_TEXT[heat],
+        )}
+      >
+        {contagemRegressiva(restanteMs)}
+      </span>
+      {podeAvancar ? (
+        <button
+          onClick={onAvancar}
+          disabled={ocupado}
+          className="press-sm inline-flex shrink-0 items-center gap-[0.4em] rounded-full bg-primary px-[1em] py-[0.6em] text-[0.9em] font-bold text-primary-foreground disabled:opacity-60"
+        >
+          <Check className="size-[1.1em]" /> Encerrar bloco
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function ASeguirCard({ row }: { row: RundownRow }) {
+  return (
+    <div className="flex w-[21em] min-w-0 shrink-0 flex-col justify-center rounded-[0.9em] border border-border bg-muted/40 px-[1em] py-[0.8em]">
+      <span className="text-[0.72em] font-extrabold uppercase tracking-wide text-muted-foreground">A seguir</span>
+      <p className="mt-[0.15em] truncate font-display text-[1.15em] font-bold text-foreground">{row.it.title}</p>
+      <p className="mt-[0.1em] truncate text-[0.8em] text-muted-foreground">
+        {row.it.responsible || "—"} · {fmtHora(row.startMs)}
+      </p>
     </div>
   );
 }
@@ -503,6 +572,7 @@ export function RundownColumns({
   const [emCarencia, armarCarencia] = useCarencia();
   const [iniciando, setIniciando] = useState(false);
   const [fonte, setFonte] = useState(FONTE_PADRAO);
+  const [tema, alternarTema] = useControlTheme();
   const [editando, setEditando] = useState<RundownItem | "novo" | null>(null);
   const [abrirMsg, setAbrirMsg] = useState(false);
 
@@ -604,6 +674,11 @@ export function RundownColumns({
     });
   };
 
+  // Faixa "Agora / A seguir" (Fase 7.3): só existe bloco ao vivo com o culto
+  // rodando — sem isso, o topo continua só com a barra de controles.
+  const liveRow = rows.find((r) => r.status === "live") ?? null;
+  const nextRow = liveRow ? rows[rows.indexOf(liveRow) + 1] ?? null : null;
+
   /** Troca o bloco de lugar com o vizinho e persiste a ordem inteira. */
   const mover = (idx: number, delta: number) => {
     const proxima = [...rows.map((r) => r.it)];
@@ -681,6 +756,17 @@ export function RundownColumns({
             </button>
           </span>
 
+          {/* Tema só desta tela (Fase 7.4) — sala apagada durante o culto, 1440px
+              de creme vira lanterna na cara do operador e vaza luz pro palco. */}
+          <button
+            onClick={alternarTema}
+            aria-label={tema === "escuro" ? "Modo claro" : "Modo escuro"}
+            title={tema === "escuro" ? "Modo claro" : "Modo escuro"}
+            className="press-sm mr-[0.4em] grid size-[2em] place-items-center rounded-full border border-border text-muted-foreground"
+          >
+            {tema === "escuro" ? <Sun className="size-[1.1em]" /> : <Moon className="size-[1.1em]" />}
+          </button>
+
           {canEdit ? (
             <button
               onClick={() => setEditando("novo")}
@@ -750,6 +836,22 @@ export function RundownColumns({
         </span>
       </div>
 
+        {/* AGORA/A SEGUIR: fora da grade, sempre visível — é o número mais
+            importante da sala e o botão que muda de lugar a cada bloco se
+            ficar dentro da linha. */}
+        {liveRow ? (
+          <div className="mb-[0.7em] flex flex-wrap gap-[0.6em]">
+            <AgoraCard
+              row={liveRow}
+              now={now}
+              podeAvancar={canEdit && rodando}
+              ocupado={ocupado}
+              onAvancar={() => agir(() => marcarBlocoFeito(liveRow.it.id, eventId, true))}
+            />
+            {nextRow ? <ASeguirCard row={nextRow} /> : null}
+          </div>
+        ) : null}
+
         {/* A porta de volta, também dentro do sticky: um culto encerrado por
             engano tem que ser desfeito de onde a pessoa está olhando, sem rolar
             a grade atrás do botão. */}
@@ -797,9 +899,7 @@ export function RundownColumns({
               idx={idx}
               cor={corDoBloco(row.it)}
               now={now}
-              podeAvancar={canEdit && rodando}
               ocupado={ocupado}
-              onAvancar={() => agir(() => marcarBlocoFeito(row.it.id, eventId, true))}
               canEdit={canEdit}
               primeiro={idx === 0}
               ultimo={idx === rows.length - 1}

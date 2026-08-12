@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { Avatar } from "@/components/ui/avatar";
 import { NotificationBell } from "./notification-bell";
 
@@ -15,11 +15,13 @@ export function TopBar({
   title,
   subtitle,
   userName,
+  action,
 }: {
   title: string;
   subtitle?: string;
   userName: string;
   unread?: number;
+  action?: ReactNode;
 }) {
   const bg = useRef<HTMLDivElement>(null);
   const condensed = useRef<HTMLDivElement>(null);
@@ -63,6 +65,7 @@ export function TopBar({
           </div>
           {subtitle ? <div className="mt-0.5 truncate text-sm text-muted-foreground">{subtitle}</div> : null}
         </div>
+        {action}
         <NotificationBell />
         <Link href="/perfil" aria-label="Perfil" className="press-sm shrink-0">
           <Avatar name={userName} className="size-[42px] border border-border/90 text-[15px] font-extrabold" />

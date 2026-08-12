@@ -13,9 +13,12 @@ import { cn } from "@/lib/utils";
 
 const pad = (n: number) => String(n).padStart(2, "0");
 function monthLabel(y: number, m: number): string {
-  return new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric", timeZone: "UTC" }).format(
+  // Intl.DateTimeFormat devolve "agosto de 2026"; `capitalize` (CSS) maiusculizaria
+  // palavra por palavra ("Agosto De 2026") — maiusculiza só a primeira letra aqui.
+  const s = new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric", timeZone: "UTC" }).format(
     new Date(Date.UTC(y, m - 1, 1)),
   );
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 /** "DD/MM" na data local da igreja. */
 function dm(iso: string): string {
@@ -135,40 +138,47 @@ export default async function BalancoPage({
     <>
       <TopBar title="Balanço do mês" subtitle="Quem serviu quanto — e com quem" userName={session.profile.full_name || "?"} />
       <div className="animate-fade-in space-y-3 py-3">
-        {/* Seletor de equipe (rolável) */}
-        {teams.length > 1 ? (
-          <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {teams.map((t) => {
-              const on = t.id === selected.id;
-              return (
-                <Link
-                  key={t.id}
-                  href={link({ team: t.id })}
-                  className={cn(
-                    "flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-[13px] font-semibold",
-                    on ? "border-primary bg-primary/10 text-primary" : "border-border text-foreground",
-                  )}
-                >
-                  <TeamDot color={t.color} className="size-2.5" />
-                  {t.name}
-                </Link>
-              );
-            })}
-          </div>
-        ) : null}
+        {/* Painel fixo: equipe · mês · números do mês, tudo antes de qualquer dado */}
+        <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-soft">
+          {teams.length > 1 ? (
+            <div className="flex gap-1.5 overflow-x-auto border-b border-border/70 p-2.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {teams.map((t) => {
+                const on = t.id === selected.id;
+                return (
+                  <Link
+                    key={t.id}
+                    href={link({ team: t.id })}
+                    className={cn(
+                      "flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-[13px] font-semibold",
+                      on ? "border-primary bg-primary/10 text-primary" : "border-border text-foreground",
+                    )}
+                  >
+                    <TeamDot color={t.color} className="size-2.5" />
+                    {t.name}
+                  </Link>
+                );
+              })}
+            </div>
+          ) : null}
 
-        {/* Navegação de mês */}
-        <div className="flex items-center justify-between">
-          <Link href={link({ m: prevM })} aria-label="Mês anterior" className="inline-flex size-9 items-center justify-center rounded-full hover:bg-muted">
-            <ChevronLeft className="size-5" />
-          </Link>
-          <h2 className="text-lg font-semibold capitalize">{monthLabel(y, m)}</h2>
-          <Link href={link({ m: nextM })} aria-label="Próximo mês" className="inline-flex size-9 items-center justify-center rounded-full hover:bg-muted">
-            <ChevronRight className="size-5" />
-          </Link>
+          <div className="flex items-center justify-between border-b border-border/70 px-1 py-1">
+            <Link href={link({ m: prevM })} aria-label="Mês anterior" className="inline-flex size-9 items-center justify-center rounded-full hover:bg-muted">
+              <ChevronLeft className="size-5" />
+            </Link>
+            <h2 className="text-[15px] font-bold">{monthLabel(y, m)}</h2>
+            <Link href={link({ m: nextM })} aria-label="Próximo mês" className="inline-flex size-9 items-center justify-center rounded-full hover:bg-muted">
+              <ChevronRight className="size-5" />
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-3 divide-x divide-border">
+            <MonthStat value={assigns.length} label={assigns.length === 1 ? "escalação" : "escalações"} />
+            <MonthStat value={byDate.length} label={byDate.length === 1 ? "evento" : "eventos"} />
+            <MonthStat value={zeroed.length} label="sem escala" warn={zeroed.length > 0} />
+          </div>
         </div>
 
-        {/* Aba: por pessoa / por data */}
+        {/* Aba: por pessoa / por data — encosta no dado, não no controle */}
         <div className="flex gap-1 rounded-2xl bg-muted/60 p-1">
           <Link
             href={link({ ver: "pessoa" })}
@@ -190,25 +200,28 @@ export default async function BalancoPage({
           </Link>
         </div>
 
-        <p className="px-1 text-sm text-muted-foreground">
-          {selected.name} · {assigns.length} escalaç{assigns.length === 1 ? "ão" : "ões"} · {byDate.length} evento{byDate.length === 1 ? "" : "s"} no mês · toque pra abrir
-        </p>
-
         {ver === "pessoa" ? (
           <>
-            {/* Ainda não escalados no mês */}
+            {/* Ainda não escalados no mês — faixa de altura fixa, não cresce com a equipe */}
             {zeroed.length > 0 ? (
-              <Card className="border-warning/30 bg-warning/5 p-4">
-                <p className="mb-2 text-sm font-bold text-warning-ink">Ainda não escalados · {zeroed.length}</p>
-                <div className="flex flex-wrap gap-2">
-                  {zeroed.map((r) => (
-                    <span key={r.profileId} className="inline-flex items-center gap-1.5 rounded-full bg-card px-2.5 py-1 text-sm">
-                      <Avatar name={r.name} src={r.avatarUrl} className="size-6" />
-                      {r.name}
-                    </span>
+              <div className="flex items-center gap-2 rounded-2xl border border-warning/30 bg-warning/5 px-3 py-2.5">
+                <p className="shrink-0 text-[12.5px] font-bold text-warning-ink">Sem escala</p>
+                <div className="flex shrink-0 -space-x-2">
+                  {zeroed.slice(0, 3).map((r) => (
+                    <Avatar key={r.profileId} name={r.name} src={r.avatarUrl} className="size-7 border-2 border-card" />
                   ))}
                 </div>
-              </Card>
+                <p className="min-w-0 flex-1 truncate text-[12.5px] text-warning-ink/90">
+                  {zeroed
+                    .slice(0, 2)
+                    .map((r) => r.name.split(/\s+/)[0])
+                    .join(", ")}
+                  {zeroed.length > 2 ? ` +${zeroed.length - 2}` : ""}
+                </p>
+                <Link href="/escalas" className="press-sm shrink-0 text-[13px] font-bold text-primary">
+                  Escalar
+                </Link>
+              </div>
             ) : null}
 
             {/* Escalados — barra + detalhe (dia · posição · com quem) */}
@@ -225,7 +238,7 @@ export default async function BalancoPage({
                           <span className="truncate text-sm font-medium">{r.name}</span>
                           <span className="shrink-0 text-sm font-bold text-primary">{r.count}×</span>
                         </div>
-                        <div className="mt-1 h-2 overflow-hidden rounded-full bg-muted">
+                        <div className="mt-1 h-[7px] overflow-hidden rounded-full bg-muted">
                           <div className="h-full rounded-full bg-primary" style={{ width: `${(r.count / max) * 100}%` }} />
                         </div>
                       </div>
@@ -282,5 +295,16 @@ export default async function BalancoPage({
         )}
       </div>
     </>
+  );
+}
+
+function MonthStat({ value, label, warn }: { value: number; label: string; warn?: boolean }) {
+  return (
+    <div className="flex flex-col items-center gap-0.5 p-2.5 text-center">
+      <span className={cn("font-display text-xl font-extrabold tabular-nums", warn ? "text-warning-ink" : "text-foreground")}>
+        {value}
+      </span>
+      <p className="text-[11px] font-medium leading-tight text-muted-foreground">{label}</p>
+    </div>
   );
 }

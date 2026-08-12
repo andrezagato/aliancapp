@@ -28,7 +28,6 @@ import { WhatsAppGroupButton } from "@/components/whatsapp-button";
 import { cn } from "@/lib/utils";
 import { fmtDayMonthShort } from "@/lib/format";
 import {
-  criarEquipe,
   renomearEquipe,
   arquivarEquipe,
   definirGrupoEquipe,
@@ -184,13 +183,11 @@ export function TeamManager({
 
   return (
     <div className="space-y-4">
-      {canCreateTeam ? <NovaEquipe /> : null}
-
       {teams.length === 0 ? (
         <Card className="border-dashed">
           <CardContent className="px-6 py-10 text-center text-sm text-muted-foreground">
             {canCreateTeam
-              ? "Nenhuma equipe ainda. Crie a primeira acima."
+              ? "Nenhuma equipe ainda. Crie a primeira no + do topo."
               : "Você ainda não lidera nenhuma equipe."}
           </CardContent>
         </Card>
@@ -239,7 +236,9 @@ export function TeamManager({
           </div>
 
           {viewMode === "equipe" ? (
-            <div className="grid gap-4 lg:grid-cols-2">
+            // Líder tem 2-3 equipes só — grade de 2 colunas no desktop não ajuda,
+            // é lista mesmo. Admin, com muitas equipes, ganha com a grade.
+            <div className={cn("grid gap-4", isAdmin && "lg:grid-cols-2")}>
               {teams.map((team) => (
                 <TeamCard
                   key={team.id}
@@ -382,46 +381,6 @@ function PersonListRow({
       ) : null}
       <ChevronRight className="size-4 shrink-0 text-muted-foreground/50" />
     </button>
-  );
-}
-
-function NovaEquipe() {
-  const router = useRouter();
-  const [pending, start] = useTransition();
-  const [name, setName] = useState("");
-  const [error, setError] = useState<string | null>(null);
-
-  function add() {
-    setError(null);
-    start(async () => {
-      const r = await criarEquipe(name);
-      if (!r.ok) setError(r.error);
-      else {
-        setName("");
-        router.refresh();
-      }
-    });
-  }
-
-  return (
-    <Card>
-      <CardContent className="space-y-2 p-4">
-        <p className="text-sm font-medium">Nova equipe</p>
-        <div className="flex gap-2">
-          <input
-            className={inputClass}
-            placeholder="Ex.: Louvor, Som, Kids…"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && name.trim() && add()}
-          />
-          <Button onClick={add} disabled={pending || !name.trim()}>
-            <Plus className="size-4" /> Criar
-          </Button>
-        </div>
-        {error ? <p className="text-sm text-destructive-ink">{error}</p> : null}
-      </CardContent>
-    </Card>
   );
 }
 

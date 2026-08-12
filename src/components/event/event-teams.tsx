@@ -10,7 +10,7 @@ import { ConfirmationAlert } from "@/components/event/confirmation-alert";
 import { AssignmentResponse } from "@/components/assignment-response";
 import { CheckinButton, SwapPending } from "@/components/slot-controls";
 import { WhatsAppButton, WhatsAppGroupButton } from "@/components/whatsapp-button";
-import { EscalarDialog, NecessarioStepper, AdicionarEquipe, RemoverEquipeButton } from "@/components/leader-controls";
+import { EscalarTrigger, NecessarioStepper, AdicionarEquipe, RemoverEquipeButton } from "@/components/leader-controls";
 import { definirStatusEscala, removerEscalacao } from "@/lib/actions";
 import { cn } from "@/lib/utils";
 import { fmtEventWhen } from "@/lib/format";
@@ -68,12 +68,15 @@ export function EventTeams({
   canCheckin,
   teams,
   availableTeams = [],
+  onEscalar,
 }: {
   eventId: string;
   startsAt: string;
   canCheckin: boolean;
   teams: DetailTeam[];
   availableTeams?: { id: string; name: string; color: string }[];
+  /** Abre "Escalar" como painel lateral do sheet do evento (não é mais Modal próprio). */
+  onEscalar: (args: { teamId: string; positionId: string; requirementId: string | null; positionName: string }) => void;
 }) {
   const multi = teams.length > 1;
   const anyManage = teams.some((t) => t.canManage);
@@ -118,9 +121,6 @@ export function EventTeams({
 
       {teams.map((team) => {
         const open = expanded[team.teamId];
-        const needsAction = team.positions.some(
-          (p) => p.openCount > 0 || p.filled.some((f) => f.swap || f.status === "convidado"),
-        );
         return (
           <Card key={team.teamId} className="overflow-hidden">
             <div className="flex w-full items-center gap-2 p-4">
@@ -131,20 +131,8 @@ export function EventTeams({
               >
                 <TeamDot color={team.color} className="size-3" />
                 <h2 className="truncate font-display text-[17px] font-bold text-foreground">{team.name}</h2>
-                {needsAction ? (
-                  <span
-                    title="Precisa de atenção"
-                    className="grid size-[18px] shrink-0 place-items-center rounded-full bg-warning/20 text-[11px] font-extrabold text-warning-ink"
-                  >
-                    !
-                  </span>
-                ) : null}
                 <CoverageBadge tone={team.tone} assigned={team.confirmed} needed={team.needed} className="ml-auto" />
               </button>
-              <WhatsAppGroupButton href={team.whatsappGroup} label="Grupo" className="h-8 shrink-0 px-2.5 text-[13px]" />
-              {team.canManage ? (
-                <RemoverEquipeButton eventId={eventId} teamId={team.teamId} teamName={team.name} assigned={team.assigned} />
-              ) : null}
               <button
                 onClick={() => toggleTeam(team.teamId)}
                 aria-label={open ? "Recolher" : "Expandir"}
@@ -155,13 +143,21 @@ export function EventTeams({
             </div>
 
             {open ? (
-              <ul className="divide-y divide-border/70 border-t border-border">
-                {team.positions.map((pos) => (
-                  <li key={pos.positionId} className="p-3.5">
-                    <PositionRow eventId={eventId} startsAt={startsAt} team={team} pos={pos} canCheckin={canCheckin} />
-                  </li>
-                ))}
-              </ul>
+              <div className="border-t border-border">
+                <div className="flex items-center justify-end gap-2 border-b border-border/70 px-4 py-2">
+                  <WhatsAppGroupButton href={team.whatsappGroup} label="Grupo" className="h-8 shrink-0 px-2.5 text-[13px]" />
+                  {team.canManage ? (
+                    <RemoverEquipeButton eventId={eventId} teamId={team.teamId} teamName={team.name} assigned={team.assigned} />
+                  ) : null}
+                </div>
+                <ul className="divide-y divide-border/70">
+                  {team.positions.map((pos) => (
+                    <li key={pos.positionId} className="p-3.5">
+                      <PositionRow eventId={eventId} startsAt={startsAt} team={team} pos={pos} canCheckin={canCheckin} onEscalar={onEscalar} />
+                    </li>
+                  ))}
+                </ul>
+              </div>
             ) : null}
           </Card>
         );
@@ -182,12 +178,14 @@ function PositionRow({
   team,
   pos,
   canCheckin,
+  onEscalar,
 }: {
   eventId: string;
   startsAt: string;
   team: DetailTeam;
   pos: DetailPosition;
   canCheckin: boolean;
+  onEscalar: (args: { teamId: string; positionId: string; requirementId: string | null; positionName: string }) => void;
 }) {
   const canManage = team.canManage;
   const notApplicable = pos.status === "not_applicable";
@@ -224,13 +222,16 @@ function PositionRow({
           ))}
 
           {canManage && pos.openCount > 0 ? (
-            <EscalarDialog
-              eventId={eventId}
-              teamId={team.teamId}
-              positionId={pos.positionId}
-              requirementId={pos.requirementId}
-              positionName={pos.positionName}
+            <EscalarTrigger
               openCount={pos.openCount}
+              onOpen={() =>
+                onEscalar({
+                  teamId: team.teamId,
+                  positionId: pos.positionId,
+                  requirementId: pos.requirementId,
+                  positionName: pos.positionName,
+                })
+              }
             />
           ) : null}
         </div>
