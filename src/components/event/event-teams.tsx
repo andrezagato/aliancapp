@@ -10,7 +10,7 @@ import { ConfirmationAlert } from "@/components/event/confirmation-alert";
 import { AssignmentResponse } from "@/components/assignment-response";
 import { CheckinButton, SwapPending } from "@/components/slot-controls";
 import { WhatsAppButton, WhatsAppGroupButton } from "@/components/whatsapp-button";
-import { EscalarDialog, NecessarioStepper, AdicionarEquipe, RemoverEquipeButton } from "@/components/leader-controls";
+import { EscalarTrigger, NecessarioStepper, AdicionarEquipe, RemoverEquipeButton } from "@/components/leader-controls";
 import { definirStatusEscala, removerEscalacao } from "@/lib/actions";
 import { cn } from "@/lib/utils";
 import { fmtEventWhen } from "@/lib/format";
@@ -68,12 +68,15 @@ export function EventTeams({
   canCheckin,
   teams,
   availableTeams = [],
+  onEscalar,
 }: {
   eventId: string;
   startsAt: string;
   canCheckin: boolean;
   teams: DetailTeam[];
   availableTeams?: { id: string; name: string; color: string }[];
+  /** Abre "Escalar" como painel lateral do sheet do evento (não é mais Modal próprio). */
+  onEscalar: (args: { teamId: string; positionId: string; requirementId: string | null; positionName: string }) => void;
 }) {
   const multi = teams.length > 1;
   const anyManage = teams.some((t) => t.canManage);
@@ -150,7 +153,7 @@ export function EventTeams({
                 <ul className="divide-y divide-border/70">
                   {team.positions.map((pos) => (
                     <li key={pos.positionId} className="p-3.5">
-                      <PositionRow eventId={eventId} startsAt={startsAt} team={team} pos={pos} canCheckin={canCheckin} />
+                      <PositionRow eventId={eventId} startsAt={startsAt} team={team} pos={pos} canCheckin={canCheckin} onEscalar={onEscalar} />
                     </li>
                   ))}
                 </ul>
@@ -175,12 +178,14 @@ function PositionRow({
   team,
   pos,
   canCheckin,
+  onEscalar,
 }: {
   eventId: string;
   startsAt: string;
   team: DetailTeam;
   pos: DetailPosition;
   canCheckin: boolean;
+  onEscalar: (args: { teamId: string; positionId: string; requirementId: string | null; positionName: string }) => void;
 }) {
   const canManage = team.canManage;
   const notApplicable = pos.status === "not_applicable";
@@ -217,13 +222,16 @@ function PositionRow({
           ))}
 
           {canManage && pos.openCount > 0 ? (
-            <EscalarDialog
-              eventId={eventId}
-              teamId={team.teamId}
-              positionId={pos.positionId}
-              requirementId={pos.requirementId}
-              positionName={pos.positionName}
+            <EscalarTrigger
               openCount={pos.openCount}
+              onOpen={() =>
+                onEscalar({
+                  teamId: team.teamId,
+                  positionId: pos.positionId,
+                  requirementId: pos.requirementId,
+                  positionName: pos.positionName,
+                })
+              }
             />
           ) : null}
         </div>

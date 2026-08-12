@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { X } from "lucide-react";
+import { ChevronLeft, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -26,6 +26,8 @@ export function Modal({
   sheet = false,
   title,
   liftY = 0,
+  onBack,
+  backLabel,
 }: {
   open: boolean;
   onClose: () => void;
@@ -34,6 +36,9 @@ export function Modal({
   title?: string;
   /** Sobe o sheet quando o teclado virtual abre (px) — evita sobreposição no iOS. */
   liftY?: number;
+  /** Quando presente, mostra "‹ backLabel" no lugar do título — ele volta em vez de fechar tudo (o X continua fechando tudo). */
+  onBack?: () => void;
+  backLabel?: string;
 }) {
   const [mounted, setMounted] = useState(false);
   const [dy, setDy] = useState(0);
@@ -138,6 +143,15 @@ export function Modal({
             >
               <X className="size-5" />
             </button>
+            {onBack ? (
+              <button
+                type="button"
+                onClick={onBack}
+                className="press-sm -ml-1 mb-1 inline-flex items-center gap-0.5 rounded-full py-1 pl-1 pr-2 text-sm font-bold text-primary"
+              >
+                <ChevronLeft className="size-4" /> {backLabel}
+              </button>
+            ) : null}
             {title ? (
               <h3 className="font-display text-[22px] font-extrabold leading-tight text-foreground">
                 {title}
