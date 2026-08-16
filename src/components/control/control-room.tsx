@@ -257,7 +257,13 @@ export function ControlRoom({
     <div
       ref={gridRef}
       className={cn(
-        "grid min-h-dvh w-full grid-cols-1 gap-2 bg-background p-2 max-lg:auto-rows-[minmax(18rem,auto)] lg:h-dvh lg:grid-cols-1",
+        // `text-foreground` junto do `bg-background` NÃO é redundância: a classe
+        // `.dark` troca as VARIÁVEIS, não a cor já computada. O `body` declara
+        // `text-foreground` no tema claro, e todo texto daqui de dentro que não
+        // tem classe de cor própria — o título do bloco, por exemplo — herdava
+        // aquela tinta escura e sumia no carvão. Declarar a cor DENTRO do escopo
+        // `.dark` é o que faz a herança resolver pelo token certo.
+        "grid min-h-dvh w-full grid-cols-1 gap-2 bg-background p-2 text-foreground max-lg:auto-rows-[minmax(18rem,auto)] lg:h-dvh lg:grid-cols-1",
         cheio ? "lg:grid-rows-1" : "lg:grid-rows-[var(--split-top,3fr)_10px_var(--split-bottom,2fr)]",
         tema === "escuro" && "dark",
       )}
