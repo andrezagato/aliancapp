@@ -1,0 +1,140 @@
+import { NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+
+/**
+ * O LINK QUE ENTRA. Um toque no botão do e-mail de acesso liberado e a pessoa
+ * está dentro — sem digitar o e-mail de novo e sem esperar um segundo e-mail.
+ *
+ * Como funciona:
+ *   1) acha o convite pelo `token` (32 hex de `invites.token`, coluna que existia
+ *      desde a 0001 e nunca tinha sido usada). Precisa de service-role: a RLS de
+ *      `invites` só responde pra admin e líder, e aqui não há ninguém logado;
+ *   2) gera um token de login AGORA, na hora do clique;
+ *   3) consome esse token NO SERVIDOR com `verifyOtp`, e o @supabase/ssr grava a
+ *      sessão nos cookies da resposta — mesmo mecanismo do /auth/callback, que já
+ *      roda em produção com `exchangeCodeForSession`.
+ *
+ * POR QUE GERAR NO CLIQUE E NÃO NA APROVAÇÃO — as três razões, em ordem de dor:
+ *   • validade: gerado na aprovação, o link herdaria a validade do magic link do
+ *     Supabase (1 hora hoje) e morreria antes da pessoa abrir a caixa de entrada.
+ *     Gerado aqui, quem manda no prazo é `invites.expires_at`, que é nosso;
+ *   • antivírus e o pré-visualizador de link do Outlook abrem o link ANTES da
+ *     pessoa. Um magic link comum seria queimado por eles e ela encontraria um
+ *     link morto. O token do convite não se gasta: cada abertura gera um token de
+ *     login novo;
+ *   • sem `redirectTo`, a allow-list de Redirect URLs do dashboard deixa de ser
+ *     um jeito silencioso de quebrar isso.
+ *
+ * POR QUE `magiclink` E NUNCA `invite`: `magiclink` é o único tipo que serve nos
+ * dois casos. Se o e-mail já tem conta em auth.users, o GoTrue gera um magic
+ * link; se não tem, ele troca sozinho para `signup` e cria a conta. Já `invite`
+ * devolve 422 ("User with email already exists") em quem tem conta confirmada —
+ * e a maior parte da igreja tem, porque entrou pelo Google. Por isso o tipo do
+ * verifyOtp vem de `verification_type`, que é o que o GoTrue REALMENTE usou, e
+ * nunca de um literal fixo: token de magiclink mora em `recovery_token`, token
+ * de signup em `confirmation_token`, e trocar os dois derruba o login.
+ */
+export const dynamic = "force-dynamic";
+
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ token: string }> },
+) {
+  const { origin, searchParams } = new URL(request.url);
+  const trocar = searchParams.get("trocar") === "1";
+  const { token } = await params;
+  // Nenhuma recusa é beco sem saída: todas caem no campo de e-mail de /entrar,
+  // que é o plano B escrito na letra miúda do próprio e-mail.
+  const recusa = (motivo: string) => NextResponse.redirect(`${origin}/entrar?link=${motivo}`);
+
+  const admin = createAdminClient();
+  // Aqui a falta de service-role FECHA a porta — ao contrário de
+  // `verificarEmailParaLink`, que libera. Esta é a única rota que abre sessão sem
+  // senha: sem conferir o convite, ela aceitaria qualquer token chutado.
+  if (!admin) {
+    console.error("[entrada] SUPABASE_SERVICE_ROLE_KEY ausente — link de entrada desligado.");
+    return recusa("indisponivel");
+  }
+
+  const { data: convite } = await admin
+    .from("invites").select("email, status, expires_at").eq("token", token).maybeSingle();
+
+  if (!convite) return recusa("invalido");
+  if (convite.status === "cancelado" || convite.status === "expirado") return recusa("invalido");
+
+  // `expires_at` só começou a ser preenchido NESTA mudança. Os 38 convites que já
+  // estão no banco têm prazo NULL e um token válido — e um `&&` otimista faria
+  // NULL virar "não expira nunca": 26 logins sem senha, eternos, um deles de um
+  // admin. Sem prazo, o convite não é deste desenho; e o que não é deste desenho
+  // não abre porta.
+  if (!convite.expires_at) return recusa("invalido");
+  if (new Date(convite.expires_at).getTime() < Date.now()) return recusa("expirado");
+  // Status 'aceito' continua valendo de propósito: o link pode ter sido aberto
+  // por um antivírus (que já casou o convite) antes da pessoa tocar nele. Quem
+  // limita é o prazo, não o status — senão a pessoa acha um link morto.
+
+  // Já logado? Trocar de conta calado é o pior desfecho: quem abre o e-mail só
+  // pra conferir se o botão funciona perderia a própria sessão sem ver nada na
+  // tela. E mandar pra /entrar não resolve — o middleware expulsa de lá quem
+  // está logado, então o recado nunca seria lido.
+  const supabase = await createClient();
+  const { data: { user: atual } } = await supabase.auth.getUser();
+  if (atual?.email && atual.email.toLowerCase() !== convite.email.toLowerCase()) {
+    if (!trocar) return NextResponse.redirect(`${origin}/auth/entrar/${token}/confirmar`);
+    await supabase.auth.signOut();
+  }
+  // Mesma pessoa que já está logada: não há nada a fazer além de seguir.
+  if (atual?.email && atual.email.toLowerCase() === convite.email.toLowerCase()) {
+    return NextResponse.redirect(`${origin}/inicio`);
+  }
+
+  const { data: gerado, error: erroLink } = await admin.auth.admin.generateLink({
+    type: "magiclink",
+    email: convite.email,
+  });
+  if (erroLink || !gerado?.properties) {
+    console.error("[entrada] generateLink falhou:", erroLink?.message);
+    return recusa("falhou");
+  }
+
+  // O GoTrue troca 'magiclink' por 'signup' quando o e-mail ainda não tem conta.
+  // Estreitar aqui, em vez de dar `as EmailOtpType`, é o que garante que um tipo
+  // inesperado vire uma recusa educada e não um erro cru na cara da pessoa.
+  const tipo = gerado.properties.verification_type;
+
+  // SÓ PRIMEIRO ACESSO — este link nunca abre sessão de conta que já existe.
+  //
+  // `invites` é gravável E legível por QUALQUER líder direto no PostgREST
+  // (policies `invites_insert_leader` / `invites_read_leader` — a de leitura nem
+  // é escopada por igreja e não esconde a coluna `token`). O gate "só admin
+  // convida" mora no `criarConvite`, não no banco. Então, se `invites.token`
+  // virasse credencial de uma conta EXISTENTE, um líder criaria um convite com o
+  // e-mail do admin, leria o token e entraria como ele — 13 pessoas com esse
+  // poder, hoje.
+  //
+  // Enquanto o link só serve pra conta que ainda NÃO existe, forjar convite não
+  // dá acesso a ninguém: cria uma conta vazia, que é exatamente o que o convite
+  // já faz. Quem já tem conta segue pelo caminho normal (Google, ou o link de 1h
+  // do /entrar), que exige a caixa de entrada dela.
+  //
+  // 'signup' é o que o GoTrue devolve quando o e-mail ainda não tem conta; se
+  // ele devolver 'magiclink', a conta existe.
+  if (tipo !== "signup") {
+    if (tipo !== "magiclink") console.error("[entrada] verification_type inesperado:", tipo);
+    return recusa("ja_tem_conta");
+  }
+
+  const { error: erroVerify } = await supabase.auth.verifyOtp({
+    type: tipo,
+    token_hash: gerado.properties.hashed_token,
+  });
+  if (erroVerify) {
+    console.error("[entrada] verifyOtp falhou:", erroVerify.message);
+    return recusa("falhou");
+  }
+
+  // /inicio: o layout de (app) decide entre a home e /aguardando conforme o
+  // status do perfil, que é onde essa decisão já mora.
+  return NextResponse.redirect(`${origin}/inicio`);
+}
