@@ -57,7 +57,12 @@ export async function sendEmail(input: SendEmailInput): Promise<void> {
 export function siteUrl(): string {
   const explicit = process.env.NEXT_PUBLIC_SITE_URL;
   if (explicit) return explicit.replace(/\/+$/, "");
-  // Na Vercel esta env vem automática (sem protocolo).
+  // Em deploy de PREVIEW, VERCEL_PROJECT_PRODUCTION_URL aponta pra PRODUÇÃO — o
+  // e-mail sairia com link pro app antigo, e o que se está testando é justamente
+  // a rota nova. VERCEL_ENV distingue os dois.
+  if (process.env.VERCEL_ENV === "preview" && process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL}`;
+  }
   const vercel = process.env.VERCEL_PROJECT_PRODUCTION_URL;
   if (vercel) return `https://${vercel}`;
   return "http://localhost:3000";
@@ -66,6 +71,26 @@ export function siteUrl(): string {
 /** Demo interativa "Primeiros passos" (estática em `public/`, aberta sem login). */
 export function demoUrl(): string {
   return `${siteUrl()}/primeiros-passos.html`;
+}
+
+/**
+ * Quanto vale o link que ENTRA, mandado no e-mail de acesso liberado.
+ *
+ * 7 dias porque o culto é semanal: quem foi aprovado numa quinta-feira à noite
+ * precisa conseguir entrar no domingo de manhã. Este prazo é NOSSO
+ * (`invites.expires_at`), não o do magic link do Supabase — que é de 1 hora e
+ * morreria antes da pessoa abrir a caixa de entrada.
+ */
+export const DIAS_LINK_ENTRADA = 7;
+
+/**
+ * O link que ENTRA: um toque abre a sessão, sem digitar e-mail e sem esperar um
+ * segundo e-mail. `token` é `invites.token` — 32 hex com índice único, que
+ * existia na tabela desde a migration 0001 e nunca tinha sido usado por nada.
+ * Quem valida é `src/app/auth/entrar/[token]/route.ts`.
+ */
+export function linkDeEntrada(token: string): string {
+  return `${siteUrl()}/auth/entrar/${token}`;
 }
 
 const BRAND = "Sirvo";
@@ -99,9 +124,12 @@ function layout(opts: {
   cta?: { label: string; href: string };
   /** Link discreto abaixo do CTA — hoje usado pela demo "Primeiros passos". */
   secondary?: { label: string; href: string; note?: string };
+  /** Letra miúda no fim do corpo — o plano B de quando o botão não funcionar.
+   *  Aceita HTML, igual a `intro`: escape você mesmo o que vier do banco. */
+  note?: string;
   footer?: string;
 }): string {
-  const { title, intro, cta, secondary, footer } = opts;
+  const { title, intro, cta, secondary, note, footer } = opts;
   return `
   <div style="margin:0;padding:24px 0;background:${C.creme};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
     <div style="max-width:480px;margin:0 auto;background:${C.cremeCarta};border-radius:16px;overflow:hidden;border:1px solid ${C.linha};">
@@ -125,6 +153,11 @@ function layout(opts: {
                </p>`
             : ""
         }
+        ${
+          note
+            ? `<p style="margin:20px 0 0;font-size:13px;line-height:1.6;color:${C.pedra};">${note}</p>`
+            : ""
+        }
       </div>
       <div style="padding:16px 28px;border-top:1px solid ${C.linha};">
         <p style="margin:0;font-size:12px;line-height:1.5;color:${C.pedra};">${
@@ -135,23 +168,80 @@ function layout(opts: {
   </div>`;
 }
 
-/** Convite pra entrar (resolve o "convite não avisa ninguém"). */
+/**
+ * "Seu acesso está liberado" — o ÚNICO e-mail entre a aprovação e a pessoa dentro.
+ *
+ * `href` não é mais a tela de login: é o link que ENTRA (`linkDeEntrada`). Antes
+ * daqui o botão levava a `/entrar`, e a pessoa tinha que digitar o e-mail de novo
+ * e esperar um SEGUNDO e-mail pra conseguir passar. A Rayane foi aprovada em
+ * 11/ago às 21:19 e abriu OUTRO pedido de entrada às 22:03 — 44 minutos depois de
+ * já estar aprovada — porque nada no e-mail dizia que ela já podia entrar.
+ * Um e-mail, um toque.
+ *
+ * O texto não cita Google de propósito: quem chega por aqui é justamente quem
+ * não tem Gmail. E não pede senha porque não existe senha pra pedir.
+ */
 export function conviteEmail(opts: {
   nome: string;
+  /** Link que ENTRA (`linkDeEntrada(invite.token)`), nunca `${siteUrl()}/entrar`. */
   href: string;
+  /** true = convite direto do admin; false/omitido = aprovação de um pedido. */
+  convidado?: boolean;
+  /** true = o href leva à tela de login, não é link que entra (convite de admin). */
+  semLinkDireto?: boolean;
 }): { subject: string; html: string } {
   const nome = opts.nome?.trim() ? esc(opts.nome.trim()) : "Olá";
+  const abertura = opts.convidado
+    ? `A liderança te convidou pra servir com a gente no <strong>${BRAND}</strong>.`
+    : `A liderança aprovou seu pedido e liberou seu acesso ao <strong>${BRAND}</strong>.`;
+  const entrar = siteUrl().replace(/^https?:\/\//, "");
   return {
-    subject: `${BRAND} — você foi convidado para servir`,
+    subject: `${BRAND} — seu acesso está liberado`,
     html: layout({
-      title: `${nome}, você foi convidado! 🙌`,
-      intro: `Você foi convidado para servir com a gente no <strong>${BRAND}</strong>. Entre com a sua conta Google (usando este mesmo e-mail) para ver suas escalas e confirmar presença.`,
-      cta: { label: "Entrar no Sirvo", href: opts.href },
+      title: `${nome}, seu acesso está liberado`,
+      intro: opts.semLinkDireto
+        ? `${abertura} Abra o Sirvo e informe este mesmo e-mail pra receber seu link de acesso.`
+        : `${abertura} Toque no botão abaixo e você já entra — sem criar senha e sem digitar nada.`,
+      cta: { label: opts.semLinkDireto ? "Abrir o Sirvo" : "Entrar no Sirvo", href: opts.href },
       secondary: {
         label: "Primeira vez? Veja como funciona",
         href: demoUrl(),
         note: "1 minuto: entrar, confirmar sua escala e acompanhar o culto",
       },
+      note: opts.semLinkDireto
+        ? undefined
+        : `Este link é só seu e vale por ${DIAS_LINK_ENTRADA} dias. Se ele expirar, abra ` +
+          `<a href="${siteUrl()}/entrar" style="color:${C.vinho};font-weight:600;">${entrar}/entrar</a> ` +
+          `e informe este mesmo e-mail — seu acesso continua liberado.`,
+    }),
+  };
+}
+
+/**
+ * "Recebemos seu pedido" — o recibo que faltava.
+ *
+ * Até aqui, quem preenchia o formulário só via uma tela de confirmação: fechava a
+ * aba e não sobrava NADA na caixa de entrada. Sem recibo, o único jeito de
+ * conferir se mandou é mandar de novo — e foi exatamente isso que gerou pedido
+ * duplicado. O recibo também responde a pergunta que fica no ar, que é "e agora,
+ * eu espero o quê?".
+ */
+export function pedidoRecebidoEmail(opts: { nome: string }): { subject: string; html: string } {
+  const nome = opts.nome?.trim() ? esc(opts.nome.trim()) : "Olá";
+  return {
+    subject: `${BRAND} — recebemos seu pedido de entrada`,
+    html: layout({
+      title: `${nome}, recebemos seu pedido`,
+      intro:
+        `Seu pedido chegou pra liderança da igreja. Agora é com eles: assim que liberarem ` +
+        `seu acesso, você recebe <strong>outro e-mail</strong> com um botão que já te coloca ` +
+        `dentro do app. Não precisa fazer mais nada — e não precisa pedir de novo.`,
+      secondary: {
+        label: "Enquanto isso, veja como funciona",
+        href: demoUrl(),
+        note: "1 minuto: entrar, confirmar sua escala e acompanhar o culto",
+      },
+      footer: `Você recebeu este e-mail porque pediu entrada no ${BRAND}. Se não foi você, é só ignorar.`,
     }),
   };
 }
