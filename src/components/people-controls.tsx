@@ -101,31 +101,77 @@ function TeamPicker({
 export function AdminAddSheet({ teams }: { teams: TeamOpt[] }) {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<"pessoa" | "equipe">("pessoa");
+  // Direção do deslize: "Nova equipe" está à DIREITA na barra de abas, então ela
+  // entra pela direita (`animate-push`) e "Convidar pessoa" volta pela esquerda
+  // (`animate-pull`). É o mesmo vocabulário dos painéis do sheet de escala
+  // (event-escala-modal.tsx, Fase 4.2) — mesma curva, mesma duração do sheet.
+  // `undefined` no primeiro render: o painel inicial não desliza, ele já está lá.
+  const [anim, setAnim] = useState<string | undefined>(undefined);
+
+  const trocarAba = (t: "pessoa" | "equipe") => {
+    if (t === tab) return;
+    setAnim(t === "equipe" ? "animate-push" : "animate-pull");
+    setTab(t);
+  };
+
+  const aba = (t: "pessoa" | "equipe", rotulo: string) => (
+    <button
+      type="button"
+      onClick={() => trocarAba(t)}
+      aria-selected={tab === t}
+      role="tab"
+      className={cn(
+        "flex-1 px-3 py-1.5 transition-colors",
+        tab === t ? "bg-primary text-primary-foreground" : "text-muted-foreground",
+      )}
+    >
+      {rotulo}
+    </button>
+  );
 
   return (
     <>
-      <Button size="icon" onClick={() => setOpen(true)} aria-label="Convidar pessoa ou criar equipe">
+      <Button
+        size="icon"
+        onClick={() => {
+          setTab("pessoa");
+          setAnim(undefined);
+          setOpen(true);
+        }}
+        aria-label="Convidar pessoa ou criar equipe"
+      >
         <Plus className="size-5" />
       </Button>
-      <Modal open={open} onClose={() => setOpen(false)} sheet title={tab === "pessoa" ? "Convidar pessoa" : "Nova equipe"}>
+      {/* Título FIXO: ele trocava junto com a aba e, com o painel deslizando por
+          baixo, a troca de golpe lia como falha de renderização. Quem nomeia as
+          duas coisas são as abas, logo abaixo — repetir isso no título era
+          dizer duas vezes e ainda piscar. */}
+      <Modal open={open} onClose={() => setOpen(false)} sheet title="Adicionar">
         <div className="space-y-4">
-          <div className="flex overflow-hidden rounded-full border border-border text-[13px] font-semibold">
-            <button
-              type="button"
-              onClick={() => setTab("pessoa")}
-              className={cn("flex-1 px-3 py-1.5", tab === "pessoa" ? "bg-primary text-primary-foreground" : "text-muted-foreground")}
-            >
-              Convidar pessoa
-            </button>
-            <button
-              type="button"
-              onClick={() => setTab("equipe")}
-              className={cn("flex-1 px-3 py-1.5", tab === "equipe" ? "bg-primary text-primary-foreground" : "text-muted-foreground")}
-            >
-              Nova equipe
-            </button>
+          <div role="tablist" className="flex overflow-hidden rounded-full border border-border text-[13px] font-semibold">
+            {aba("pessoa", "Convidar pessoa")}
+            {aba("equipe", "Nova equipe")}
           </div>
-          {tab === "pessoa" ? <ConvidarFields teams={teams} onDone={() => setOpen(false)} /> : <NovaEquipeFields onDone={() => setOpen(false)} />}
+
+          {/* ALTURA ÚNICA pros dois painéis. Sem isto o sheet é ancorado embaixo
+              (`items-end` no Modal) e trocar de aba faz ele SALTAR — "Convidar
+              pessoa" tem três campos, a lista de equipes e o checkbox de admin;
+              "Nova equipe" tem um campo só.
+              `vh` e não `dvh`/`svh` de propósito: `dvh` encolhe quando o teclado
+              do iOS abre, e o painel desabaria no meio da digitação. `vh` é a
+              viewport grande e não se mexe.
+              `overflow-hidden` é obrigatório: o painel que entra começa em
+              translateX(±100%) e, sem o corte, o sheet (que é `overflow-y-auto`,
+              o que faz o eixo X computar `auto`) ganharia barra horizontal. */}
+          <div className="relative h-[min(58vh,440px)] overflow-hidden">
+            <div key={tab} className={cn("h-full", anim)}>
+              {tab === "pessoa" ? (
+                <ConvidarFields teams={teams} onDone={() => setOpen(false)} />
+              ) : (
+                <NovaEquipeFields onDone={() => setOpen(false)} />
+              )}
+            </div>
+          </div>
         </div>
       </Modal>
     </>
@@ -167,7 +213,11 @@ function ConvidarFields({ teams, onDone }: { teams: TeamOpt[]; onDone: () => voi
   }
 
   return (
-    <div className="space-y-4">
+    // `h-full` + rolagem interna: este painel é mais alto que a caixa comum das
+    // abas, e a decisão foi aceitar um scroll aqui em vez do sheet pular de
+    // altura. `overscroll-contain` impede que o fim da rolagem deste painel
+    // continue rolando a página atrás (ver a trava em modal.tsx).
+    <div className="h-full space-y-4 overflow-y-auto overscroll-contain pb-1 pr-0.5">
       <label className="block space-y-1.5">
         <span className="text-sm font-medium">Nome completo</span>
         <input className={inputClass} value={fullName} onChange={(e) => setFullName(e.target.value)} />
@@ -229,11 +279,13 @@ function NovaEquipeFields({ onDone }: { onDone: () => void }) {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="h-full space-y-4 overflow-y-auto overscroll-contain pb-1 pr-0.5">
       <label className="block space-y-1.5">
         <span className="text-sm font-medium">Nome da equipe</span>
+        {/* Sem `autoFocus`: com a troca de aba deslizando e a altura do painel
+            travada, o teclado do iOS subia no meio da animação sobre uma caixa
+            que não compensa (o sheet só ganha `liftY` onde o campo é o assunto). */}
         <input
-          autoFocus
           className={inputClass}
           placeholder="Ex.: Louvor, Som, Kids…"
           value={name}
@@ -250,6 +302,9 @@ function NovaEquipeFields({ onDone }: { onDone: () => void }) {
           {pending ? "Criando…" : "Criar equipe"}
         </Button>
       </div>
+      <p className="text-xs text-muted-foreground">
+        Cor, posições e quem lidera se ajustam depois, dentro da equipe.
+      </p>
     </div>
   );
 }

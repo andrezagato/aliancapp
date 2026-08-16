@@ -1632,7 +1632,11 @@ export async function ajustarDuracaoBloco(id: string, eventId: string, durationM
     .update({ duration_min: Math.max(0, Math.round(durationMin)) })
     .eq("id", id);
   if (error) return fail(error.message);
+  // `/control` e a página da escala também: até agora a duração só mudava pelo
+  // celular, e revalidar o /cronograma bastava. Agora a régia é uma das origens.
   revalidatePath("/cronograma");
+  revalidatePath("/control");
+  revalidatePath(`/escalas/${eventId}`);
   return ok;
 }
 

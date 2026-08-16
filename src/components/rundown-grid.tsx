@@ -62,14 +62,25 @@ import { useRundownRealtime } from "@/components/rundown-realtime";
 import { BotaoSegurar, FaixaEncerrado, useCarencia } from "@/components/rundown-salvaguardas";
 import { MenuCulto, type ItemMenuCulto } from "@/components/rundown-menu-culto";
 import { PastaModal } from "@/components/pasta-evento-modal";
+import { DuracaoPopover } from "@/components/rundown-duracao-popover";
 
-const PX_PER_MIN = 6; // altura do bloco = duração × isto (arrastar 1min = 6px)
-const MIN_H = 72; // altura mínima pra caber os contadores/toque
+/**
+ * ALTURA ÚNICA DE TODO BLOCO.
+ *
+ * A altura proporcional à duração (`MIN_H` + `duração × PX_PER_MIN`) morreu junto
+ * com a alça de redimensionar que ela servia: sem arrastar a borda, a proporção
+ * deixou de ser affordance e virou só irregularidade — um bloco de 40 min tomava
+ * meia tela e um de 2 min sumia entre os vizinhos. Roteiro no celular se lê como
+ * LISTA, não como gráfico de tempo; quem quer proporção olha a régia.
+ *
+ * É `min-height`, não altura travada: observação longa faz o card crescer. Cortar
+ * o único campo com texto de verdade seria pior que a irregularidade que a altura
+ * fixa resolve.
+ */
+const ALTURA_BLOCO = 92;
 // Cor de bloco vem da Paleta de Categoria (DESIGN.md) — a rampa antiga era a
 // paleta default do Tailwind (ciano/violeta/azul), fria e de outra casa.
 const SWATCHES = [...CATEGORY_HEXES, CATEGORY_NEUTRAL];
-
-const heightOf = (dur: number) => Math.max(MIN_H, dur * PX_PER_MIN);
 
 /**
  * TRAVA MACIA (migration 0048) — quanto tempo a marca "estou editando" vale.
@@ -114,41 +125,42 @@ function AvisoDeEdicao({ nome }: { nome: string }) {
   );
 }
 
-/** Contador com rótulo (início · corrido · passou). */
-function Stat({
+/**
+ * Contador da coluna fina: número em cima, rótulo embaixo, os dois centrados.
+ *
+ * Saiu de dentro do card (ago/2026) e virou coluna própria: ali ele disputava a
+ * primeira linha com o título do bloco, e é ele que a pessoa procura primeiro
+ * quando o culto está rolando. O rótulo continua em caixa baixa e sem tracking —
+ * "estourou" em caixa-alta não cabe em 58px.
+ */
+function Contador({
   label,
   value,
   className,
-  big,
-  strike,
 }: {
   label: string;
   value: string;
   className?: string;
-  big?: boolean;
-  strike?: boolean;
 }) {
   return (
-    <div className="flex flex-col">
-      <span
-        className={cn(
-          "font-bold tabular-nums leading-none",
-          big ? "text-[22px]" : "text-[15px]",
-          strike && "line-through",
-          className,
-        )}
-      >
+    <div className="flex flex-col items-center text-center">
+      <span className={cn("text-sm font-extrabold leading-none tabular-nums", className)}>
         {value}
       </span>
-      <span className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</span>
+      <span className="mt-0.5 text-[11px] font-extrabold leading-none text-muted-foreground">
+        {label}
+      </span>
     </div>
   );
 }
 
-type Drag =
-  | { mode: "resize"; id: string; startY: number; startDur: number; newDur: number }
-  | { mode: "reorder"; id: string }
-  | null;
+/**
+ * Sobrou só o REORDENAR. O `mode` fica: ele é o que o resto do arquivo lê pra
+ * saber "tem mão no bloco agora?" (o guarda do clique, a válvula do tempo real,
+ * o realce do card arrastado). Redimensionar saiu por decisão do dono — a
+ * duração agora se muda pelo popover, que não depende de precisão de pixel.
+ */
+type Drag = { mode: "reorder"; id: string } | null;
 
 export function RundownGrid({
   eventId,
@@ -202,15 +214,37 @@ export function RundownGrid({
   const [abrirMsg, setAbrirMsg] = useState(false);
   const [abrirPasta, setAbrirPasta] = useState(false);
   const [flashId, setFlashId] = useState<string | null>(null); // bloco recém-movido (destaque pós-drop)
+  // Qual bloco está com o popover de duração aberto (id) — ou `null`.
+  const [duracaoAberta, setDuracaoAberta] = useState<string | null>(null);
+  // Salvamento com atraso: cada toque no ± vale na hora na tela e junta os toques
+  // numa ida só ao servidor.
+  const salvarDurRef = useRef<number | null>(null);
 
-  useEffect(() => setList(items), [items]);
+  // Palpites de duração ainda não confirmados pelo servidor. Existe porque
+  // `ajustarDuracaoBloco` faz `revalidatePath` e o Next re-renderiza a rota junto
+  // com a resposta da action, mesmo sem `router.refresh()` — sem este filtro o
+  // `items` que chega no meio dos toques reescreve o número debaixo do dedo.
+  const durPendenteRef = useRef(new Map<string, number>());
+  /** Fila de saves: dois toques no mesmo bloco têm que chegar no servidor NA
+   *  ORDEM em que foram tocados. Sem a fila, o segundo pode ultrapassar o
+   *  primeiro e o valor ANTIGO vence — e o roteiro passa a mentir. */
+  const filaRef = useRef<Promise<unknown>>(Promise.resolve());
+
+  useEffect(() => {
+    const p = durPendenteRef.current;
+    for (const it of items) if (p.get(it.id) === it.durationMin) p.delete(it.id);
+    setList(p.size === 0 ? items : items.map((it) => (p.has(it.id) ? { ...it, durationMin: p.get(it.id)! } : it)));
+  }, [items]);
   useEffect(() => setStarted(startedAt), [startedAt]);
   useEffect(() => setEnded(endedAt), [endedAt]);
 
   // Tempo real (migration 0047) mora no hook, compartilhado com a régia. Aqui
   // `ocupado` importa: este grid espelha `items` em estado local, então atualizar
   // no meio de um arraste ou com modal aberto atropelaria a mão da pessoa.
-  const ocupado = drag !== null || editing !== null || contributing !== null || manageKinds || manageTpl;
+  // O popover entra na conta: um refresh chegando entre dois toques no "+" traria
+  // o `items` antigo do servidor e o número pularia pra trás debaixo do dedo.
+  const ocupado =
+    drag !== null || editing !== null || contributing !== null || manageKinds || manageTpl || duracaoAberta !== null;
   useRundownRealtime({ eventId, ocupado });
   // Ref à parte pra centralizar no bloco ao vivo lendo o valor mais recente sem
   // reexecutar o efeito (ele depende da TROCA de bloco, não de `ocupado`).
@@ -250,41 +284,86 @@ export function RundownGrid({
       await reordenarCronograma(eventId, next.map((x) => x.id));
       router.refresh();
     });
-  const persistDuration = (id: string, dur: number) =>
-    startTx(async () => {
-      await ajustarDuracaoBloco(id, eventId, dur);
-      router.refresh();
+  const salvarDuracao = (id: string, min: number) => {
+    salvarDurRef.current = null;
+    const proxima = filaRef.current.then(async () => {
+      const r = await ajustarDuracaoBloco(id, eventId, min);
+      if (!r.ok) {
+        durPendenteRef.current.delete(id); // volta pro que o servidor tem
+        showToast(r.error);
+      }
     });
+    filaRef.current = proxima.catch(() => {});
+    startTx(async () => {
+      await proxima.catch(() => {});
+    });
+  };
+
+  /** Toque no ±: vale na tela imediatamente, vai pro servidor 600ms depois. */
+  const mudarDuracao = (id: string, min: number) => {
+    durPendenteRef.current.set(id, min);
+    setList((prev) => prev.map((x) => (x.id === id ? { ...x, durationMin: min } : x)));
+    if (salvarDurRef.current) window.clearTimeout(salvarDurRef.current);
+    salvarDurRef.current = window.setTimeout(() => salvarDuracao(id, min), 600);
+  };
+
+  // Não precisa tratar "mudou de bloco com save pendente": abrir o popover de B
+  // dispara o pointerdown fora de A, que fecha A e dá flush.
+  /** Fechar garante que o ÚLTIMO toque foi pro servidor antes de soltar a tela.
+   *  Lê de REF, nunca de estado: o listener de "tocar fora" mora num efeito com
+   *  deps [aberto] e carrega a closure de quando o popover ABRIU. */
+  const fecharDuracao = () => {
+    const id = duracaoAberta;
+    if (salvarDurRef.current) {
+      window.clearTimeout(salvarDurRef.current);
+      salvarDurRef.current = null;
+      const min = id ? durPendenteRef.current.get(id) : undefined;
+      if (id && min != null) salvarDuracao(id, min);
+    }
+    // Engole O PRÓXIMO clique em vez de apostar num prazo: o clique sintético vem
+    // depois do pointerup, e num toque lento isso passa dos 60ms que o arraste usa.
+    // Sem isto, dispensar o popover ABRE o modal do bloco por baixo.
+    const engolir = (ev: MouseEvent) => {
+      ev.stopPropagation();
+      ev.preventDefault();
+    };
+    document.addEventListener("click", engolir, { capture: true, once: true });
+    window.setTimeout(() => document.removeEventListener("click", engolir, true), 400);
+    setDuracaoAberta(null);
+    // SEM `router.refresh()`: a própria action revalida a rota, e um refresh no
+    // fechar refaria meia dúzia de queries do /cronograma à toa.
+  };
+
+  // Cronômetro pendente não pode sobreviver ao desmonte da tela.
+  useEffect(
+    () => () => {
+      if (salvarDurRef.current) window.clearTimeout(salvarDurRef.current);
+    },
+    [],
+  );
 
   // ---- Gestos (arrastar) --------------------------------------------------
   const onPointerMove = useCallback((e: PointerEvent) => {
     const d = dragRef.current;
     if (!d) return;
-    if (d.mode === "resize") {
-      const deltaMin = Math.round((e.clientY - d.startY) / PX_PER_MIN);
-      const newDur = Math.max(1, d.startDur + deltaMin);
-      setDrag({ ...d, newDur });
-      setList((prev) => prev.map((it) => (it.id === d.id ? { ...it, durationMin: newDur } : it)));
-    } else {
-      const ids = listRef.current.map((x) => x.id);
-      let over = ids.length - 1;
-      for (let i = 0; i < ids.length; i++) {
-        const el = itemRefs.current.get(ids[i]);
-        if (!el) continue;
-        const r = el.getBoundingClientRect();
-        if (e.clientY < r.top + r.height / 2) {
-          over = i;
-          break;
-        }
+    const ids = listRef.current.map((x) => x.id);
+    let over = ids.length - 1;
+    for (let i = 0; i < ids.length; i++) {
+      const el = itemRefs.current.get(ids[i]);
+      if (!el) continue;
+      const r = el.getBoundingClientRect();
+      if (e.clientY < r.top + r.height / 2) {
+        over = i;
+        break;
       }
-      const cur = listRef.current;
-      const from = cur.findIndex((x) => x.id === d.id);
-      if (from !== -1 && over !== from) {
-        const next = [...cur];
-        const [moved] = next.splice(from, 1);
-        next.splice(over, 0, moved);
-        setList(next);
-      }
+    }
+    const cur = listRef.current;
+    const from = cur.findIndex((x) => x.id === d.id);
+    if (from !== -1 && over !== from) {
+      const next = [...cur];
+      const [moved] = next.splice(from, 1);
+      next.splice(over, 0, moved);
+      setList(next);
     }
   }, []);
 
@@ -298,25 +377,12 @@ export function RundownGrid({
       suppressClickRef.current = false;
     }, 60);
     if (!d) return;
-    if (d.mode === "resize") {
-      const it = listRef.current.find((x) => x.id === d.id);
-      if (it) persistDuration(it.id, it.durationMin);
-    } else {
-      persistOrder(listRef.current);
-      setFlashId(d.id);
-      window.setTimeout(() => setFlashId(null), 900);
-    }
+    persistOrder(listRef.current);
+    setFlashId(d.id);
+    window.setTimeout(() => setFlashId(null), 900);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onPointerMove]);
 
-  const beginResize = (e: React.PointerEvent, it: RundownItem) => {
-    e.preventDefault();
-    e.stopPropagation();
-    suppressClickRef.current = true;
-    setDrag({ mode: "resize", id: it.id, startY: e.clientY, startDur: it.durationMin, newDur: it.durationMin });
-    window.addEventListener("pointermove", onPointerMove);
-    window.addEventListener("pointerup", onPointerUp, { once: true });
-  };
   const beginReorder = (e: React.PointerEvent, it: RundownItem) => {
     e.preventDefault();
     e.stopPropagation();
@@ -619,7 +685,6 @@ export function RundownGrid({
             const done = status === "done";
             const live = status === "live";
             const last = idx === rows.length - 1;
-            const resizingThis = drag?.mode === "resize" && drag.id === it.id;
             const reorderingThis = drag?.mode === "reorder" && drag.id === it.id;
             const durMs = it.durationMin * 60000;
             const elapsedMs = live ? (now != null ? now - startMs : 0) : done ? endMs - startMs : durMs;
@@ -635,33 +700,111 @@ export function RundownGrid({
                   if (el) itemRefs.current.set(it.id, el);
                   else itemRefs.current.delete(it.id);
                 }}
-                className="flex select-none items-stretch"
+                className="flex select-none items-stretch gap-1"
               >
-                {/* Régua: horário de início */}
-                <div className="flex w-[46px] shrink-0 flex-col items-end pr-1 pt-2.5 text-right">
+                {/* ---- COLUNA 1: quando começa, e quanto dura ----------------
+                    A duração subiu pra cá quando a alça da borda de baixo saiu:
+                    sem o arraste, o número precisava virar o próprio controle.
+                    O rótulo "agora" saiu daqui — ao vivo o card já ganha o anel
+                    vinho, o nó fica vermelho e a coluna do contador acende
+                    sozinha ("restam 4:32"). Com a duração empilhada não sobrava
+                    linha, e três sinais de "ao vivo" já são dois a mais. Fica o
+                    aviso pro leitor de tela, que não vê anel nenhum. */}
+                <div className="flex w-10 shrink-0 flex-col items-end pt-2.5 text-right">
                   <span
                     className={cn(
                       "text-[13px] font-bold leading-none tabular-nums",
-                      done ? "text-muted-foreground line-through" : liveRed ? "text-destructive-ink" : live ? "text-primary" : "text-foreground",
+                      done
+                        ? "text-muted-foreground line-through"
+                        : liveRed
+                          ? "text-destructive-ink"
+                          : live
+                            ? "text-primary"
+                            : "text-foreground",
                     )}
                   >
                     {fmt(startMs)}
                   </span>
-                  {live ? <span className="mt-1 text-[11px] font-extrabold uppercase tracking-wide text-primary">agora</span> : null}
+                  {live ? <span className="sr-only">Bloco ao vivo</span> : null}
+
+                  {canEdit ? (
+                    <DuracaoPopover
+                      className="mt-1 w-full"
+                      valor={it.durationMin}
+                      rotuloBloco={it.title}
+                      aberto={duracaoAberta === it.id}
+                      onAbrir={() => setDuracaoAberta(it.id)}
+                      onFechar={fecharDuracao}
+                      onMudar={(min) => mudarDuracao(it.id, min)}
+                      abrirPara="cima"
+                      // h-9 = 36px, o piso de alvo do DESIGN.md, na largura toda
+                      // da régua (40px) — dá 40×36 de área tocável num número.
+                      // Pastilha (`bg-muted`): é o único controle novo da tela e
+                      // ninguém adivinharia que se toca nela sem uma pista visual.
+                      classeGatilho="mt-1 flex h-9 w-full items-center justify-center rounded-lg bg-muted text-[12.5px] font-bold leading-none text-foreground"
+                    />
+                  ) : (
+                    <span className="mt-1 flex h-9 w-full items-center justify-center rounded-lg text-[12.5px] font-bold leading-none tabular-nums text-muted-foreground">
+                      {it.durationMin}m
+                    </span>
+                  )}
                 </div>
 
-                {/* Trilha do tempo (linha + nó) */}
-                <div className="relative w-4 shrink-0" aria-hidden>
-                  <span className={cn("absolute left-1/2 top-0 w-px -translate-x-1/2 bg-border", last ? "bottom-2.5" : "-bottom-2")} />
+                {/* ---- COLUNA 2 (fina): a trilha do tempo + o contador --------
+                    A trilha (linha + nó colorido) é o único lugar do celular onde
+                    a cor do bloco aparece, e continua igual. Embaixo dela mora
+                    agora o contador, que era o primeiro número DENTRO do card e
+                    ali disputava a linha com o título. */}
+                <div className="relative flex w-[54px] shrink-0 flex-col items-center pt-6">
                   <span
+                    aria-hidden
+                    className={cn(
+                      "absolute left-1/2 top-0 w-px -translate-x-1/2 bg-border",
+                      last ? "bottom-2.5" : "-bottom-2",
+                    )}
+                  />
+                  <span
+                    aria-hidden
                     className="absolute left-1/2 top-2.5 size-2.5 -translate-x-1/2 rounded-full ring-2 ring-background"
                     style={{ backgroundColor: liveRed ? "hsl(var(--destructive))" : color }}
                   />
+
+                  {live ? (
+                    /* AO VIVO: UM número, contando pra baixo, e o RÓTULO carrega
+                       o sinal — "estourou 1:23" lê melhor que "restam −1:23". Na
+                       régia, que não tem espaço pra rótulo, quem carrega é o
+                       menos. Ver rundown-timing.ts § contagemRegressiva.
+                       `z-10` + fundo: a linha da trilha (posicionada) pinta por
+                       CIMA de texto não-posicionado sem isto — o contador ficava
+                       riscado ao meio pela régua vertical. */
+                    <div className="relative z-10 rounded bg-card px-0.5">
+                      <Contador
+                        label={restanteMs >= 0 ? "restam" : "estourou"}
+                        value={clock(Math.abs(restanteMs))}
+                        className={HEAT_TEXT[h]}
+                      />
+                    </div>
+                  ) : done ? (
+                    /* CONCLUÍDO segue PROGRESSIVO, e isso é decisão antiga e
+                       deliberada: contagem regressiva de um bloco que já acabou
+                       não quer dizer nada — o que interessa ali é quanto ele
+                       realmente levou. Na coluna fina os dois números empilham
+                       em vez de ficar lado a lado. */
+                    <div className="relative z-10 flex flex-col items-center gap-1.5 rounded bg-card px-0.5">
+                      <Contador label="corrido" value={clock(elapsedMs)} className="text-muted-foreground" />
+                      {overMs > 0 ? (
+                        <Contador label="passou" value={`+${clock(overMs)}`} className="text-destructive-ink" />
+                      ) : null}
+                    </div>
+                  ) : null /* FUTURO: nada. A duração planejada agora mora na
+                              coluna 1, e um "0:00" ou um travessão aqui seria
+                              inventar informação. A coluna nunca fica visualmente
+                              vazia — a trilha e o nó ocupam ela sempre. */}
                 </div>
 
-                {/* Card */}
+                {/* ---- COLUNA 3: o que é o bloco ---------------------------- */}
                 <div
-                  style={{ minHeight: heightOf(it.durationMin) }}
+                  style={{ minHeight: ALTURA_BLOCO }}
                   onClick={() => {
                     if (drag || suppressClickRef.current) return;
                     if (canEdit) setEditing(it);
@@ -678,70 +821,19 @@ export function RundownGrid({
                     flashId === it.id && "animate-pop ring-2 ring-primary",
                   )}
                 >
-                  {resizingThis ? (
-                    <span className="absolute right-2 top-2 z-20 rounded-full bg-foreground px-2.5 py-1 text-sm font-extrabold tabular-nums text-background shadow-lift">
-                      {it.durationMin} min
-                    </span>
-                  ) : null}
-                  {/* Tick de "feito" */}
-                  {canEdit ? (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleDone(it);
-                      }}
-                      aria-label={done ? "Desmarcar feito" : "Marcar feito"}
-                      className={cn(
-                        "my-3 ml-3 grid size-7 shrink-0 place-items-center self-start rounded-full border-2 transition-colors",
-                        done ? "border-success bg-success text-white" : live ? "border-primary text-primary" : "border-border text-transparent",
-                      )}
-                    >
-                      <Check className="size-4" strokeWidth={3.5} />
-                    </button>
-                  ) : (
-                    <span
-                      className={cn(
-                        "my-3 ml-3 grid size-7 shrink-0 place-items-center self-start rounded-full",
-                        done ? "bg-success text-white" : live ? "border-2 border-primary" : "border-2 border-border",
-                      )}
-                    >
-                      {done ? <Check className="size-4" strokeWidth={3.5} /> : null}
-                    </span>
-                  )}
-
-                  {/* Contadores + textos */}
                   <div className="my-2.5 ml-3 min-w-0 flex-1 pr-1">
-                    {live ? (
-                      /* AO VIVO: UM número, contando pra baixo. Antes eram dois
-                         ("corrido" + "passou"), e nenhum deles era o que a régia
-                         fala no ponto nem o que o monitor do palco mostra. Aqui o
-                         rótulo carrega o sinal — "estourou 1:23" lê melhor que
-                         "restam −1:23"; na régia, que não tem espaço pra rótulo,
-                         quem carrega é o menos. */
-                      <Stat
-                        label={restanteMs >= 0 ? "restam" : "estourou"}
-                        value={clock(Math.abs(restanteMs))}
-                        big
-                        className={HEAT_TEXT[h]}
-                      />
-                    ) : done ? (
-                      /* CONCLUÍDO segue progressivo: contagem regressiva de um
-                         bloco que acabou não quer dizer nada — o que interessa
-                         ali é quanto ele realmente levou. */
-                      <div className="flex items-end gap-5">
-                        <Stat label="corrido" value={clock(elapsedMs)} className="text-muted-foreground" />
-                        {overMs > 0 ? (
-                          <Stat label="passou" value={`+${clock(overMs)}`} className="text-destructive-ink" />
-                        ) : null}
-                      </div>
-                    ) : (
-                      <Stat label="duração" value={`${it.durationMin} min`} className="text-muted-foreground" />
-                    )}
-                    <p className={cn("mt-1.5 font-semibold leading-tight", done && "line-through")}>{it.title}</p>
-                    <p className="text-[12px] text-muted-foreground">
-                      {it.kind}
-                      {it.responsible ? ` · ${it.responsible}` : ""}
-                    </p>
+                    <p className={cn("font-semibold leading-tight", done && "line-through")}>{it.title}</p>
+                    {/* O TIPO saiu da linha exibida (ago/2026): na Aliança ele é
+                        quase sempre a MESMA palavra do título ("Louvor"/"Louvor"),
+                        e repetir dobrado gastava a única linha de contexto. O campo
+                        continua no banco e no modal do bloco, onde ele faz o
+                        trabalho dele: dar nome padrão e a COR — que é como o tipo
+                        aparece aqui, no nó da trilha. Sem responsável a linha não
+                        existe: um travessão no celular é ruído (na régia ele fica,
+                        porque célula de grade vazia parece defeito). */}
+                    {it.responsible ? (
+                      <p className="text-[12.5px] text-muted-foreground">{it.responsible}</p>
+                    ) : null}
                     {it.note ? <p className="mt-0.5 text-[13px] text-muted-foreground">{it.note}</p> : null}
                     {it.link ? (
                       <a
@@ -767,31 +859,55 @@ export function RundownGrid({
                     ) : null}
                   </div>
 
-                  {/* Alça de reordenar */}
-                  {canEdit ? (
-                    <button
-                      onPointerDown={(e) => beginReorder(e, it)}
-                      onClick={(e) => e.stopPropagation()}
-                      aria-label="Arrastar pra reordenar"
-                      style={{ touchAction: "none" }}
-                      className="my-2 mr-1 grid w-8 shrink-0 cursor-grab place-items-center self-center rounded-lg text-muted-foreground/60 hover:bg-muted active:cursor-grabbing"
-                    >
-                      <GripVertical className="size-5" />
-                    </button>
-                  ) : null}
+                  {/* ---- TRILHO DIREITO: tique em cima, alça embaixo ---------
+                      O tique mudou de lado. Ele saiu da esquerda porque a leitura
+                      do card começa no título, não num círculo vazio — e porque
+                      a alça de reordenar já morava na direita: os dois controles
+                      do bloco agora ficam no MESMO trilho, um sob o outro, em vez
+                      de um em cada quina. Tique primeiro (é o gesto de todo
+                      domingo), alça depois (é o de montar). */}
+                  <div className="flex w-9 shrink-0 flex-col items-center gap-1 py-2">
+                    {canEdit ? (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleDone(it);
+                        }}
+                        aria-label={done ? "Desmarcar feito" : "Marcar feito"}
+                        className={cn(
+                          "grid size-9 shrink-0 place-items-center rounded-full border-2 transition-colors",
+                          done
+                            ? "border-success bg-success text-white"
+                            : live
+                              ? "border-primary text-primary"
+                              : "border-border text-transparent",
+                        )}
+                      >
+                        <Check className="size-4" strokeWidth={3.5} />
+                      </button>
+                    ) : (
+                      <span
+                        className={cn(
+                          "grid size-9 shrink-0 place-items-center rounded-full",
+                          done ? "bg-success text-white" : live ? "border-2 border-primary" : "border-2 border-border",
+                        )}
+                      >
+                        {done ? <Check className="size-4" strokeWidth={3.5} /> : null}
+                      </span>
+                    )}
 
-                  {/* Alça de redimensionar (borda de baixo) */}
-                  {canEdit ? (
-                    <div
-                      onPointerDown={(e) => beginResize(e, it)}
-                      onClick={(e) => e.stopPropagation()}
-                      style={{ touchAction: "none" }}
-                      className="absolute inset-x-0 bottom-0 flex h-4 cursor-ns-resize items-center justify-center"
-                      aria-label="Arrastar pra mudar a duração"
-                    >
-                      <span className={cn("h-1 w-10 rounded-full", resizingThis ? "bg-primary" : "bg-border")} />
-                    </div>
-                  ) : null}
+                    {canEdit ? (
+                      <button
+                        onPointerDown={(e) => beginReorder(e, it)}
+                        onClick={(e) => e.stopPropagation()}
+                        aria-label="Arrastar pra reordenar"
+                        style={{ touchAction: "none" }}
+                        className="grid size-9 shrink-0 cursor-grab place-items-center rounded-lg text-muted-foreground/60 hover:bg-muted active:cursor-grabbing"
+                      >
+                        <GripVertical className="size-5" />
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
               </li>
             );

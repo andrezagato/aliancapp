@@ -27,6 +27,9 @@ export function ReactiveHeader({
 
   useEffect(() => {
     const onScroll = () => {
+      // Modal aberto trava o body com position:fixed e o scrollY vira 0 — ler
+      // isso aqui desmontaria o cabeçalho atrás do véu.
+      if (document.documentElement.dataset.scrollTravado) return;
       const t = Math.min(1, Math.max(0, window.scrollY) / 70);
       // O título grande some DE VEZ (opacidade 0 em t=0.5) antes do condensado
       // entrar (a partir de t=0.55) — sem os dois títulos sobrepostos.
