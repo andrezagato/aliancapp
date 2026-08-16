@@ -1,28 +1,64 @@
 "use client";
 
-import { useState } from "react";
-import Link from "next/link";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { MailCheck } from "lucide-react";
+import { MailCheck, Hourglass } from "lucide-react";
 import { createClient, supabaseConfigured } from "@/lib/supabase/client";
 import { verificarEmailParaLink } from "@/lib/actions";
 import { Button } from "@/components/ui/button";
 import { SirvoMark } from "@/components/brand/sirvo-mark";
 import { PrimeirosPassosLink } from "@/components/primeiros-passos-link";
+import { PedidoEntradaForm } from "@/components/pedido-entrada-form";
 
 const isDev = process.env.NODE_ENV === "development";
 
 const inputClass =
   "w-full rounded-2xl border border-input bg-card px-4 py-3 text-sm outline-none transition focus-visible:border-primary/40 focus-visible:ring-2 focus-visible:ring-ring";
 
+/**
+ * UMA TELA, UM BOTÃO.
+ *
+ * Antes daqui havia duas chamadas concorrentes — "Receber link de acesso" e, no
+ * rodapé, "É voluntário e ainda não tem acesso? Solicitar entrada" — e a pessoa
+ * tinha que adivinhar em qual dos dois grupos ela estava. Ela não sabe. O app
+ * sabe: `verificarEmailParaLink` responde "ok", "aguardando" ou "nao_encontrado".
+ * Só que ele só era consultado DEPOIS que ela já tinha escolhido.
+ *
+ * Agora quem escolhe é o app: "Continuar" pergunta primeiro e abre UM caminho.
+ */
+type Etapa = "inicio" | "link_enviado" | "em_analise" | "pedir_entrada";
+
+/**
+ * Recados de quem chegou aqui empurrado — pelo link de entrada
+ * (`/auth/entrar/[token]`) ou pelo callback do OAuth. Nenhum é beco sem saída:
+ * todos terminam no campo de e-mail logo abaixo, que resolve.
+ */
+const RECADOS: Record<string, string> = {
+  expirado: "Esse link de acesso já venceu. Informe seu e-mail abaixo que a gente manda um novo.",
+  invalido: "Não reconhecemos esse link. Informe seu e-mail abaixo pra continuar.",
+  falhou: "Não consegui abrir sua sessão por esse link. Toque nele de novo — se não der, informe seu e-mail abaixo.",
+  indisponivel: "Não consegui abrir sua sessão por esse link. Informe seu e-mail abaixo pra continuar.",
+  auth: "Não consegui concluir o login. Tente de novo aqui embaixo.",
+  ja_tem_conta: "Você já tem conta no Sirvo. Informe seu e-mail abaixo que a gente manda o link de acesso.",
+};
+
 export default function EntrarPage() {
   const router = useRouter();
-  const [loading, setLoading] = useState<null | "google" | "magic" | "dev">(null);
+  const [loading, setLoading] = useState<null | "google" | "email" | "dev">(null);
   const [error, setError] = useState<string | null>(null);
   const [email, setEmail] = useState("");
-  const [magicSent, setMagicSent] = useState(false);
-  const [precisaPedir, setPrecisaPedir] = useState(false);
+  const [etapa, setEtapa] = useState<Etapa>("inicio");
+  const [recado, setRecado] = useState<string | null>(null);
   const [devPassword, setDevPassword] = useState("");
+
+  // Lido no cliente de propósito: `useSearchParams` obrigaria esta página a
+  // nascer dentro de um <Suspense> pra não quebrar o build estático, e não vale
+  // esse preço por um recado.
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search);
+    const motivo = p.get("link") ?? p.get("erro");
+    if (motivo) setRecado(RECADOS[motivo] ?? RECADOS.invalido);
+  }, []);
 
   function ensureConfigured() {
     if (!supabaseConfigured) {
@@ -49,38 +85,41 @@ export default function EntrarPage() {
     }
   }
 
-  async function sendMagicLink(e: React.FormEvent) {
+  async function continuar(e: React.FormEvent) {
     e.preventDefault();
     if (!ensureConfigured()) return;
-    if (!email.includes("@")) {
-      setError("Informe um email válido.");
+    const alvo = email.trim();
+    if (!alvo.includes("@")) {
+      setError("Informe um e-mail válido.");
       return;
     }
-    setLoading("magic");
+    setLoading("email");
     setError(null);
-    setPrecisaPedir(false);
+    setRecado(null);
 
-    // Confere ANTES de mandar: sem convite/conta, `signInWithOtp` criaria uma
-    // conta órfã (pendente e sem igreja), que só se destrava à mão em Equipes.
-    const { status } = await verificarEmailParaLink(email);
-    if (status === "aguardando") {
-      setLoading(null);
-      setError("Seu pedido de entrada está em análise. Você recebe um e-mail assim que for aprovado.");
-      return;
-    }
+    // Pergunta ANTES de agir — é isto que dispensa a pessoa de escolher. E é a
+    // mesma checagem que impede `signInWithOtp` de criar conta órfã (pendente e
+    // sem igreja) pra qualquer e-mail digitado.
+    const { status } = await verificarEmailParaLink(alvo);
+
     if (status === "nao_encontrado") {
       setLoading(null);
-      setPrecisaPedir(true);
+      setEtapa("pedir_entrada");   // o pedido acontece AQUI, sem trocar de página
+      return;
+    }
+    if (status === "aguardando") {
+      setLoading(null);
+      setEtapa("em_analise");
       return;
     }
 
     const { error } = await createClient().auth.signInWithOtp({
-      email: email.trim(),
+      email: alvo,
       options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
     });
     setLoading(null);
     if (error) setError(error.message);
-    else setMagicSent(true);
+    else setEtapa("link_enviado");
   }
 
   async function devSignIn(e: React.FormEvent) {
@@ -101,7 +140,12 @@ export default function EntrarPage() {
     router.refresh();
   }
 
-  if (magicSent) {
+  function voltarAoInicio() {
+    setEtapa("inicio");
+    setError(null);
+  }
+
+  if (etapa === "link_enviado") {
     return (
       <main className="mx-auto flex min-h-dvh max-w-[460px] flex-col justify-center px-6 py-10">
         <div className="animate-fade-in flex flex-col items-center gap-4 text-center">
@@ -120,15 +164,50 @@ export default function EntrarPage() {
             <PrimeirosPassosLink />
           </div>
           <button
-            onClick={() => {
-              setMagicSent(false);
-              setError(null);
-            }}
+            onClick={voltarAoInicio}
             className="text-sm text-muted-foreground underline-offset-4 hover:underline"
           >
             Usar outro email
           </button>
         </div>
+      </main>
+    );
+  }
+
+  if (etapa === "em_analise") {
+    // Âmbar, não a caixa vermelha de erro: estar na fila não é um erro dela.
+    return (
+      <main className="mx-auto flex min-h-dvh max-w-[460px] flex-col justify-center px-6 py-10">
+        <div className="animate-fade-in flex flex-col items-center gap-4 text-center">
+          <span className="inline-flex size-16 items-center justify-center rounded-full bg-warning/12 text-warning-ink">
+            <Hourglass className="size-8" />
+          </span>
+          <h1 className="text-3xl">Seu pedido está com a liderança</h1>
+          <p className="text-balance text-muted-foreground">
+            Assim que aprovarem, você recebe um e-mail com um botão que já te coloca dentro do app. Você não
+            precisa pedir de novo.
+          </p>
+          <button
+            onClick={voltarAoInicio}
+            className="text-sm text-muted-foreground underline-offset-4 hover:underline"
+          >
+            Voltar
+          </button>
+        </div>
+      </main>
+    );
+  }
+
+  if (etapa === "pedir_entrada") {
+    return (
+      <main className="mx-auto flex min-h-dvh max-w-[480px] flex-col justify-center px-6 py-10">
+        <div className="animate-fade-in mb-6 rounded-xl bg-accent/10 px-4 py-3 text-center text-sm">
+          <p className="font-semibold">Ainda não temos um convite pra esse e-mail</p>
+          <p className="mt-1 text-muted-foreground">
+            Se você serve na igreja, peça entrada abaixo e a liderança libera seu acesso.
+          </p>
+        </div>
+        <PedidoEntradaForm emailInicial={email.trim()} onVoltar={voltarAoInicio} voltarLabel="Voltar" />
       </main>
     );
   }
@@ -155,7 +234,11 @@ export default function EntrarPage() {
           <span className="h-px flex-1 bg-border" /> ou pelo email <span className="h-px flex-1 bg-border" />
         </div>
 
-        <form onSubmit={sendMagicLink} className="space-y-2">
+        {recado ? (
+          <p className="rounded-xl border border-accent/40 bg-accent/10 px-4 py-3 text-center text-sm">{recado}</p>
+        ) : null}
+
+        <form onSubmit={continuar} className="space-y-2">
           <input
             type="email"
             inputMode="email"
@@ -165,39 +248,17 @@ export default function EntrarPage() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
+          {/* UM botão. O app é que sabe se isso vira link de acesso ou pedido de
+              entrada — perguntar isso pra ela era pedir que adivinhasse. */}
           <Button type="submit" size="lg" className="w-full" disabled={loading !== null}>
-            {loading === "magic" ? "Enviando…" : "Receber link de acesso"}
+            {loading === "email" ? "Continuando…" : "Continuar"}
           </Button>
         </form>
 
         {error ? (
           <p className="rounded-xl bg-destructive/10 px-4 py-3 text-center text-sm text-destructive-ink">{error}</p>
         ) : null}
-
-        {/* Sem convite não criamos conta — mas a pessoa não pode ficar sem saída:
-            o aviso já leva pro caminho certo, que é pedir entrada. */}
-        {precisaPedir ? (
-          <div className="rounded-xl border border-accent/40 bg-accent/10 px-4 py-3 text-center text-sm">
-            <p className="font-semibold">Ainda não temos um convite pra esse e-mail</p>
-            <p className="mt-1 text-muted-foreground">
-              Se você serve na igreja, peça entrada aqui e a liderança libera seu acesso.
-            </p>
-            <Link
-              href="/cadastro"
-              className="press-sm mt-3 inline-flex h-11 w-full items-center justify-center rounded-[14px] bg-primary text-[15px] font-bold text-primary-foreground"
-            >
-              Solicitar entrada
-            </Link>
-          </div>
-        ) : null}
       </div>
-
-      <p className="mt-8 text-center text-sm text-muted-foreground">
-        É voluntário e ainda não tem acesso?{" "}
-        <Link href="/cadastro" className="font-semibold text-primary underline-offset-4 hover:underline">
-          Solicitar entrada
-        </Link>
-      </p>
 
       {isDev ? (
         <details className="mt-10 rounded-2xl border border-dashed border-border p-4 text-sm">
