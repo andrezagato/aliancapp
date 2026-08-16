@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -29,8 +29,10 @@ import {
   marcarBlocoFeito,
   reordenarCronograma,
   removerBlocoCronograma,
+  ajustarDuracaoBloco,
 } from "@/lib/actions";
 import { BlocoModal } from "@/components/rundown-grid";
+import { DuracaoPopover } from "@/components/rundown-duracao-popover";
 import {
   StageMessageButton,
   StageMessageSheet,
@@ -76,6 +78,13 @@ import { MenuCulto } from "@/components/rundown-menu-culto";
  * o que se faz com o culto rolando. Reordenar, criar e apagar bloco continua na
  * aba Roteiro: no meio do culto ninguém reestrutura, e um arraste acidental num
  * monitor de sala de controle sairia caro.
+ *
+ * A exceção é a DURAÇÃO. Esticar ou cortar minutos com o culto rolando não é
+ * montar roteiro, é conduzir: é a decisão que a régia toma olhando o relógio
+ * ("estamos 7 min atrasados, tira 5 do avisos"), e é dela que sai o desvio que
+ * esta tela inteira existe pra mostrar. Mandar alguém pegar o celular pra fazer
+ * isso no meio do culto seria pedir pra não fazer. Por isso a célula "Dur." abre
+ * o mesmo popover do celular — e só ela.
  *
  * TUDO É DIMENSIONADO EM `em`, e o `font-size` da raiz é o que os botões A−/A+
  * mudam. É o que permite adaptar a régia à distância de leitura da sala sem que
@@ -296,6 +305,10 @@ function Linha({
   onDescer,
   onEditar,
   refLinha,
+  duracaoAberta,
+  onAbrirDuracao,
+  onFecharDuracao,
+  onMudarDuracao,
 }: {
   row: RundownRow;
   idx: number;
@@ -309,6 +322,10 @@ function Linha({
   onDescer: () => void;
   onEditar: () => void;
   refLinha: (el: HTMLElement | null) => void;
+  duracaoAberta: boolean;
+  onAbrirDuracao: () => void;
+  onFecharDuracao: () => void;
+  onMudarDuracao: (min: number) => void;
 }) {
   const { it, startMs, endMs, durMs, status } = row;
   const live = status === "live";
@@ -363,10 +380,35 @@ function Linha({
       {/* Duração planejada; ao vivo, a CONTAGEM REGRESSIVA ocupa o lugar e ganha
           a cor. Aqui não cabe rótulo, então o sinal de menos é quem diz que o
           bloco estourou — e é o mesmo número que o pregador está lendo no monitor,
-          que a ponte sempre mandou regressivo. */}
-      <span className={cn("tabular-nums", live && HEAT_TEXT[heat])}>
-        {live ? contagemRegressiva(durMs - decorridoMs) : `${it.durationMin}m`}
-      </span>
+          que a ponte sempre mandou regressivo.
+          A célula ABRE O POPOVER de duração pra quem pode editar, inclusive ao
+          vivo: é o gesto do "estamos atrasados, corta 5 do próximo". Ao vivo o
+          gatilho continua mostrando a regressiva (mudar o que a sala lê de longe
+          seria pior que o toque escondido), e o popover diz em letra grande a
+          duração planejada que está sendo mexida.
+          Abre pra BAIXO: a grade rola dentro de uma caixa e um popover pra cima
+          na primeira linha seria cortado pela borda do scroller. */}
+      {canEdit ? (
+        <DuracaoPopover
+          em
+          abrirPara="baixo"
+          valor={it.durationMin}
+          rotuloBloco={it.title}
+          aberto={duracaoAberta}
+          onAbrir={onAbrirDuracao}
+          onFechar={onFecharDuracao}
+          onMudar={onMudarDuracao}
+          classeGatilho={cn(
+            "rounded-[0.3em] px-[0.2em] tabular-nums hover:bg-muted",
+            live && HEAT_TEXT[heat],
+          )}
+          gatilho={live ? contagemRegressiva(durMs - decorridoMs) : `${it.durationMin}m`}
+        />
+      ) : (
+        <span className={cn("tabular-nums", live && HEAT_TEXT[heat])}>
+          {live ? contagemRegressiva(durMs - decorridoMs) : `${it.durationMin}m`}
+        </span>
+      )}
 
       {/* Filete: separa o grupo QUANDO (horário/duração) do grupo O QUÊ (bloco/
           responsável/observação). Célula vazia — precisa de `self-stretch`
@@ -569,12 +611,29 @@ export function RundownColumns({
   const router = useRouter();
   const { showToast } = useToast();
   const [ocupado, startTx] = useTransition();
+  // Transição SEPARADA: o `ocupado` de cima desabilita ↑ ↓ e o lápis de todas as
+  // linhas. Um save de duração não pode apagar os controles da régia.
+  const [, startDurTx] = useTransition();
   const [emCarencia, armarCarencia] = useCarencia();
   const [iniciando, setIniciando] = useState(false);
   const [fonte, setFonte] = useState(FONTE_PADRAO);
   const [tema, alternarTema] = useControlTheme();
   const [editando, setEditando] = useState<RundownItem | "novo" | null>(null);
   const [abrirMsg, setAbrirMsg] = useState(false);
+
+  // Popover de duração (o mesmo componente do celular). O `id` diz qual linha
+  // está aberta; o valor otimista existe porque a régia NÃO espelha `items` em
+  // estado local — sem ele, o número mudaria e a projeção mentiria por meio
+  // segundo, que é justamente o que esta tela não pode fazer.
+  const [duracaoAberta, setDuracaoAberta] = useState<string | null>(null);
+  // Palpites por bloco. REF é a fonte da verdade (o listener de "tocar fora"
+  // carrega a closure de quando o popover abriu); o estado existe só pra
+  // re-renderizar. Um MAPA e não um slot só: mexer no bloco B não pode apagar o
+  // palpite do A, nem o caminho de erro trocar os pés.
+  const durPendenteRef = useRef(new Map<string, number>());
+  const [durVersao, setDurVersao] = useState(0);
+  const salvarDurRef = useRef<number | null>(null);
+  const filaRef = useRef<Promise<unknown>>(Promise.resolve());
 
   // O tamanho da letra é do APARELHO, não da conta: depende da distância entre a
   // mesa e o monitor daquela sala — mesma lógica da URL do stream.
@@ -600,10 +659,31 @@ export function RundownColumns({
   // Com um modal aberto a atualização espera: um refresh no meio da digitação
   // remontaria a grade debaixo da pessoa. Fora isso a régia não espelha `items`
   // em estado local, então pode atualizar à vontade.
-  useRundownRealtime({ eventId, ocupado: editando !== null });
+  // O popover entra na conta: um refresh entre dois toques traria o `items`
+  // antigo e o número pularia pra trás debaixo do dedo.
+  useRundownRealtime({ eventId, ocupado: editando !== null || duracaoAberta !== null });
+
+  // A grade inteira — Início→Fim, regressiva, "Atrasado 7 min" — sai daqui.
+  // `durVersao` está na dependência só pra este cálculo refazer quando o mapa
+  // (que é ref) muda.
+  const itensAjustados = useMemo(() => {
+    const p = durPendenteRef.current;
+    if (p.size === 0) return items;
+    return items.map((it) => (p.has(it.id) ? { ...it, durationMin: p.get(it.id)! } : it));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, durVersao]);
+
+  // Solta o palpite assim que o servidor devolve o mesmo número — senão uma
+  // mudança feita por outra pessoa ficaria presa atrás do nosso valor pra sempre.
+  useEffect(() => {
+    const p = durPendenteRef.current;
+    let mudou = false;
+    for (const it of items) if (p.get(it.id) === it.durationMin) (p.delete(it.id), (mudou = true));
+    if (mudou) setDurVersao((v) => v + 1);
+  }, [items]);
 
   const { now, rows, totalMin, startedMs, endedMs, finishMs, desvioMs, corDoBloco } =
-    useRundownTiming({ items, kinds, startsAt, started: startedAt, ended: endedAt });
+    useRundownTiming({ items: itensAjustados, kinds, startsAt, started: startedAt, ended: endedAt });
 
   // Bloco ao vivo sempre à vista, MESMA regra do celular: centraliza quando o
   // bloco TROCA, não a cada segundo — senão brigaria com quem rolou a grade pra
@@ -612,8 +692,13 @@ export function RundownColumns({
   const blocoAtivoId = rows.find((r) => r.status === "live")?.it.id ?? null;
   const editandoRef = useRef(editando);
   editandoRef.current = editando;
+  // Popover de duração também trava a centralização: com a linha ativa presa
+  // no popover aberto, um scrollIntoView no meio do ajuste tiraria a âncora de
+  // debaixo do dedo.
+  const duracaoAbertaRef = useRef(duracaoAberta);
+  duracaoAbertaRef.current = duracaoAberta;
   useEffect(() => {
-    if (!blocoAtivoId || editandoRef.current) return;
+    if (!blocoAtivoId || editandoRef.current || duracaoAbertaRef.current) return;
     linhaRefs.current.get(blocoAtivoId)?.scrollIntoView({ block: "center", behavior: "smooth" });
   }, [blocoAtivoId]);
 
@@ -687,6 +772,56 @@ export function RundownColumns({
     [proxima[idx], proxima[destino]] = [proxima[destino], proxima[idx]];
     agir(() => reordenarCronograma(eventId, proxima.map((x) => x.id)));
   };
+
+  const salvarDuracao = (id: string, min: number) => {
+    salvarDurRef.current = null;
+    const proxima = filaRef.current.then(async () => {
+      const r = await ajustarDuracaoBloco(id, eventId, min);
+      if (!r.ok) {
+        durPendenteRef.current.delete(id);
+        setDurVersao((v) => v + 1);
+        showToast(r.error);
+      }
+    });
+    filaRef.current = proxima.catch(() => {});
+    startDurTx(async () => {
+      await proxima.catch(() => {});
+    });
+  };
+
+  const mudarDuracao = (id: string, min: number) => {
+    durPendenteRef.current.set(id, min);
+    setDurVersao((v) => v + 1);
+    if (salvarDurRef.current) window.clearTimeout(salvarDurRef.current);
+    salvarDurRef.current = window.setTimeout(() => salvarDuracao(id, min), 600);
+  };
+
+  const fecharDuracao = () => {
+    const id = duracaoAberta;
+    if (salvarDurRef.current) {
+      window.clearTimeout(salvarDurRef.current);
+      salvarDurRef.current = null;
+      const min = id ? durPendenteRef.current.get(id) : undefined;
+      if (id && min != null) salvarDuracao(id, min);
+    }
+    // Engole o PRÓXIMO clique: o painel de 15em cobre as setas ↑ ↓ da linha
+    // vizinha, e dispensar o popover em cima de uma delas reordenaria o culto
+    // no ar — exatamente o que esta tela existe pra impedir.
+    const engolir = (ev: MouseEvent) => {
+      ev.stopPropagation();
+      ev.preventDefault();
+    };
+    document.addEventListener("click", engolir, { capture: true, once: true });
+    window.setTimeout(() => document.removeEventListener("click", engolir, true), 400);
+    setDuracaoAberta(null);
+  };
+
+  useEffect(
+    () => () => {
+      if (salvarDurRef.current) window.clearTimeout(salvarDurRef.current);
+    },
+    [],
+  );
 
   return (
     <div className="flex min-h-0 min-w-[52em] flex-col" style={{ fontSize: `${fonte}px` }}>
@@ -910,6 +1045,10 @@ export function RundownColumns({
                 if (el) linhaRefs.current.set(row.it.id, el);
                 else linhaRefs.current.delete(row.it.id);
               }}
+              duracaoAberta={duracaoAberta === row.it.id}
+              onAbrirDuracao={() => setDuracaoAberta(row.it.id)}
+              onFecharDuracao={fecharDuracao}
+              onMudarDuracao={(min) => mudarDuracao(row.it.id, min)}
             />
           ))}
         </div>
