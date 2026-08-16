@@ -9,7 +9,8 @@ import { cn } from "@/lib/utils";
  * Pull-to-refresh: puxar no topo (window.scrollY <= 0) revela a "chama" que
  * gira conforme a distância; soltar > ~48px dispara `router.refresh()`. Ignora
  * gestos que começam num card com swipe ([data-swipe]) — quem manda ali é o
- * arrasto horizontal do próprio card.
+ * arrasto horizontal do próprio card. Ignora também gestos vindos de dentro de
+ * um modal ([data-modal]) — o portal engana a propagação do React.
  */
 export function PullToRefresh({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -20,8 +21,15 @@ export function PullToRefresh({ children }: { children: React.ReactNode }) {
 
   const onDown = (e: React.PointerEvent) => {
     if (refreshing) return;
-    const onCard = (e.target as Element)?.closest?.("[data-swipe]");
-    if (window.scrollY <= 0 && !onCard) start.current = e.clientY;
+    const alvo = e.target as Element | null;
+    const noCard = alvo?.closest?.("[data-swipe]");
+    // O Modal renderiza por portal no <body>, mas o React propaga evento pela
+    // árvore de COMPONENTES: sem este guarda, arrastar dentro de um sheet aberto
+    // de dentro do HomeShell (o dia do calendário do admin, o TeamCalendar)
+    // chegava aqui e acendia o "puxe para atualizar" da página por baixo —
+    // inclusive disparando router.refresh() ao soltar.
+    const noModal = alvo?.closest?.("[data-modal]");
+    if (window.scrollY <= 0 && !noCard && !noModal) start.current = e.clientY;
   };
   const onMove = (e: React.PointerEvent) => {
     if (start.current == null) return;
