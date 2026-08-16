@@ -14,6 +14,12 @@
         "value": "cubic-bezier(.34, 1.56, .64, 1)",
         "createdAt": "2026-07-31T12:12:07.789Z",
         "reason": "Curva do emoji-pop, a mola da mesma celebração (anim-emoji). Mesmo caso do spring-in: DESIGN.md § Motion define mola com overshoot como linguagem do app. Confirmado pelo André 31/jul."
+      },
+      {
+        "rule": "design-system-font-size",
+        "value": "26px",
+        "createdAt": "2026-08-16T21:23:22.130Z",
+        "reason": "Andre confirmou: 26px e o degrau Display do DESIGN.md (26-29), usado no titulo grande do cabecalho reativo desde o redesenho Aconchego (2268a2f, 14/jul)"
       }
     ]
   }

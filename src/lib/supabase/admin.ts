@@ -6,14 +6,20 @@ import type { Database } from "./database.types";
 /**
  * Cliente de SERVICE-ROLE: ignora RLS e não tem `auth.uid()`.
  *
- * Existe por causa da cobrança agendada (migration 0045): o cron roda sem
- * ninguém logado, então nada do caminho normal serve — as RPCs de aviso exigem
- * `is_active()` e um `auth.uid()`, e a RLS não deixaria ler a escala nem as subs
- * de push de outra pessoa.
+ * Nasceu pra cobrança agendada (migration 0045): o cron roda sem ninguém
+ * logado, então nada do caminho normal serve. Depois virou também a ferramenta
+ * do ONBOARDING PRÉ-LOGIN — conferir e-mail, achar convite por token, checar
+ * pedido duplicado — porque quem ainda não entrou não tem `auth.uid()` e a RLS
+ * de `invites`/`join_requests` só responde pra admin e líder.
  *
- * Só pode ser usado por rota de cron/webhook, NUNCA a partir de uma ação do
- * usuário: aqui não existe dono, então toda checagem de permissão que a RLS
- * fazia de graça passa a ser responsabilidade de quem chama.
+ * A regra não é "só cron": é que aqui NÃO EXISTE DONO. Toda checagem de
+ * permissão que a RLS fazia de graça passa a ser responsabilidade de quem
+ * chama — e quem chama tem que decidir, por escrito, o que fazer quando este
+ * cliente é `null`. As duas respostas certas convivem no código de propósito:
+ *   • `verificarEmailParaLink` LIBERA (fail-open): trancar a igreja inteira por
+ *     causa de uma env ausente é pior que a conta órfã, que o líder destrava.
+ *   • `/auth/entrar/[token]` FECHA (fail-closed): é a rota que abre sessão sem
+ *     senha; sem conferir o convite ela aceitaria qualquer token chutado.
  */
 export function createAdminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;

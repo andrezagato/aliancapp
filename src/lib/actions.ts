@@ -27,7 +27,10 @@ import { logActivity } from "@/lib/activity";
 import { notify, notifyMany, teamLeaderIds, avisoPrefs, quemAceitaEmail } from "@/lib/notify";
 import { comVia, registrarEntrega } from "@/lib/delivery";
 import { sendPushToSubs } from "@/lib/push";
-import { sendEmail, conviteEmail, escaladoEmail, lembreteEmail, siteUrl } from "@/lib/email";
+import {
+  sendEmail, conviteEmail, escaladoEmail, lembreteEmail, pedidoRecebidoEmail,
+  siteUrl, linkDeEntrada, DIAS_LINK_ENTRADA,
+} from "@/lib/email";
 import { churchDateISO, fmtEventWhen } from "@/lib/format";
 import type { DeliveryChannel } from "@/lib/supabase/database.types";
 import type {
@@ -42,6 +45,10 @@ import type {
 
 const ok: ActionResult = { ok: true };
 const fail = (error: string): ActionResult => ({ ok: false, error });
+
+/** `ilike` trata % e _ como curinga: e-mail vindo de formulário público não pode
+ *  virar padrão de busca. Escapa antes de comparar. */
+const comoTexto = (e: string) => e.replace(/([\\%_])/g, "\\$1");
 
 /**
  * `via` chega do `?via=` da URL — entrada de usuário. Um valor fora do enum
@@ -128,19 +135,38 @@ export async function verificarEmailParaLink(emailBruto: string): Promise<{ stat
   if (!email.includes("@")) return { status: "nao_encontrado" };
 
   const admin = createAdminClient();
-  // Sem service-role configurada, libera: travar o login de todo mundo por causa
-  // de uma env ausente seria pior que a conta órfã que estamos evitando.
-  if (!admin) return { status: "ok" };
+  // Sem service-role, libera: travar o login de todo mundo por causa de uma env
+  // ausente seria pior que a conta órfã que estamos evitando (o líder destrava
+  // em Equipes com um toque). Mas agora custa mais caro do que antes — neste
+  // estado `nao_encontrado` nunca acontece, ou seja o formulário de pedido de
+  // entrada fica INALCANÇÁVEL e todo mundo cai em /aguardando. Por isso o
+  // alarme: em produção isto tem que aparecer no log da Vercel.
+  if (!admin) {
+    console.error("[onboarding] SUPABASE_SERVICE_ROLE_KEY ausente — a tela de entrar está liberando todo e-mail.");
+    return { status: "ok" };
+  }
 
   const [{ data: perfis }, { data: convites }, { data: pedidos }] = await Promise.all([
-    admin.from("profiles").select("id").ilike("email", email).limit(1),
-    admin.from("invites").select("id").ilike("email", email).eq("status", "pendente").limit(1),
-    admin.from("join_requests").select("id").ilike("email", email).eq("status", "pendente").limit(1),
+    admin.from("profiles").select("id").ilike("email", comoTexto(email)).limit(1),
+    admin.from("invites").select("id").ilike("email", comoTexto(email)).eq("status", "pendente").limit(1),
+    // `neq('recusado')` em vez de `eq('pendente')`: precisamos enxergar também os
+    // APROVADOS (ver o bloco abaixo). Recusado nunca vale.
+    admin.from("join_requests").select("status").ilike("email", comoTexto(email)).neq("status", "recusado"),
   ]);
 
   // Já tem conta (inclusive conta órfã antiga) ou tem convite esperando: entra.
   if ((perfis?.length ?? 0) > 0 || (convites?.length ?? 0) > 0) return { status: "ok" };
-  // Pediu entrada e ninguém aprovou ainda: esperar é o certo, criar conta não.
+
+  // APROVADO É PERMISSÃO, NÃO FILA — e esta linha vem ANTES do "aguardando" de
+  // propósito. Era aqui que morava o pior bug do onboarding: quem tinha um
+  // pedido aprovado E um pedido antigo ainda pendente (o duplicado, que existia
+  // porque a aprovação não dava acesso de verdade) ouvia "seu pedido está em
+  // análise" — o app mandava esperar uma coisa que já tinha acontecido. Se o
+  // convite tiver sido cancelado no meio, ela ainda cai em /aguardando, mas aí
+  // como perfil na fila do líder, que é um toque, e não uma porta fechada.
+  if (pedidos?.some((p) => p.status === "aprovado")) return { status: "ok" };
+
+  // Pediu entrada e ninguém resolveu ainda: esperar é o certo, criar conta não.
   if ((pedidos?.length ?? 0) > 0) return { status: "aguardando" };
   return { status: "nao_encontrado" };
 }
@@ -149,15 +175,50 @@ export async function verificarEmailParaLink(emailBruto: string): Promise<{ stat
 // Passa pelo server (mesma origem) em vez de fetch direto do navegador ao
 // Supabase — evita o "Load failed" do Safari e dá erro claro.
 // =============================================================================
+/**
+ * Resultado próprio, e não o `ActionResult` genérico, porque a tela precisa dizer
+ * três coisas diferentes: "recebemos", "já tínhamos recebido" e "seu acesso já
+ * está liberado, procura o e-mail". Dizer "solicitação enviada!" pra quem já foi
+ * aprovado é como o app mentiu pra Rayane.
+ */
+export type SolicitarEntradaResult =
+  | { ok: true; estado: "novo" | "ja_pendente" | "ja_aprovado" }
+  | { ok: false; error: string };
+
 export async function solicitarEntrada(input: {
   fullName: string;
   email: string;
   phone: string;
   message: string;
   desiredTeamId?: string | null;
-}): Promise<ActionResult> {
+}): Promise<SolicitarEntradaResult> {
   const nome = input.fullName.trim();
-  if (nome.length < 2) return fail("Informe seu nome completo.");
+  // Atenção: aqui NÃO dá pra usar o helper `fail()` — ele devolve `ActionResult`,
+  // que não encaixa neste tipo (o ramo `{ok:true}` dele não tem `estado`).
+  if (nome.length < 2) return { ok: false, error: "Informe seu nome completo." };
+  const email = input.email.trim().toLowerCase();
+
+  // PEDIR DUAS VEZES NÃO PODE VIRAR DOIS PEDIDOS.
+  // A RPC `solicitar_entrada` (migration 0040, linha 52) insere sem conferir
+  // nada, então a guarda mora aqui — de propósito, pra esta tarefa não precisar
+  // encostar no banco de produção. O pedido sobrando não era só ruído na fila do
+  // líder: um pedido 'pendente' esquecido fazia o login responder "seu pedido
+  // está em análise" pra quem JÁ tinha sido aprovado no outro.
+  // Precisa de service-role: a RLS `join_read` (0040) só responde pra admin e
+  // líder, e quem está pedindo entrada não está logado.
+  const admin = createAdminClient();
+  if (admin && email.includes("@")) {
+    const { data: jaTem } = await admin
+      .from("join_requests")
+      .select("status")
+      .ilike("email", comoTexto(email))
+      .neq("status", "recusado");
+    if (jaTem?.some((j) => j.status === "aprovado")) return { ok: true, estado: "ja_aprovado" };
+    if ((jaTem?.length ?? 0) > 0) return { ok: true, estado: "ja_pendente" };
+  } else if (!admin) {
+    console.error("[onboarding] sem service-role — guarda de pedido duplicado desligada.");
+  }
+
   const supabase = await createClient();
   const { error } = await supabase.rpc("solicitar_entrada", {
     p_full_name: nome,
@@ -166,8 +227,15 @@ export async function solicitarEntrada(input: {
     p_message: input.message.trim(),
     p_desired_team_id: input.desiredTeamId || undefined,
   });
-  if (error) return fail(error.message);
-  return ok;
+  if (error) return { ok: false, error: error.message };
+
+  // Recibo por e-mail (best-effort, igual ao resto): a tela de confirmação some
+  // quando ela fecha a aba, e sem nada na caixa de entrada o único jeito de
+  // conferir se mandou é mandar de novo. Era o que faltava para fechar o ciclo.
+  const recibo = pedidoRecebidoEmail({ nome });
+  await sendEmail({ to: email, subject: recibo.subject, html: recibo.html });
+
+  return { ok: true, estado: "novo" };
 }
 
 /** Lista pública de equipes (RLS normal exige is_active()/is_admin() — não serve
@@ -2132,6 +2200,11 @@ export async function responderInteresse(
 // =============================================================================
 // ADMIN: convites e aprovações (onboarding de 2 portas)
 // =============================================================================
+/** Prazo do link que vai no e-mail. Ver DIAS_LINK_ENTRADA em `email.ts`. */
+function prazoDoConvite(): string {
+  return new Date(Date.now() + DIAS_LINK_ENTRADA * 86_400_000).toISOString();
+}
+
 export async function criarConvite(input: CriarConviteInput): Promise<ActionResult> {
   const session = await getSession();
   if (!session) return fail("Sessão expirada.");
@@ -2143,12 +2216,38 @@ export async function criarConvite(input: CriarConviteInput): Promise<ActionResu
   const supabase = await createClient();
   const { data: existing } = await supabase
     .from("invites")
-    .select("id")
+    .select("id, token")
     .eq("church_id", session.profile.church_id)
-    .ilike("email", email)
+    // `comoTexto` aqui é cinto e suspensório: este e-mail vem de admin digitando
+    // no próprio formulário, não de entrada anônima. Mas esta busca agora decide
+    // QUAL token vai por e-mail, e uma comparação que aceita curinga nesse papel
+    // é armadilha esperando mudança de contexto.
+    .ilike("email", comoTexto(email))
     .eq("status", "pendente")
     .maybeSingle();
-  if (existing) return fail("Já existe um convite pendente para esse email.");
+  // Convite pendente que já existe deixa de ser erro e passa a ser REENVIO: com
+  // o link ganhando prazo (7 dias), recusar aqui deixaria o admin sem nenhuma
+  // forma de renovar — só cancelar e recriar, que perde as equipes já marcadas.
+  if (existing) {
+    const { data: renovado } = await supabase
+      .from("invites")
+      .update({ expires_at: prazoDoConvite() })
+      .eq("id", existing.id)
+      .select("token")
+      .single();
+    if (renovado?.token) {
+      const ehAdminR = input.systemRole === "admin";
+      const reenvio = conviteEmail({
+        nome: input.fullName.trim(),
+        href: ehAdminR ? `${siteUrl()}/entrar` : linkDeEntrada(renovado.token),
+        convidado: true,
+        semLinkDireto: ehAdminR,
+      });
+      await sendEmail({ to: email, subject: reenvio.subject, html: reenvio.html });
+    }
+    revalidatePath("/equipes");
+    return ok;
+  }
 
   const { data: inv, error } = await supabase
     .from("invites")
@@ -2159,8 +2258,13 @@ export async function criarConvite(input: CriarConviteInput): Promise<ActionResu
       phone: input.phone?.trim() || null,
       system_role: input.systemRole,
       created_by: session.userId,
+      // A coluna existia desde a 0001 e nunca tinha sido preenchida. Nada no
+      // banco lê ela (handle_new_user e reconciliar_onboarding olham só o
+      // `status`), então preencher não muda comportamento nenhum — quem confere
+      // é a rota /auth/entrar/[token], e só ela.
+      expires_at: prazoDoConvite(),
     })
-    .select("id")
+    .select("id, token")
     .single();
   if (error || !inv) return fail(error?.message || "Não consegui criar o convite.");
 
@@ -2172,11 +2276,17 @@ export async function criarConvite(input: CriarConviteInput): Promise<ActionResu
     if (itErr) return fail(itErr.message);
   }
 
-  // E-mail de convite (best-effort) — resolve o "convite não avisa ninguém":
-  // a pessoa ainda não é usuária, então o sino não alcança; o e-mail chega sozinho.
+  // Convite de ADMIN não leva o link que entra: ele vale 7 dias e abre quantas
+  // vezes quiser, então um e-mail encaminhado por engano viraria uma conta de
+  // administrador da igreja. Pro admin, o e-mail continua levando à tela de
+  // login — o que exige a caixa de entrada dele. Voluntário e líder ganham o
+  // link direto, que é onde estava a dor.
+  const ehAdmin = input.systemRole === "admin";
   const convite = conviteEmail({
     nome: input.fullName.trim(),
-    href: `${siteUrl()}/entrar`,
+    href: ehAdmin ? `${siteUrl()}/entrar` : linkDeEntrada(inv.token),
+    convidado: true,
+    semLinkDireto: ehAdmin,
   });
   await sendEmail({ to: email, subject: convite.subject, html: convite.html });
 
@@ -2214,14 +2324,27 @@ export async function aprovarJoinRequest(joinId: string, teams: InviteTeamInput[
   if (!jr.email) return fail("Essa solicitação não tem email — não dá pra casar no login.");
 
   const email = jr.email.trim().toLowerCase();
+  const prazo = prazoDoConvite();
+  // `.order().limit(1)` antes do `.maybeSingle()`: essa busca decide qual token
+  // vai no e-mail, e `.maybeSingle()` sozinho DÁ ERRO se houver dois convites
+  // pendentes do mesmo e-mail.
   const { data: existing } = await supabase
     .from("invites")
-    .select("id")
-    .ilike("email", email)
+    .select("id, token")
+    .ilike("email", comoTexto(email))
     .eq("status", "pendente")
+    .order("created_at", { ascending: false })
+    .limit(1)
     .maybeSingle();
+
   let inviteId = existing?.id ?? null;
-  if (!inviteId) {
+  let inviteToken = existing?.token ?? null;
+
+  if (inviteId) {
+    // Convite reaproveitado: renova o prazo, senão o link que estamos mandando
+    // AGORA já nasceria vencido (ou com `expires_at` nulo de antes desta mudança).
+    await supabase.from("invites").update({ expires_at: prazo }).eq("id", inviteId);
+  } else {
     const { data: inv, error } = await supabase
       .from("invites")
       .insert({
@@ -2229,11 +2352,13 @@ export async function aprovarJoinRequest(joinId: string, teams: InviteTeamInput[
         email,
         full_name: jr.full_name,
         created_by: session.userId,
+        expires_at: prazo,
       })
-      .select("id")
+      .select("id, token")
       .single();
     if (error || !inv) return fail(error?.message || "Não consegui criar o convite.");
     inviteId = inv.id;
+    inviteToken = inv.token;
   }
 
   const picked = teams.filter((t) => t.teamId && (session.role === "admin" || canManageTeam(session, t.teamId)));
@@ -2245,11 +2370,16 @@ export async function aprovarJoinRequest(joinId: string, teams: InviteTeamInput[
 
   await supabase.from("join_requests").update({ status: "aprovado", resolved_by: session.userId }).eq("id", joinId);
 
-  // E-mail de convite (best-effort) — mesmo motivo do convite direto
-  // (criarConvite): a pessoa ainda não é usuária, o sino não alcança, só o
-  // e-mail chega sozinho. Faltava aqui — quem pedia entrada pelo formulário e
-  // era aprovado não recebia AVISO NENHUM de que podia entrar.
-  const convite = conviteEmail({ nome: jr.full_name, href: `${siteUrl()}/entrar` });
+  // UM e-mail, não dois. Antes daqui o botão levava a `/entrar`: a pessoa tinha
+  // que digitar o e-mail de novo e esperar um SEGUNDO e-mail pra passar. A
+  // Rayane foi aprovada 11/ago 21:19 e abriu OUTRO pedido de entrada às 22:03 —
+  // 44 min depois de já estar aprovada — porque aprovar dava dever de casa, não
+  // acesso. Agora o botão do e-mail já abre a sessão.
+  //
+  // O link só existe DEPOIS do convite: quem ativa o perfil no primeiro acesso é
+  // o trigger handle_new_user, procurando um convite 'pendente' com este e-mail.
+  if (!inviteToken) return fail("Não consegui gerar o link de acesso do convite.");
+  const convite = conviteEmail({ nome: jr.full_name, href: linkDeEntrada(inviteToken) });
   await sendEmail({ to: email, subject: convite.subject, html: convite.html });
 
   revalidatePath("/equipes");
