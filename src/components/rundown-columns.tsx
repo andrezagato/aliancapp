@@ -678,7 +678,12 @@ export function RundownColumns({
   useEffect(() => {
     const p = durPendenteRef.current;
     let mudou = false;
-    for (const it of items) if (p.get(it.id) === it.durationMin) (p.delete(it.id), (mudou = true));
+    for (const it of items) {
+      if (p.get(it.id) === it.durationMin) {
+        p.delete(it.id);
+        mudou = true;
+      }
+    }
     if (mudou) setDurVersao((v) => v + 1);
   }, [items]);
 
