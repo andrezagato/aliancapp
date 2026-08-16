@@ -8,7 +8,6 @@ import {
   Cake,
   UserPlus,
   Clock,
-  CheckCircle2,
   CalendarPlus,
 } from "lucide-react";
 import { HomeShell } from "@/components/app-shell/home-shell";
@@ -17,7 +16,6 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { STATUS_META } from "@/lib/status";
 import { TeamDot } from "@/components/coverage-badge";
-import { EventPiesCard } from "@/components/event-pies-card";
 import { AbrirEscala } from "@/components/event/abrir-escala";
 import { AssignmentResponse } from "@/components/assignment-response";
 import { getSession } from "@/lib/auth";
@@ -40,10 +38,8 @@ import {
   listTeams,
   listTeamsWithPositions,
   listEventsInRange,
-  listUpcomingEvents,
   listUnconfirmedForEvent,
   type MyAssignment,
-  type EventListItem,
   type MyResponsibleEvent,
   type SwapInboxItem,
   type MyInterest,
@@ -526,10 +522,9 @@ async function AdminSection({
     new Date(Date.UTC(y, m - 1, 1)),
   );
 
-  const [home, monthEvents, upcoming, eventRequests] = await Promise.all([
+  const [home, monthEvents, eventRequests] = await Promise.all([
     getAdminHome(session),
     listEventsInRange(session, fromIso, toIso),
-    listUpcomingEvents(session, 8),
     listPendingEventRequests(),
   ]);
   const eventDayISO: Record<string, string> = Object.fromEntries(
@@ -596,34 +591,12 @@ async function AdminSection({
       <SwapInbox items={swaps} />
       <ResponsibleConfirm events={respEvents} />
 
-      {/* Próximos eventos com o responsável de cada um */}
-      <AdminUpcomingList events={upcoming} />
+      {/* A lista de próximos eventos saiu daqui (ago/2026). Ela repetia, em
+          forma de cards altos, o que o calendário logo acima já diz pela cor —
+          e o calendário é por onde quase todo mundo entra. Um dado só, dito
+          duas vezes, custa meia tela de rolagem. A lista completa continua
+          existindo em /escalas, que é a tela dela. */}
     </>
-  );
-}
-
-function AdminUpcomingList({ events }: { events: EventListItem[] }) {
-  if (events.length === 0) {
-    return (
-      <Card className="border-dashed">
-        <CardContent className="flex flex-col items-center gap-2 px-6 py-8 text-center">
-          <CheckCircle2 className="size-8 text-success-ink" />
-          <p className="max-w-xs text-balance text-sm text-muted-foreground">
-            Nenhum evento à frente. Que tal criar o próximo culto?
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
-  return (
-    <section>
-      <h3 className="mb-2 px-1 text-base font-semibold">Próximos eventos</h3>
-      <div className="space-y-3">
-        {events.map((ev) => (
-          <EventPiesCard key={ev.id} ev={ev} />
-        ))}
-      </div>
-    </section>
   );
 }
 
