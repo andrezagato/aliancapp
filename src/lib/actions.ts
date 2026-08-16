@@ -2214,7 +2214,11 @@ export async function criarConvite(input: CriarConviteInput): Promise<ActionResu
     .from("invites")
     .select("id, token")
     .eq("church_id", session.profile.church_id)
-    .ilike("email", email)
+    // `comoTexto` aqui é cinto e suspensório: este e-mail vem de admin digitando
+    // no próprio formulário, não de entrada anônima. Mas esta busca agora decide
+    // QUAL token vai por e-mail, e uma comparação que aceita curinga nesse papel
+    // é armadilha esperando mudança de contexto.
+    .ilike("email", comoTexto(email))
     .eq("status", "pendente")
     .maybeSingle();
   // Convite pendente que já existe deixa de ser erro e passa a ser REENVIO: com
