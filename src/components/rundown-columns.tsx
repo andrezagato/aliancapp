@@ -748,7 +748,13 @@ export function RundownColumns({
   // em estado local, então pode atualizar à vontade.
   // O popover entra na conta: um refresh entre dois toques traria o `items`
   // antigo e o número pularia pra trás debaixo do dedo.
-  useRundownRealtime({ eventId, ocupado: editando !== null || duracaoAberta !== null });
+  // `aoVivo` decide o ritmo da rede de segurança: esta tela mora num monitor da
+  // sala e fica ligada a semana inteira pra um culto de duas horas.
+  useRundownRealtime({
+    eventId,
+    ocupado: editando !== null || duracaoAberta !== null,
+    aoVivo: startedAt != null && endedAt == null,
+  });
 
   // A grade inteira — Início→Fim, regressiva, "Atrasado 7 min" — sai daqui. É
   // costurando os palpites ANTES do cálculo que o toque muda a projeção do culto

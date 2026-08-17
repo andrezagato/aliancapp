@@ -256,7 +256,9 @@ export function RundownGrid({
   // o `items` antigo do servidor e o número pularia pra trás debaixo do dedo.
   const ocupado =
     drag !== null || editing !== null || contributing !== null || manageKinds || manageTpl || duracaoAberta !== null;
-  useRundownRealtime({ eventId, ocupado });
+  // `started`/`ended` locais e não as props: quem inicia o culto por esta tela
+  // muda o estado local primeiro, e o ritmo tem que acompanhar na hora.
+  useRundownRealtime({ eventId, ocupado, aoVivo: started != null && ended == null });
   // Ref à parte pra centralizar no bloco ao vivo lendo o valor mais recente sem
   // reexecutar o efeito (ele depende da TROCA de bloco, não de `ocupado`).
   const ocupadoRef = useRef(ocupado);
