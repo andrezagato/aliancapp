@@ -32,6 +32,13 @@ export function PedidoEntradaForm({
   voltarLabel?: string;
 }) {
   const [enviado, setEnviado] = useState<Enviado | null>(null);
+  /**
+   * O e-mail que ela realmente mandou — mostrado de volta, em destaque, na tela
+   * de confirmação. É a única chance dela de perceber que digitou errado: dali
+   * em diante tudo acontece na caixa de entrada, e um typo vira espera infinita
+   * por um e-mail que foi pra outro endereço.
+   */
+  const [emailEnviado, setEmailEnviado] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [teams, setTeams] = useState<TeamOpt[]>([]);
@@ -46,6 +53,7 @@ export function PedidoEntradaForm({
     setLoading(true);
     setError(null);
     const form = new FormData(e.currentTarget);
+    setEmailEnviado(String(form.get("email") ?? "").trim());
     const r = await solicitarEntrada({
       fullName: String(form.get("full_name") ?? ""),
       email: String(form.get("email") ?? ""),
@@ -75,14 +83,37 @@ export function PedidoEntradaForm({
         >
           {jaAprovado ? <MailCheck className="size-8" /> : <CheckCircle2 className="size-8" />}
         </span>
-        <h1 className="text-3xl">{jaAprovado ? "Seu acesso já está liberado" : "Pedido recebido"}</h1>
+        <h1 className="text-3xl">{jaAprovado ? "Seu acesso já está liberado" : "Pedido enviado"}</h1>
+        {/* O E-MAIL EM DESTAQUE, e não perdido no meio do parágrafo: daqui em
+            diante tudo acontece na caixa de entrada, então este é o último
+            instante em que ela pode perceber que digitou errado. */}
         <p className="text-balance text-muted-foreground">
           {jaAprovado
             ? "A liderança já aprovou você. Procure na sua caixa de entrada o e-mail do Sirvo com o botão “Entrar no Sirvo” — ele te coloca direto no app."
             : enviado === "ja_pendente"
-              ? "Você já tinha pedido, e o pedido continua com a liderança — não criamos outro. Assim que liberarem, chega um e-mail com um botão que já te coloca dentro."
-              : "Seu pedido foi pra liderança e você recebeu um e-mail confirmando. Assim que liberarem seu acesso, chega outro e-mail com um botão que já te coloca dentro. Não precisa pedir de novo."}
+              ? "Você já tinha pedido, e o pedido continua com a liderança — não criamos outro."
+              : "Avisamos a liderança. Assim que aprovarem, o link de acesso chega em:"}
         </p>
+        {!jaAprovado && emailEnviado ? (
+          <p className="w-full break-all rounded-2xl bg-muted px-4 py-3 font-semibold text-foreground">
+            {emailEnviado}
+          </p>
+        ) : null}
+        {!jaAprovado ? (
+          <p className="text-balance text-sm text-muted-foreground">
+            É um link que já te coloca dentro do app — não precisa criar senha, e não precisa pedir de novo.
+          </p>
+        ) : null}
+        {!jaAprovado ? (
+          /* A saída pro typo. Sem ela, quem errou o endereço só descobre
+             esperando um e-mail que nunca vem. */
+          <button
+            onClick={() => setEnviado(null)}
+            className="text-sm font-semibold text-primary underline-offset-4 hover:underline"
+          >
+            Esse e-mail está errado
+          </button>
+        ) : null}
         <div className="mt-2 w-full space-y-2">
           <p className="text-sm text-muted-foreground">Aproveite a espera e veja o passo a passo:</p>
           <PrimeirosPassosLink />

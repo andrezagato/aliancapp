@@ -28,7 +28,7 @@ import { notify, notifyMany, teamLeaderIds, avisoPrefs, quemAceitaEmail } from "
 import { comVia, registrarEntrega } from "@/lib/delivery";
 import { sendPushToSubs } from "@/lib/push";
 import {
-  sendEmail, conviteEmail, escaladoEmail, lembreteEmail, pedidoRecebidoEmail,
+  sendEmail, conviteEmail, escaladoEmail, lembreteEmail,
   siteUrl, linkDeEntrada, DIAS_LINK_ENTRADA,
 } from "@/lib/email";
 import { churchDateISO, fmtEventWhen } from "@/lib/format";
@@ -128,7 +128,62 @@ function distanceM(lat1: number, lng1: number, lat2: number, lng2: number): numb
  * Roda com service-role de propósito: nada disso vira RPC pública, pra não criar
  * uma consulta de "esse e-mail existe?" acessível com a chave anônima.
  */
-export type EmailParaLink = "ok" | "aguardando" | "nao_encontrado";
+export type EmailParaLink = "ok" | "convite_pendente" | "aguardando" | "nao_encontrado";
+
+/**
+ * REENVIAR o e-mail de acesso liberado — pra quem apagou sem querer.
+ *
+ * Público (não há sessão: quem precisa disto ainda não entrou). Três cuidados,
+ * porque endpoint anônimo que dispara e-mail é convite pra abuso:
+ *  · só reenvia pra quem JÁ TEM convite pendente. Não dá pra fazer o app mandar
+ *    e-mail pra um endereço qualquer — só pra quem a liderança já aprovou;
+ *  · o conteúdo é fixo, e o destinatário é o do CONVITE, nunca o que veio no
+ *    parâmetro. Quem digita o e-mail de outra pessoa faz o link chegar na caixa
+ *    DELA, não na sua — a caixa de entrada continua sendo a credencial;
+ *  · responde `ok` mesmo quando não achou nada, pra não virar um oráculo de
+ *    "este e-mail existe na igreja?".
+ *
+ * Renova o prazo junto: reenviar um link que já venceu não ajudaria ninguém.
+ */
+export async function reenviarLinkDeAcesso(emailBruto: string): Promise<ActionResult> {
+  const email = emailBruto.trim().toLowerCase();
+  if (!email.includes("@")) return ok;
+
+  const admin = createAdminClient();
+  if (!admin) {
+    console.error("[onboarding] SUPABASE_SERVICE_ROLE_KEY ausente — reenvio de link desligado.");
+    return ok;
+  }
+
+  const { data: convite } = await admin
+    .from("invites")
+    .select("id, email, full_name, system_role")
+    .ilike("email", comoTexto(email))
+    .eq("status", "pendente")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!convite) return ok;
+
+  const { data: renovado } = await admin
+    .from("invites")
+    .update({ expires_at: prazoDoConvite() })
+    .eq("id", convite.id)
+    .select("token")
+    .single();
+  if (!renovado?.token) return ok;
+
+  // Convite de ADMIN continua sem link direto, igual ao envio original.
+  const ehAdmin = convite.system_role === "admin";
+  const msg = conviteEmail({
+    nome: convite.full_name ?? "",
+    href: ehAdmin ? `${siteUrl()}/entrar` : linkDeEntrada(renovado.token),
+    convidado: true,
+    semLinkDireto: ehAdmin,
+  });
+  await sendEmail({ to: convite.email, subject: msg.subject, html: msg.html });
+  return ok;
+}
 
 export async function verificarEmailParaLink(emailBruto: string): Promise<{ status: EmailParaLink }> {
   const email = emailBruto.trim().toLowerCase();
@@ -154,8 +209,15 @@ export async function verificarEmailParaLink(emailBruto: string): Promise<{ stat
     admin.from("join_requests").select("status").ilike("email", comoTexto(email)).neq("status", "recusado"),
   ]);
 
-  // Já tem conta (inclusive conta órfã antiga) ou tem convite esperando: entra.
-  if ((perfis?.length ?? 0) > 0 || (convites?.length ?? 0) > 0) return { status: "ok" };
+  // Já tem conta (inclusive conta órfã antiga): manda o link de sempre.
+  if ((perfis?.length ?? 0) > 0) return { status: "ok" };
+
+  // TEM CONVITE ESPERANDO E AINDA NÃO ENTROU. Antes isto caía no mesmo "ok" de
+  // cima e a pessoa recebia um SEGUNDO link — ficava com dois e-mails de acesso
+  // na caixa e sem saber qual valia. Ela não precisa de link novo: já tem um, e
+  // o dela vale 7 dias contra a 1 hora do link de login. A tela passa a dizer
+  // isso, e oferece reenviar pra quem apagou o e-mail sem querer.
+  if ((convites?.length ?? 0) > 0) return { status: "convite_pendente" };
 
   // APROVADO É PERMISSÃO, NÃO FILA — e esta linha vem ANTES do "aguardando" de
   // propósito. Era aqui que morava o pior bug do onboarding: quem tinha um
@@ -228,12 +290,6 @@ export async function solicitarEntrada(input: {
     p_desired_team_id: input.desiredTeamId || undefined,
   });
   if (error) return { ok: false, error: error.message };
-
-  // Recibo por e-mail (best-effort, igual ao resto): a tela de confirmação some
-  // quando ela fecha a aba, e sem nada na caixa de entrada o único jeito de
-  // conferir se mandou é mandar de novo. Era o que faltava para fechar o ciclo.
-  const recibo = pedidoRecebidoEmail({ nome });
-  await sendEmail({ to: email, subject: recibo.subject, html: recibo.html });
 
   return { ok: true, estado: "novo" };
 }
@@ -1168,11 +1224,12 @@ export async function solicitarEvento(input: {
       kind: "evento_solicitado",
       title: "Novo pedido de evento",
       body: `${session.profile.full_name || "Um líder"} sugeriu: ${title} (${fmtEventWhen(desiredAt)}).`,
-      link: "/calendario",
+      link: "/escalas",
     },
   );
 
-  revalidatePath("/calendario");
+  revalidatePath("/escalas");
+  revalidatePath("/inicio");
   return ok;
 }
 
@@ -1248,10 +1305,9 @@ export async function resolverEventoSolicitado(
     body: aprovar
       ? `"${req.title}" entrou no calendário.${nota ? ` ${nota}` : ""}`
       : `"${req.title}" não foi aprovado agora.${nota ? ` ${nota}` : ""}`,
-    link: aprovar && createdEventId ? `/escalas/${createdEventId}` : "/calendario",
+    link: aprovar && createdEventId ? `/escalas/${createdEventId}` : "/inicio",
   });
 
-  revalidatePath("/calendario");
   revalidatePath("/escalas");
   revalidatePath("/inicio");
   return { ok: true, eventId: createdEventId ?? undefined };
@@ -1311,7 +1367,6 @@ export async function arquivarEvento(eventId: string, arquivar: boolean): Promis
     .eq("id", eventId);
   if (error) return fail(error.message);
   revalidatePath("/escalas");
-  revalidatePath("/calendario");
   revalidatePath("/inicio");
   return ok;
 }
@@ -1344,7 +1399,6 @@ export async function excluirEvento(eventId: string): Promise<ActionResult> {
   }
 
   revalidatePath("/escalas");
-  revalidatePath("/calendario");
   revalidatePath("/inicio");
   return ok;
 }
@@ -2825,7 +2879,7 @@ export async function criarModelo(input: CriarModeloInput): Promise<ActionResult
   if (stErr) return fail(stErr.message);
 
   revalidatePath("/modelos");
-  revalidatePath("/escalas/novo");
+  revalidatePath("/escalas");
   return ok;
 }
 
@@ -2836,7 +2890,7 @@ export async function excluirModelo(seriesId: string): Promise<ActionResult> {
   const { error } = await supabase.from("event_series").delete().eq("id", seriesId);
   if (error) return fail(error.message);
   revalidatePath("/modelos");
-  revalidatePath("/escalas/novo");
+  revalidatePath("/escalas");
   return ok;
 }
 

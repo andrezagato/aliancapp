@@ -24,9 +24,6 @@ export default async function EventoPage({ params }: { params: Promise<{ id: str
     <>
       <TopBar title="Escalas" subtitle="Veja o que vem por aí" userName={session.profile.full_name || "?"} />
       <div className="animate-fade-in space-y-3 py-3">
-        <Link href="/calendario" className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline">
-          <CalendarDays className="size-4" /> Ver o mês inteiro
-        </Link>
         {isAdmin ? (
           <Link href="/escalas/novo" className={cn(buttonVariants(), "w-full")}>
             <Plus className="size-4" /> Criar evento

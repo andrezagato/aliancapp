@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { MailCheck, Hourglass } from "lucide-react";
 import { createClient, supabaseConfigured } from "@/lib/supabase/client";
-import { verificarEmailParaLink } from "@/lib/actions";
+import { verificarEmailParaLink, reenviarLinkDeAcesso } from "@/lib/actions";
 import { Button } from "@/components/ui/button";
 import { SirvoMark } from "@/components/brand/sirvo-mark";
 import { PrimeirosPassosLink } from "@/components/primeiros-passos-link";
@@ -26,7 +26,7 @@ const inputClass =
  *
  * Agora quem escolhe é o app: "Continuar" pergunta primeiro e abre UM caminho.
  */
-type Etapa = "inicio" | "link_enviado" | "em_analise" | "pedir_entrada";
+type Etapa = "inicio" | "link_enviado" | "ja_liberado" | "em_analise" | "pedir_entrada";
 
 /**
  * Recados de quem chegou aqui empurrado — pelo link de entrada
@@ -44,7 +44,8 @@ const RECADOS: Record<string, string> = {
 
 export default function EntrarPage() {
   const router = useRouter();
-  const [loading, setLoading] = useState<null | "google" | "email" | "dev">(null);
+  const [loading, setLoading] = useState<null | "google" | "email" | "dev" | "reenvio">(null);
+  const [reenviado, setReenviado] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [etapa, setEtapa] = useState<Etapa>("inicio");
@@ -112,6 +113,15 @@ export default function EntrarPage() {
       setEtapa("em_analise");
       return;
     }
+    // Já aprovada, mas ainda não entrou: ela JÁ TEM um link de acesso na caixa,
+    // e o dela vale 7 dias contra a 1 hora do link de login. Mandar outro aqui
+    // deixaria dois e-mails concorrentes na mão dela — o certo é apontar pro que
+    // já existe, e oferecer reenviar só pra quem apagou.
+    if (status === "convite_pendente") {
+      setLoading(null);
+      setEtapa("ja_liberado");
+      return;
+    }
 
     const { error } = await createClient().auth.signInWithOtp({
       email: alvo,
@@ -143,6 +153,20 @@ export default function EntrarPage() {
   function voltarAoInicio() {
     setEtapa("inicio");
     setError(null);
+    setReenviado(false);
+  }
+
+  /**
+   * Reenvia o e-mail de acesso liberado. A action responde `ok` mesmo quando não
+   * acha convite nenhum (pra não virar um oráculo de "este e-mail existe na
+   * igreja?"), então aqui a tela sempre confirma — o que ela promete é "mandamos
+   * de novo pra quem tinha", não "existe alguém com esse e-mail".
+   */
+  async function reenviar() {
+    setLoading("reenvio");
+    await reenviarLinkDeAcesso(email.trim());
+    setLoading(null);
+    setReenviado(true);
   }
 
   if (etapa === "link_enviado") {
@@ -168,6 +192,47 @@ export default function EntrarPage() {
             className="text-sm text-muted-foreground underline-offset-4 hover:underline"
           >
             Usar outro email
+          </button>
+        </div>
+      </main>
+    );
+  }
+
+  if (etapa === "ja_liberado") {
+    return (
+      <main className="mx-auto flex min-h-dvh max-w-[460px] flex-col justify-center px-6 py-10">
+        <div className="animate-fade-in flex flex-col items-center gap-4 text-center">
+          <span className="inline-flex size-16 items-center justify-center rounded-full bg-success/12 text-success-ink">
+            <MailCheck className="size-8" />
+          </span>
+          <h1 className="text-3xl">Seu acesso já foi liberado</h1>
+          <p className="text-balance text-muted-foreground">
+            A liderança aprovou seu pedido. Agora só falta abrir o e-mail que enviamos para{" "}
+            <span className="font-semibold text-foreground">{email.trim()}</span> e tocar em{" "}
+            <span className="font-semibold text-foreground">Entrar no Sirvo</span> — o botão de lá já te
+            coloca dentro do app, sem digitar nada.
+          </p>
+          {reenviado ? (
+            <p className="w-full rounded-2xl bg-success/10 px-4 py-3 text-sm font-medium text-success-ink">
+              Pronto, enviamos de novo. Pode levar um minutinho pra chegar.
+            </p>
+          ) : (
+            /* Só pra quem apagou o e-mail sem querer. Não é o caminho principal
+               de propósito: o link que ela já tem vale 7 dias, e um segundo
+               e-mail na caixa só cria dúvida sobre qual usar. */
+            <button
+              onClick={reenviar}
+              disabled={loading === "reenvio"}
+              className="press-sm h-11 w-full rounded-[14px] border border-border text-[15px] font-bold text-foreground disabled:opacity-60"
+            >
+              {loading === "reenvio" ? "Reenviando…" : "Não achei o e-mail — reenviar"}
+            </button>
+          )}
+          <button
+            onClick={voltarAoInicio}
+            className="text-sm text-muted-foreground underline-offset-4 hover:underline"
+          >
+            Usar outro e-mail
           </button>
         </div>
       </main>

@@ -1,40 +1,28 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowLeft, LayoutTemplate } from "lucide-react";
-import { getSession } from "@/lib/auth";
-import { listTeamsWithPositions, listTemplates } from "@/lib/data";
-import { NovoEventoForm } from "@/components/novo-evento-form";
 
+/**
+ * A página "Novo evento" morreu — virou um modal de 3 passos dentro de /escalas.
+ * A ROTA fica de pé porque ainda é linkada de fora (o "‹ Novo evento" de
+ * /modelos, o botão da casca de /escalas/[id]) e pode estar num favorito: um 404
+ * no meio de "criar o culto de domingo" é o pior desfecho possível.
+ *
+ * Ela vira porta: manda pra /escalas pedindo o wizard aberto, com a data no
+ * bolso. Quem abre e limpa a URL é o `CalendarioGaveta`, do outro lado.
+ *
+ * Sem `getSession()` de propósito: o middleware já barra quem não está logado,
+ * e mesmo o wizard estando MONTADO pra todo mundo dentro do `CalendarioGaveta`,
+ * só abre pra admin — as duas guardas (a prop `autoOpenNovo={isAdmin && …}` de
+ * `escalas/page.tsx` e o `podeCriar` de dentro do próprio `CalendarioGaveta`)
+ * resolvem isso, além de `criarEventoAvulso` recusar não-admin no servidor
+ * (actions.ts:1051). Uma consulta a menos numa rota que só existe pra
+ * redirecionar.
+ */
 export default async function NovoEventoPage({
   searchParams,
 }: {
   searchParams: Promise<{ data?: string }>;
 }) {
-  const session = await getSession();
-  if (!session) return null;
-  if (session.role !== "admin") redirect("/escalas");
-  const sp = await searchParams;
-
-  const [teams, templates] = await Promise.all([listTeamsWithPositions(), listTemplates()]);
-
-  return (
-    <div className="animate-fade-in space-y-3 py-3">
-      <Link href="/escalas" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-        <ArrowLeft className="size-4" /> Escalas
-      </Link>
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">Novo evento</h1>
-          <p className="text-muted-foreground">Crie um culto ou evento e escolha as equipes.</p>
-        </div>
-        <Link
-          href="/modelos"
-          className="inline-flex shrink-0 items-center gap-1 rounded-full border border-border px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground"
-        >
-          <LayoutTemplate className="size-4" /> Modelos
-        </Link>
-      </div>
-      <NovoEventoForm teams={teams} templates={templates} initialDate={sp.data} />
-    </div>
-  );
+  const { data } = await searchParams;
+  const dia = /^\d{4}-\d{2}-\d{2}$/.test(data ?? "") ? `&data=${data}` : "";
+  redirect(`/escalas?novo=1${dia}`);
 }
