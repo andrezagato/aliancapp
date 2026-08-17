@@ -37,6 +37,7 @@ import {
   listPendingEventRequests,
   listTeams,
   listTeamsWithPositions,
+  listTemplates,
   listEventsInRange,
   listUnconfirmedForEvent,
   type MyAssignment,
@@ -522,10 +523,12 @@ async function AdminSection({
     new Date(Date.UTC(y, m - 1, 1)),
   );
 
-  const [home, monthEvents, eventRequests] = await Promise.all([
+  const [home, monthEvents, eventRequests, teamsPos, templates] = await Promise.all([
     getAdminHome(session),
     listEventsInRange(session, fromIso, toIso),
     listPendingEventRequests(),
+    listTeamsWithPositions(),
+    listTemplates(),
   ]);
   const eventDayISO: Record<string, string> = Object.fromEntries(
     monthEvents.map((e) => [e.id, churchDateISO(e.starts_at)]),
@@ -552,6 +555,8 @@ async function AdminSection({
           monthLabel={monthLabel}
           prevM={prevM}
           nextM={nextM}
+          teams={teamsPos}
+          templates={templates}
         />
       </section>
 

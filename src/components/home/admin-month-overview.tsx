@@ -7,8 +7,9 @@ import { ChevronLeft, ChevronRight, Plus, CalendarPlus } from "lucide-react";
 import { MonthCalendar } from "@/components/month-calendar";
 import { Modal } from "@/components/modal";
 import { CoverageBadge } from "@/components/coverage-badge";
+import { NovoEventoWizard } from "@/components/event/novo-evento-wizard";
 import { fmtTime } from "@/lib/format";
-import type { EventListItem } from "@/lib/data";
+import type { EventListItem, TeamWithPositions, EventTemplate } from "@/lib/data";
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
@@ -27,6 +28,8 @@ export function AdminMonthOverview({
   monthLabel,
   prevM,
   nextM,
+  teams,
+  templates,
 }: {
   year: number;
   month: number;
@@ -36,8 +39,11 @@ export function AdminMonthOverview({
   monthLabel: string;
   prevM: string; // "YYYY-MM" do mês anterior
   nextM: string; // "YYYY-MM" do próximo mês
+  teams: TeamWithPositions[];
+  templates: EventTemplate[];
 }) {
   const [day, setDay] = useState<{ n: number; events: EventListItem[] } | null>(null);
+  const [novo, setNovo] = useState<string | null>(null);
   const dayIso = day ? `${year}-${pad(month)}-${pad(day.n)}` : "";
 
   return (
@@ -59,13 +65,15 @@ export function AdminMonthOverview({
         >
           <ChevronRight className="size-5" />
         </Link>
-        <Link
-          href="/escalas/novo"
+        <button
+          type="button"
+          onClick={() => setNovo("")}
           aria-label="Novo evento"
+          aria-expanded={novo !== null}
           className="press-sm ml-1 inline-flex size-9 items-center justify-center rounded-full bg-primary text-primary-foreground"
         >
           <Plus className="size-5" />
-        </Link>
+        </button>
       </div>
 
       <MonthCalendar
@@ -117,14 +125,29 @@ export function AdminMonthOverview({
             <p className="px-1 py-1 text-sm text-muted-foreground">Nenhum evento nesse dia ainda.</p>
           ) : null}
 
-          <Link
-            href={`/escalas/novo?data=${dayIso}`}
+          {/* FECHA o sheet do dia ANTES de abrir o wizard. O DESIGN.md proíbe
+              modal dentro de modal, e o repo já resolve assim em
+              team-calendar.tsx:73-76 (setOpenEvent + setDay(null)). */}
+          <button
+            type="button"
+            onClick={() => {
+              setDay(null);
+              setNovo(dayIso);
+            }}
             className="press mt-1 flex w-full items-center justify-center gap-2 rounded-[14px] border border-dashed border-primary/40 py-3 text-sm font-bold text-primary"
           >
             <CalendarPlus className="size-4" /> Adicionar evento nesse dia
-          </Link>
+          </button>
         </div>
       </Modal>
+
+      <NovoEventoWizard
+        open={novo !== null}
+        onClose={() => setNovo(null)}
+        teams={teams}
+        templates={templates}
+        initialDate={novo || undefined}
+      />
     </>
   );
 }
