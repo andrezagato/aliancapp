@@ -103,6 +103,12 @@ const TRAVA_TTL_MS = 2 * 60_000;
  */
 const SEGURA_SCROLL_MS = 700;
 
+/**
+ * Quanto antes da hora marcada o roteiro já conta como "ao vivo" pra sincronia.
+ * Uma hora: é quando a equipe monta o roteiro e é quando alguém aperta Iniciar.
+ */
+const QUASE_LA_MS = 60 * 60_000;
+
 /** Nome de quem está com o bloco na mão agora, ou `null` se está livre. */
 function quemEstaEditando(item: RundownItem, meId: string): string | null {
   if (!item.editingBy || !item.editingAt || item.editingBy === meId) return null;
@@ -256,9 +262,18 @@ export function RundownGrid({
   // o `items` antigo do servidor e o número pularia pra trás debaixo do dedo.
   const ocupado =
     drag !== null || editing !== null || contributing !== null || manageKinds || manageTpl || duracaoAberta !== null;
-  // `started`/`ended` locais e não as props: quem inicia o culto por esta tela
-  // muda o estado local primeiro, e o ritmo tem que acompanhar na hora.
-  useRundownRealtime({ eventId, ocupado, aoVivo: started != null && ended == null });
+  // O ritmo NUNCA fica mais lento que a verdade do servidor. `started`/`ended`
+  // são otimistas: servem pra ACELERAR no instante em que a pessoa toca
+  // Iniciar, nunca pra desacelerar por causa de uma action que falhou — um
+  // "encerrar" recusado pelo RLS deixaria a tela achando que acabou e a
+  // sincronia cairia pro degrau lento COM O CULTO NO AR.
+  // A hora antes da marcada também conta: é este laço que traz o `startedAt`.
+  const aoVivo =
+    !(ended != null && endedAt != null) &&
+    (started != null ||
+      startedAt != null ||
+      Date.now() >= new Date(startsAt).getTime() - QUASE_LA_MS);
+  useRundownRealtime({ eventId, ocupado, aoVivo });
   // Ref à parte pra centralizar no bloco ao vivo lendo o valor mais recente sem
   // reexecutar o efeito (ele depende da TROCA de bloco, não de `ocupado`).
   const ocupadoRef = useRef(ocupado);
@@ -484,6 +499,12 @@ export function RundownGrid({
         showToast(warm("cultoEncerrado"));
         router.refresh();
       } else {
+        // DESFAZ o otimismo, igual ao `reabrir` já fazia. Sem isto a tela ficava
+        // "Encerrado" pra sempre — o espelho `useEffect(…, [endedAt])` não
+        // conserta, porque a prop não MUDOU. E desde que o ritmo da sincronia
+        // passou a seguir esse estado, ficar preso aqui derrubaria o laço pro
+        // degrau lento com o culto ainda no ar.
+        setEnded(endedAt);
         showToast(r.error);
       }
     });

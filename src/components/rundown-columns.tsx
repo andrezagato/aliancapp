@@ -628,6 +628,12 @@ function TudoConcluidoCard() {
  */
 const CARENCIA_AVANCO_MS = 1500;
 
+/**
+ * Quanto antes da hora marcada o roteiro já conta como "ao vivo" pra sincronia.
+ * Uma hora: é quando a equipe monta o roteiro e é quando alguém aperta Iniciar.
+ */
+const QUASE_LA_MS = 60 * 60_000;
+
 /** Quanto tempo o "Desfazer" fica na tela depois de um avanço. */
 const DESFAZER_AVANCO_MS = 10_000;
 /**
@@ -750,10 +756,17 @@ export function RundownColumns({
   // antigo e o número pularia pra trás debaixo do dedo.
   // `aoVivo` decide o ritmo da rede de segurança: esta tela mora num monitor da
   // sala e fica ligada a semana inteira pra um culto de duas horas.
+  //
+  // A hora ANTES do culto conta como ao vivo, e não é generosidade: é este laço
+  // que traz o `startedAt` pro cliente. Se o degrau lento valesse aqui, a
+  // própria descoberta de que o culto começou levaria minutos — e é justamente
+  // nessa hora que o roteiro mais é mexido.
   useRundownRealtime({
     eventId,
     ocupado: editando !== null || duracaoAberta !== null,
-    aoVivo: startedAt != null && endedAt == null,
+    aoVivo:
+      endedAt == null &&
+      (startedAt != null || Date.now() >= new Date(startsAt).getTime() - QUASE_LA_MS),
   });
 
   // A grade inteira — Início→Fim, regressiva, "Atrasado 7 min" — sai daqui. É

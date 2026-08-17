@@ -24,7 +24,17 @@ import { createClient } from "@/lib/supabase/client";
  */
 const PASSO = {
   aoVivo: { conectado: 30_000, caido: 8_000 },
-  parado: { conectado: 300_000, caido: 60_000 },
+  /**
+   * TETO AMARRADO À MENSAGEM DE PALCO. `enviar_stage_message` nasce com 3 min
+   * (`p_minutos` default 3, mínimo 1), e este laço é a rede DELA também — a
+   * assinatura de `stage_messages` é sem filtro de evento justamente pra
+   * acender em tela que NÃO está num culto vivo. Passo maior que a vida da
+   * mensagem a deixaria nascer e morrer entre duas perguntas.
+   *
+   * A regra, pra quem mexer aqui depois: o passo mais lento tem que ser menor
+   * que o TTL mais curto de qualquer coisa da qual este laço é a rede.
+   */
+  parado: { conectado: 120_000, caido: 30_000 },
 };
 
 /**
@@ -58,8 +68,11 @@ export function useRundownRealtime({
   const router = useRouter();
   const ocupadoRef = useRef(ocupado);
   ocupadoRef.current = ocupado;
+  // Escrito no COMMIT (no efeito lá embaixo), nunca durante o render: o App
+  // Router roda em modo concorrente e estas telas usam `startTransition`, então
+  // um render descartado deixaria o ref mentindo — e errar aqui pro lado
+  // "parado" é sincronia lenta no meio do culto.
   const aoVivoRef = useRef(aoVivo);
-  aoVivoRef.current = aoVivo;
   const atualizacaoPendente = useRef(false);
   /**
    * A função que re-arma o intervalo, exposta pra fora do efeito principal.
@@ -75,6 +88,8 @@ export function useRundownRealtime({
     let timer: number | null = null;
     let pesquisa: number | null = null;
     let conectado = false;
+    /** Este efeito já foi limpo — ver a trava no callback do `subscribe`. */
+    let morto = false;
 
     const aplicar = () => {
       if (ocupadoRef.current) {
@@ -91,15 +106,24 @@ export function useRundownRealtime({
     // no meio do culto ninguém vai descobrir que "parou de atualizar". Então
     // também perguntamos de tempos em tempos — devagar quando o tempo real está
     // de pé, rápido quando ele caiu.
+    // A batida do laço. Aba escondida não PERGUNTA — mas o intervalo continua
+    // ARMADO. Desarmar e rearmar a cada troca de aba faria duas coisas ruins: a
+    // existência da rede passaria a depender de o `visibilitychange` chegar (e
+    // ele não chega no bfcache, no freeze do Page Lifecycle, no PWA do iOS
+    // voltando do multitarefa), e cada volta zeraria a contagem — com 2 min
+    // parado, quem alterna janelas nunca deixaria o laço completar. Assim, se o
+    // evento falhar, perde-se uma batida, não a rede.
+    // Timer em aba escondida o navegador já estrangula pra 1/min sozinho: o
+    // custo de deixá-lo armado é desprezível, e o de desarmá-lo era a rede toda.
+    const pulsar = () => {
+      if (document.visibilityState === "hidden") return;
+      aplicar();
+    };
+
     const repesquisar = () => {
       if (pesquisa) window.clearInterval(pesquisa);
-      pesquisa = null;
-      // Aba escondida não pergunta NADA. O celular no bolso com o app aberto era
-      // um assinante silencioso desse laço; ao voltar pra tela, o `aoVoltar`
-      // abaixo busca na hora, então nada se perde por ter ficado calado.
-      if (document.visibilityState === "hidden") return;
       const passo = aoVivoRef.current ? PASSO.aoVivo : PASSO.parado;
-      pesquisa = window.setInterval(aplicar, conectado ? passo.conectado : passo.caido);
+      pesquisa = window.setInterval(pulsar, conectado ? passo.conectado : passo.caido);
     };
     rearmarRef.current = repesquisar;
 
@@ -120,6 +144,12 @@ export function useRundownRealtime({
       // inclusive na de quem está olhando outro culto.
       .on("postgres_changes", { event: "*", schema: "public", table: "stage_messages" }, aplicar)
       .subscribe((status) => {
+        // O 'CLOSED' do `removeChannel` chega DEPOIS desta limpeza: o
+        // `unsubscribe` da realtime-js dispara o binding de close no ack do
+        // leave — ou na hora, se o socket já tinha caído. Sem esta trava, cada
+        // desmonte (navegar pra fora, trocar de `?ev=`) deixava um setInterval
+        // ÓRFÃO chamando `router.refresh()` pra sempre, de closure morta.
+        if (morto) return;
         conectado = status === "SUBSCRIBED";
         repesquisar();
       });
@@ -129,13 +159,11 @@ export function useRundownRealtime({
     // enquanto estava em segundo plano. Busca na hora, sem esperar o intervalo.
     const aoVoltar = () => {
       if (document.visibilityState === "visible") aplicar();
-      // Liga ou desliga o laço conforme a aba: escondida não pergunta, visível
-      // volta a perguntar no ritmo certo.
-      repesquisar();
     };
     document.addEventListener("visibilitychange", aoVoltar);
 
     return () => {
+      morto = true;
       if (timer) window.clearTimeout(timer);
       if (pesquisa) window.clearInterval(pesquisa);
       rearmarRef.current = null;
@@ -146,8 +174,10 @@ export function useRundownRealtime({
   }, [eventId]);
 
   // O culto começou ou encerrou: troca o ritmo SEM derrubar o websocket. É por
-  // isso que `aoVivo` não entra nas dependências do efeito de cima.
+  // isso que `aoVivo` não entra nas dependências do efeito de cima — e é aqui,
+  // no commit, que o ref é escrito.
   useEffect(() => {
+    aoVivoRef.current = aoVivo;
     rearmarRef.current?.();
   }, [aoVivo]);
 
