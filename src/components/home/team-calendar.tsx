@@ -27,6 +27,7 @@ export function TeamCalendar({
   teams,
   hint,
   canRequest = true,
+  onCriarNoDia,
 }: {
   year: number;
   month: number;
@@ -36,6 +37,13 @@ export function TeamCalendar({
   teams: TeamOption[];
   hint?: string;
   canRequest?: boolean;
+  /**
+   * Admin: fecha o sheet do dia e abre o "novo evento" já naquela data. Sem
+   * isto, tocar num dia vazio é um beco sem saída — a tela diz que não há nada
+   * e não oferece o que fazer a respeito. `canRequest` resolve o mesmo beco pro
+   * LÍDER (que pede em vez de criar); esta é a metade que faltava.
+   */
+  onCriarNoDia?: (iso: string) => void;
 }) {
   const router = useRouter();
   const [day, setDay] = useState<{ n: number; iso: string; events: EventListItem[] } | null>(null);
@@ -109,6 +117,23 @@ export function TeamCalendar({
                 <CalendarPlus className="size-4" /> Pedir evento nesse dia
               </button>
             )
+          ) : null}
+
+          {onCriarNoDia && day ? (
+            <button
+              type="button"
+              onClick={() => {
+                // Fecha o sheet do dia ANTES de abrir o wizard: o DESIGN.md
+                // proíbe modal dentro de modal, e é o mesmo par que este arquivo
+                // já usa pra abrir a escala (setOpenEvent + setDay(null)).
+                const iso = day.iso;
+                setDay(null);
+                onCriarNoDia(iso);
+              }}
+              className="press mt-1 flex w-full items-center justify-center gap-2 rounded-[14px] border border-dashed border-primary/40 py-3 text-sm font-bold text-primary"
+            >
+              <CalendarPlus className="size-4" /> Adicionar evento nesse dia
+            </button>
           ) : null}
         </div>
       </Modal>
