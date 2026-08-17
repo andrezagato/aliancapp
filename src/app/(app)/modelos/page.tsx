@@ -15,7 +15,7 @@ export default async function ModelosPage() {
 
   return (
     <div className="animate-fade-in space-y-3 py-3">
-      <Link href="/escalas/novo" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+      <Link href="/escalas" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="size-4" /> Novo evento
       </Link>
       <div>

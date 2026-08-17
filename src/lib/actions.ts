@@ -2819,7 +2819,7 @@ export async function criarModelo(input: CriarModeloInput): Promise<ActionResult
   if (stErr) return fail(stErr.message);
 
   revalidatePath("/modelos");
-  revalidatePath("/escalas/novo");
+  revalidatePath("/escalas");
   return ok;
 }
 
@@ -2830,7 +2830,7 @@ export async function excluirModelo(seriesId: string): Promise<ActionResult> {
   const { error } = await supabase.from("event_series").delete().eq("id", seriesId);
   if (error) return fail(error.message);
   revalidatePath("/modelos");
-  revalidatePath("/escalas/novo");
+  revalidatePath("/escalas");
   return ok;
 }
 
