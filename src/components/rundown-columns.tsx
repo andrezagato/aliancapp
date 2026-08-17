@@ -545,7 +545,9 @@ function AgoraCard({
       </div>
       <span
         className={cn(
-          "shrink-0 font-display text-[3.2em] font-extrabold leading-none tabular-nums",
+          // `min-w` + `text-right`: sem piso, "4:32" → "1:02:34" empurra o botão
+          // "Encerrar bloco" ao lado — o alvo do dedo não pode dançar (F6).
+          "shrink-0 min-w-[4.5em] text-right font-display text-[3.2em] font-extrabold leading-none tabular-nums",
           HEAT_TEXT[heat],
         )}
       >
@@ -575,6 +577,42 @@ function ASeguirCard({ row }: { row: RundownRow }) {
     </div>
   );
 }
+
+/**
+ * Substituto do `AgoraCard` quando o ÚLTIMO bloco acaba de ser encerrado.
+ *
+ * Sem isto, `liveRow` vira `null` e a faixa inteira colapsa (~5em), subindo a
+ * grade — e o que sobe pro pixel onde o dedo tocou "Encerrar bloco" é o lápis
+ * de editar da primeira linha. Reaproveita a MESMA altura do `AgoraCard`
+ * (mesmo container, mesmo `size-[3.2em]` do lado direito) pra a grade não
+ * pular debaixo do dedo (F5 do DECISOES-TIQUE.md).
+ */
+function TudoConcluidoCard() {
+  return (
+    <div className="flex min-w-0 flex-[2] items-center gap-[0.9em] rounded-[0.9em] border border-border bg-card px-[1em] py-[0.8em] shadow-soft">
+      <div className="min-w-0 flex-1">
+        <p className="font-display text-[1.8em] font-extrabold leading-tight text-foreground">
+          Todos os blocos concluídos
+        </p>
+      </div>
+      <Check className="size-[3.2em] shrink-0 text-muted-foreground" />
+    </div>
+  );
+}
+
+/**
+ * Quanto tempo o "Encerrar bloco" fica fechado depois de avançar.
+ *
+ * 1,5s, e não os 0,4s do repique mecânico, porque o dono escolheu TRAVAR: ticar
+ * vários blocos em sequência rápida deixa de ser possível na régia (quem precisa
+ * recuperar atraso faz pelo celular, que tem tique por linha).
+ *
+ * A condição pra ser longa é ser VISÍVEL. Trava que engole toque em silêncio é o
+ * mesmo defeito de sempre com outro nome — a pessoa toca, nada acontece, e ela
+ * toca de novo. Por isso ela mora em ESTADO (o botão fica desabilitado e a
+ * pessoa vê), e não num `ref` mudo.
+ */
+const CARENCIA_AVANCO_MS = 1500;
 
 export function RundownColumns({
   eventId,
@@ -615,6 +653,11 @@ export function RundownColumns({
   // linhas. Um save de duração não pode apagar os controles da régia.
   const [, startDurTx] = useTransition();
   const [emCarencia, armarCarencia] = useCarencia();
+  // Carência SEPARADA da de cima: `emCarencia` (3s) nasce junto do Iniciar/
+  // Reiniciar/Reabrir (controles que trocam de lugar no flex). O "Encerrar
+  // bloco" não troca de lugar — trava mais curta (1,5s) e não pode ficar presa
+  // à mesma trava dos outros três, senão ticar um bloco travaria o Reabrir.
+  const [emCarenciaAvanco, armarCarenciaAvanco] = useCarencia(CARENCIA_AVANCO_MS);
   const [iniciando, setIniciando] = useState(false);
   const [fonte, setFonte] = useState(FONTE_PADRAO);
   const [tema, alternarTema] = useControlTheme();
@@ -687,7 +730,7 @@ export function RundownColumns({
     if (mudou) setDurVersao((v) => v + 1);
   }, [items]);
 
-  const { now, rows, totalMin, startedMs, endedMs, finishMs, desvioMs, corDoBloco } =
+  const { now, rows, totalMin, allDone, startedMs, endedMs, finishMs, desvioMs, corDoBloco } =
     useRundownTiming({ items: itensAjustados, kinds, startsAt, started: startedAt, ended: endedAt });
 
   // Bloco ao vivo sempre à vista, MESMA regra do celular: centraliza quando o
@@ -985,10 +1028,18 @@ export function RundownColumns({
               row={liveRow}
               now={now}
               podeAvancar={canEdit && rodando}
-              ocupado={ocupado}
-              onAvancar={() => agir(() => marcarBlocoFeito(liveRow.it.id, eventId, true))}
+              ocupado={ocupado || emCarenciaAvanco}
+              onAvancar={() => {
+                armarCarenciaAvanco();
+                fixarNesteCulto();
+                agir(() => marcarBlocoFeito(liveRow.it.id, eventId, true));
+              }}
             />
             {nextRow ? <ASeguirCard row={nextRow} /> : null}
+          </div>
+        ) : rodando && allDone ? (
+          <div className="mb-[0.7em] flex flex-wrap gap-[0.6em]">
+            <TudoConcluidoCard />
           </div>
         ) : null}
 
