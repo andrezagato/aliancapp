@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarPlus, MapPin, Plus } from "lucide-react";
+import { MapPin, Plus } from "lucide-react";
 import { Modal } from "@/components/modal";
 import { TeamDot } from "@/components/coverage-badge";
 import { useToast } from "@/components/ui/toast";
@@ -125,44 +125,6 @@ export function SugerirEventoForm({
         {pending ? "Enviando…" : "Enviar pedido"}
       </button>
     </div>
-  );
-}
-
-// -----------------------------------------------------------------------------
-// Botão que abre o formulário num modal
-// -----------------------------------------------------------------------------
-export function SugerirEventoButton({ teams }: { teams: TeamOption[] }) {
-  const router = useRouter();
-  const [open, setOpen] = useState(false);
-
-  return (
-    <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="press flex w-full items-center gap-3 rounded-2xl border border-dashed border-primary/30 p-4 text-left hover:bg-primary/5"
-      >
-        <span className="inline-flex size-10 items-center justify-center rounded-full bg-primary/10 text-primary">
-          <CalendarPlus className="size-5" />
-        </span>
-        <div>
-          <p className="font-medium">Sugerir um evento</p>
-          <p className="text-sm text-muted-foreground">Você propõe, a administração aprova.</p>
-        </div>
-      </button>
-
-      <Modal open={open} onClose={() => setOpen(false)} sheet title="Sugerir evento">
-        <div className="mt-1">
-          <SugerirEventoForm
-            teams={teams}
-            onDone={() => {
-              setOpen(false);
-              router.refresh();
-            }}
-          />
-        </div>
-      </Modal>
-    </>
   );
 }
 
