@@ -519,12 +519,16 @@ function AgoraCard({
   podeAvancar,
   ocupado,
   onAvancar,
+  desfazivel,
+  onDesfazer,
 }: {
   row: RundownRow;
   now: number | null;
   podeAvancar: boolean;
   ocupado: boolean;
   onAvancar: () => void;
+  desfazivel: { id: string; titulo: string } | null;
+  onDesfazer: () => void;
 }) {
   const { it, startMs, durMs } = row;
   const decorridoMs = now != null ? now - startMs : 0;
@@ -545,12 +549,24 @@ function AgoraCard({
       </div>
       <span
         className={cn(
-          "shrink-0 font-display text-[3.2em] font-extrabold leading-none tabular-nums",
+          // `min-w` + `text-right`: sem piso, "4:32" → "1:02:34" empurra o botão
+          // "Encerrar bloco" ao lado — o alvo do dedo não pode dançar (F6).
+          "shrink-0 min-w-[4.5em] text-right font-display text-[3.2em] font-extrabold leading-none tabular-nums",
           HEAT_TEXT[heat],
         )}
       >
         {contagemRegressiva(restanteMs)}
       </span>
+      {desfazivel ? (
+        /* AO LADO do "Encerrar bloco", nunca no lugar dele: o pixel do
+           destrutivo não se herda (a lição de 09/08). Fica 10s e some. */
+        <button
+          onClick={onDesfazer}
+          className="press-sm inline-flex shrink-0 items-center gap-[0.4em] rounded-full border border-border px-[0.9em] py-[0.6em] text-[0.9em] font-bold text-muted-foreground"
+        >
+          <RotateCcw className="size-[1.1em]" /> Desfazer
+        </button>
+      ) : null}
       {podeAvancar ? (
         <button
           onClick={onAvancar}
@@ -575,6 +591,58 @@ function ASeguirCard({ row }: { row: RundownRow }) {
     </div>
   );
 }
+
+/**
+ * Substituto do `AgoraCard` quando o ÚLTIMO bloco acaba de ser encerrado.
+ *
+ * Sem isto, `liveRow` vira `null` e a faixa inteira colapsa (~5em), subindo a
+ * grade — e o que sobe pro pixel onde o dedo tocou "Encerrar bloco" é o lápis
+ * de editar da primeira linha. Reaproveita a MESMA altura do `AgoraCard`
+ * (mesmo container, mesmo `size-[3.2em]` do lado direito) pra a grade não
+ * pular debaixo do dedo (F5 do DECISOES-TIQUE.md).
+ */
+function TudoConcluidoCard() {
+  return (
+    <div className="flex min-w-0 flex-[2] items-center gap-[0.9em] rounded-[0.9em] border border-border bg-card px-[1em] py-[0.8em] shadow-soft">
+      <div className="min-w-0 flex-1">
+        <p className="font-display text-[1.8em] font-extrabold leading-tight text-foreground">
+          Todos os blocos concluídos
+        </p>
+      </div>
+      <Check className="size-[3.2em] shrink-0 text-muted-foreground" />
+    </div>
+  );
+}
+
+/**
+ * Quanto tempo o "Encerrar bloco" fica fechado depois de avançar.
+ *
+ * 1,5s, e não os 0,4s do repique mecânico, porque o dono escolheu TRAVAR: ticar
+ * vários blocos em sequência rápida deixa de ser possível na régia (quem precisa
+ * recuperar atraso faz pelo celular, que tem tique por linha).
+ *
+ * A condição pra ser longa é ser VISÍVEL. Trava que engole toque em silêncio é o
+ * mesmo defeito de sempre com outro nome — a pessoa toca, nada acontece, e ela
+ * toca de novo. Por isso ela mora em ESTADO (o botão fica desabilitado e a
+ * pessoa vê), e não num `ref` mudo.
+ */
+const CARENCIA_AVANCO_MS = 1500;
+
+/**
+ * Quanto antes da hora marcada o roteiro já conta como "ao vivo" pra sincronia.
+ * Uma hora: é quando a equipe monta o roteiro e é quando alguém aperta Iniciar.
+ */
+const QUASE_LA_MS = 60 * 60_000;
+
+/** Quanto tempo o "Desfazer" fica na tela depois de um avanço. */
+const DESFAZER_AVANCO_MS = 10_000;
+/**
+ * Nenhum palpite otimista sobrevive a isto. Sem esta rede, um "Reiniciar
+ * roteiro" no meio do voo (que zera todos os `done_at`) deixaria o palpite preso
+ * pra sempre — a soltura abaixo reage a ACORDO entre palpite e servidor, e nesse
+ * caso o acordo nunca chega.
+ */
+const PALPITE_MAX_MS = 15_000;
 
 export function RundownColumns({
   eventId,
@@ -615,6 +683,11 @@ export function RundownColumns({
   // linhas. Um save de duração não pode apagar os controles da régia.
   const [, startDurTx] = useTransition();
   const [emCarencia, armarCarencia] = useCarencia();
+  // Carência SEPARADA da de cima: `emCarencia` (3s) nasce junto do Iniciar/
+  // Reiniciar/Reabrir (controles que trocam de lugar no flex). O "Encerrar
+  // bloco" não troca de lugar — trava mais curta (1,5s) e não pode ficar presa
+  // à mesma trava dos outros três, senão ticar um bloco travaria o Reabrir.
+  const [emCarenciaAvanco, armarCarenciaAvanco] = useCarencia(CARENCIA_AVANCO_MS);
   const [iniciando, setIniciando] = useState(false);
   const [fonte, setFonte] = useState(FONTE_PADRAO);
   const [tema, alternarTema] = useControlTheme();
@@ -634,6 +707,26 @@ export function RundownColumns({
   const [durVersao, setDurVersao] = useState(0);
   const salvarDurRef = useRef<number | null>(null);
   const filaRef = useRef<Promise<unknown>>(Promise.resolve());
+
+  /**
+   * Palpites de "feito" que ESTA tela já deu e o servidor ainda não confirmou.
+   *
+   * `string` = otimistamente FEITO (o carimbo da hora, gravado UMA vez).
+   * `null`   = otimistamente DESFEITO (o caminho do desfazer).
+   *
+   * MAPA e não `Set` porque o palpite precisa carregar o CARIMBO junto: o
+   * `useRundownTiming` usa `done_at` como fim do bloco feito e início do
+   * seguinte, então recalcular `new Date()` a cada renderização empurraria o
+   * começo do bloco "Agora" pra frente — e a regressiva de 3.2em na cara da sala
+   * pularia PRA TRÁS a cada atualização do tempo real. Carimba-se uma vez, aqui.
+   */
+  const feitoPendenteRef = useRef(new Map<string, string | null>());
+  const [feitoVersao, setFeitoVersao] = useState(0);
+  /** Um cronômetro por palpite — a rede que impede palpite preso (ver PALPITE_MAX_MS). */
+  const palpiteTimersRef = useRef(new Map<string, number>());
+  /** O que o "Desfazer" desfaz, enquanto ele está na tela. */
+  const [desfazivel, setDesfazivel] = useState<{ id: string; titulo: string } | null>(null);
+  const desfazerTimerRef = useRef<number | null>(null);
 
   // O tamanho da letra é do APARELHO, não da conta: depende da distância entre a
   // mesa e o monitor daquela sala — mesma lógica da URL do stream.
@@ -661,17 +754,40 @@ export function RundownColumns({
   // em estado local, então pode atualizar à vontade.
   // O popover entra na conta: um refresh entre dois toques traria o `items`
   // antigo e o número pularia pra trás debaixo do dedo.
-  useRundownRealtime({ eventId, ocupado: editando !== null || duracaoAberta !== null });
+  // `aoVivo` decide o ritmo da rede de segurança: esta tela mora num monitor da
+  // sala e fica ligada a semana inteira pra um culto de duas horas.
+  //
+  // A hora ANTES do culto conta como ao vivo, e não é generosidade: é este laço
+  // que traz o `startedAt` pro cliente. Se o degrau lento valesse aqui, a
+  // própria descoberta de que o culto começou levaria minutos — e é justamente
+  // nessa hora que o roteiro mais é mexido.
+  useRundownRealtime({
+    eventId,
+    ocupado: editando !== null || duracaoAberta !== null,
+    aoVivo:
+      endedAt == null &&
+      (startedAt != null || Date.now() >= new Date(startsAt).getTime() - QUASE_LA_MS),
+  });
 
-  // A grade inteira — Início→Fim, regressiva, "Atrasado 7 min" — sai daqui.
-  // `durVersao` está na dependência só pra este cálculo refazer quando o mapa
-  // (que é ref) muda.
+  // A grade inteira — Início→Fim, regressiva, "Atrasado 7 min" — sai daqui. É
+  // costurando os palpites ANTES do cálculo que o toque muda a projeção do culto
+  // no mesmo quadro, e não só o número de uma célula.
   const itensAjustados = useMemo(() => {
-    const p = durPendenteRef.current;
-    if (p.size === 0) return items;
-    return items.map((it) => (p.has(it.id) ? { ...it, durationMin: p.get(it.id)! } : it));
+    const dur = durPendenteRef.current;
+    const feito = feitoPendenteRef.current;
+    if (dur.size === 0 && feito.size === 0) return items;
+    return items.map((it) => {
+      const d = dur.get(it.id);
+      const temF = feito.has(it.id);
+      if (d == null && !temF) return it;
+      return {
+        ...it,
+        ...(d != null ? { durationMin: d } : null),
+        ...(temF ? { doneAt: feito.get(it.id) } : null),
+      };
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, durVersao]);
+  }, [items, durVersao, feitoVersao]);
 
   // Solta o palpite assim que o servidor devolve o mesmo número — senão uma
   // mudança feita por outra pessoa ficaria presa atrás do nosso valor pra sempre.
@@ -687,7 +803,19 @@ export function RundownColumns({
     if (mudou) setDurVersao((v) => v + 1);
   }, [items]);
 
-  const { now, rows, totalMin, startedMs, endedMs, finishMs, desvioMs, corDoBloco } =
+  // Solta o palpite quando o servidor CONCORDA — nos dois sentidos. Comparar só
+  // "chegou `doneAt`?" deixaria um palpite de DESFEITO presuo pra sempre, porque
+  // pra ele o acordo é o campo ficar VAZIO.
+  useEffect(() => {
+    const p = feitoPendenteRef.current;
+    for (const it of items) {
+      if (!p.has(it.id)) continue;
+      if (!!it.doneAt === (p.get(it.id) !== null)) soltarFeitoOtimista(it.id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items]);
+
+  const { now, rows, totalMin, allDone, startedMs, endedMs, finishMs, desvioMs, corDoBloco } =
     useRundownTiming({ items: itensAjustados, kinds, startsAt, started: startedAt, ended: endedAt });
 
   // Bloco ao vivo sempre à vista, MESMA regra do celular: centraliza quando o
@@ -764,10 +892,92 @@ export function RundownColumns({
     });
   };
 
+  const soltarFeitoOtimista = (id: string) => {
+    const t = palpiteTimersRef.current.get(id);
+    if (t) {
+      window.clearTimeout(t);
+      palpiteTimersRef.current.delete(id);
+    }
+    if (!feitoPendenteRef.current.delete(id)) return;
+    setFeitoVersao((v) => v + 1);
+  };
+
+  const palpitarFeito = (id: string, feito: boolean) => {
+    // O carimbo nasce AQUI e não muda mais — ver o comentário do feitoPendenteRef.
+    feitoPendenteRef.current.set(id, feito ? new Date().toISOString() : null);
+    setFeitoVersao((v) => v + 1);
+    const antigo = palpiteTimersRef.current.get(id);
+    if (antigo) window.clearTimeout(antigo);
+    palpiteTimersRef.current.set(
+      id,
+      window.setTimeout(() => soltarFeitoOtimista(id), PALPITE_MAX_MS),
+    );
+  };
+
   // Faixa "Agora / A seguir" (Fase 7.3): só existe bloco ao vivo com o culto
   // rodando — sem isso, o topo continua só com a barra de controles.
   const liveRow = rows.find((r) => r.status === "live") ?? null;
   const nextRow = liveRow ? rows[rows.indexOf(liveRow) + 1] ?? null : null;
+
+  /**
+   * Encerrar o bloco ao vivo. O palpite é pintado ANTES da ida ao servidor: era
+   * o silêncio de ~2s entre o toque e a tela mudar que fazia a Produção tocar de
+   * novo — e o segundo toque, com a tela já virada, encerrava o bloco SEGUINTE.
+   */
+  const avancar = (id: string, titulo: string) => {
+    if (ocupado || emCarenciaAvanco) return;
+    armarCarenciaAvanco();
+    // FORA do startTx de propósito: dentro dele isto entraria na lane de
+    // transição e não pintaria no mesmo quadro, que é justamente o ponto.
+    palpitarFeito(id, true);
+    fixarNesteCulto();
+    setDesfazivel({ id, titulo });
+    if (desfazerTimerRef.current) window.clearTimeout(desfazerTimerRef.current);
+    desfazerTimerRef.current = window.setTimeout(() => setDesfazivel(null), DESFAZER_AVANCO_MS);
+
+    startTx(async () => {
+      const r = await marcarBlocoFeito(id, eventId, true);
+      if (!r.ok) {
+        soltarFeitoOtimista(id); // o palpite CAI: a faixa volta pro bloco
+        setDesfazivel(null);
+        showToast(r.error);
+        return;
+      }
+      router.refresh();
+    });
+  };
+
+  /**
+   * Voltar o último avanço. Até aqui a régia não tinha como desfazer: a única
+   * saída era "Reiniciar roteiro" — que apaga o culto inteiro — ou pegar um
+   * celular no meio do culto. É ele que permite a carência ser proteção em vez
+   * de prisão.
+   */
+  const desfazerAvanco = () => {
+    const alvo = desfazivel;
+    if (!alvo) return;
+    setDesfazivel(null);
+    if (desfazerTimerRef.current) window.clearTimeout(desfazerTimerRef.current);
+    palpitarFeito(alvo.id, false); // volta na tela no mesmo quadro
+    startTx(async () => {
+      const r = await marcarBlocoFeito(alvo.id, eventId, false);
+      if (!r.ok) {
+        soltarFeitoOtimista(alvo.id);
+        showToast(r.error);
+        return;
+      }
+      router.refresh();
+    });
+  };
+
+  // Cronômetro pendente não pode sobreviver ao desmonte da tela.
+  useEffect(
+    () => () => {
+      if (desfazerTimerRef.current) window.clearTimeout(desfazerTimerRef.current);
+      for (const t of palpiteTimersRef.current.values()) window.clearTimeout(t);
+    },
+    [],
+  );
 
   /** Troca o bloco de lugar com o vizinho e persiste a ordem inteira. */
   const mover = (idx: number, delta: number) => {
@@ -985,10 +1195,16 @@ export function RundownColumns({
               row={liveRow}
               now={now}
               podeAvancar={canEdit && rodando}
-              ocupado={ocupado}
-              onAvancar={() => agir(() => marcarBlocoFeito(liveRow.it.id, eventId, true))}
+              ocupado={ocupado || emCarenciaAvanco}
+              onAvancar={() => avancar(liveRow.it.id, liveRow.it.title)}
+              desfazivel={desfazivel?.id === liveRow.it.id ? null : desfazivel}
+              onDesfazer={desfazerAvanco}
             />
             {nextRow ? <ASeguirCard row={nextRow} /> : null}
+          </div>
+        ) : rodando && allDone ? (
+          <div className="mb-[0.7em] flex flex-wrap gap-[0.6em]">
+            <TudoConcluidoCard />
           </div>
         ) : null}
 

@@ -1898,12 +1898,29 @@ export async function marcarBlocoFeito(id: string, eventId: string, done: boolea
   if (!session) return fail("Sessão expirada.");
   if (!(await podeEditarCronograma(session, eventId))) return fail("Sem permissão.");
   const supabase = await createClient();
-  const { error } = await supabase
+  let query = supabase
     .from("event_rundown")
     .update({ done_at: done ? new Date().toISOString() : null })
     .eq("id", id);
+  // Ao marcar como feito, só carimba se o bloco ainda não tinha `done_at`.
+  // Sem isto, um toque duplo que escapou da trava da UI reescreve a hora real
+  // de término a cada chamada — e isso mente o "atrasado/adiantado" do culto.
+  // Update de 0 linhas aqui é o resultado ESPERADO (o bloco já estava feito),
+  // não um erro: a ação retorna sucesso e o dado nunca mudou porque não
+  // precisava mudar. Essa mesma confusão ("0 linhas" = falha) já aconteceu
+  // duas vezes neste repo (migrations 0029 e 0049) — aqui é intencional.
+  if (done) query = query.is("done_at", null);
+  const { error } = await query;
   if (error) return fail(error.message);
+  // `/control` também — e a falta dela era o grosso dos ~2s que a Produção
+  // sentia ao encerrar um bloco. Todas as outras nove ações do roteiro já
+  // revalidavam as duas rotas; esta, que é a MAIS usada durante o culto, não.
+  // Sem ela a resposta da action não traz árvore nova pra régia, e a tela só
+  // muda no `router.refresh()` seguinte — uma segunda ida ao servidor, que
+  // refaz as seis consultas de /control. Com ela, a árvore volta junto com a
+  // resposta, numa ida só.
   revalidatePath("/cronograma");
+  revalidatePath("/control");
   return ok;
 }
 
