@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { Fragment, useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, UserCheck, Check, Clock, X, Trash2 } from "lucide-react";
+import { ChevronDown, UserCheck, Check, Clock, X, Trash2, Eye } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
 import { CoverageBadge, TeamDot } from "@/components/coverage-badge";
 import { ConfirmationAlert } from "@/components/event/confirmation-alert";
@@ -78,20 +79,27 @@ export function EventTeams({
   /** Abre "Escalar" como painel lateral do sheet do evento (não é mais Modal próprio). */
   onEscalar: (args: { teamId: string; positionId: string; requirementId: string | null; positionName: string }) => void;
 }) {
-  const multi = teams.length > 1;
+  // "Próprias" = as equipes que o usuário gerencia ou de que é membro. O
+  // padrão de expansão (1 equipe própria abre sozinha; várias, depende da
+  // preferência salva) considera só elas — as equipes "de fora" (viewOnly)
+  // sempre entram recolhidas por padrão, mesmo quando há uma preferência de
+  // "expandir tudo" salva. Continuam alcançáveis: cada Card abre com um toque,
+  // e o botão "Expandir tudo" também as abre (é ação explícita, não padrão).
+  const proprias = teams.filter((t) => !t.viewOnly);
+  const multi = proprias.length > 1;
   const anyManage = teams.some((t) => t.canManage);
   const pendingConfirms = teams
     .filter((t) => t.canManage)
     .reduce((s, t) => s + Math.max(t.assigned - t.confirmed, 0), 0);
   const [expanded, setExpanded] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(teams.map((t) => [t.teamId, !multi])),
+    Object.fromEntries(teams.map((t) => [t.teamId, t.viewOnly ? false : !multi])),
   );
 
   useEffect(() => {
     try {
       const e = localStorage.getItem(EXPAND_KEY);
       const all = e === "1" ? true : e === "0" ? false : !multi;
-      setExpanded(Object.fromEntries(teams.map((t) => [t.teamId, all])));
+      setExpanded(Object.fromEntries(teams.map((t) => [t.teamId, t.viewOnly ? false : all])));
     } catch {
       /* localStorage indisponível — mantém o padrão */
     }
@@ -119,47 +127,68 @@ export function EventTeams({
         </div>
       ) : null}
 
-      {teams.map((team) => {
+      {teams.map((team, i) => {
         const open = expanded[team.teamId];
+        // Fronteira entre as equipes próprias e as "de fora" (viewOnly) —
+        // detailTeams já vem ordenado com as próprias primeiro (data.ts).
+        const isFirstOutside = team.viewOnly && !teams[i - 1]?.viewOnly;
         return (
-          <Card key={team.teamId} className="overflow-hidden">
-            <div className="flex w-full items-center gap-2 p-4">
-              <button
-                onClick={() => toggleTeam(team.teamId)}
-                className="press-sm flex min-w-0 flex-1 items-center gap-2.5 text-left"
-                aria-expanded={open}
-              >
-                <TeamDot color={team.color} className="size-3" />
-                <h2 className="truncate font-display text-[17px] font-bold text-foreground">{team.name}</h2>
-                <CoverageBadge tone={team.tone} assigned={team.confirmed} needed={team.needed} className="ml-auto" />
-              </button>
-              <button
-                onClick={() => toggleTeam(team.teamId)}
-                aria-label={open ? "Recolher" : "Expandir"}
-                className="press-sm shrink-0"
-              >
-                <ChevronDown className={cn("size-5 text-muted-foreground transition-transform", open && "rotate-180")} />
-              </button>
-            </div>
-
-            {open ? (
-              <div className="border-t border-border">
-                <div className="flex items-center justify-end gap-2 border-b border-border/70 px-4 py-2">
-                  <WhatsAppGroupButton href={team.whatsappGroup} label="Grupo" className="h-8 shrink-0 px-2.5 text-[13px]" />
-                  {team.canManage ? (
-                    <RemoverEquipeButton eventId={eventId} teamId={team.teamId} teamName={team.name} assigned={team.assigned} />
-                  ) : null}
-                </div>
-                <ul className="divide-y divide-border/70">
-                  {team.positions.map((pos) => (
-                    <li key={pos.positionId} className="p-3.5">
-                      <PositionRow eventId={eventId} startsAt={startsAt} team={team} pos={pos} canCheckin={canCheckin} onEscalar={onEscalar} />
-                    </li>
-                  ))}
-                </ul>
-              </div>
+          <Fragment key={team.teamId}>
+            {isFirstOutside ? (
+              <p className="px-1 pt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Outras equipes deste culto — só para acompanhar
+              </p>
             ) : null}
-          </Card>
+            <Card className="overflow-hidden">
+              <div className="flex w-full items-center gap-2 p-4">
+                <button
+                  onClick={() => toggleTeam(team.teamId)}
+                  className="press-sm flex min-w-0 flex-1 items-center gap-2.5 text-left"
+                  aria-expanded={open}
+                >
+                  <TeamDot color={team.color} className="size-3" />
+                  <h2 className="truncate font-display text-[17px] font-bold text-foreground">{team.name}</h2>
+                  {team.viewOnly ? (
+                    <Badge variant="neutral" className="ml-auto shrink-0 gap-1">
+                      <Eye className="size-3" />
+                      Só leitura
+                    </Badge>
+                  ) : null}
+                  <CoverageBadge
+                    tone={team.tone}
+                    assigned={team.confirmed}
+                    needed={team.needed}
+                    className={team.viewOnly ? "shrink-0" : "ml-auto"}
+                  />
+                </button>
+                <button
+                  onClick={() => toggleTeam(team.teamId)}
+                  aria-label={open ? "Recolher" : "Expandir"}
+                  className="press-sm shrink-0"
+                >
+                  <ChevronDown className={cn("size-5 text-muted-foreground transition-transform", open && "rotate-180")} />
+                </button>
+              </div>
+
+              {open ? (
+                <div className="border-t border-border">
+                  <div className="flex items-center justify-end gap-2 border-b border-border/70 px-4 py-2">
+                    <WhatsAppGroupButton href={team.whatsappGroup} label="Grupo" className="h-8 shrink-0 px-2.5 text-[13px]" />
+                    {team.canManage ? (
+                      <RemoverEquipeButton eventId={eventId} teamId={team.teamId} teamName={team.name} assigned={team.assigned} />
+                    ) : null}
+                  </div>
+                  <ul className="divide-y divide-border/70">
+                    {team.positions.map((pos) => (
+                      <li key={pos.positionId} className="p-3.5">
+                        <PositionRow eventId={eventId} startsAt={startsAt} team={team} pos={pos} canCheckin={canCheckin} onEscalar={onEscalar} />
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </Card>
+          </Fragment>
         );
       })}
 
@@ -233,6 +262,11 @@ function PositionRow({
                 })
               }
             />
+          ) : team.viewOnly && pos.openCount > 0 ? (
+            // Equipe de fora: vaga aberta é só informativa, não um botão de ação.
+            <p className="px-1 text-xs text-muted-foreground">
+              {pos.openCount} {pos.openCount === 1 ? "vaga em aberto" : "vagas em aberto"}
+            </p>
           ) : null}
         </div>
       )}
