@@ -28,7 +28,7 @@ import { notify, notifyMany, teamLeaderIds, avisoPrefs, quemAceitaEmail } from "
 import { comVia, registrarEntrega } from "@/lib/delivery";
 import { sendPushToSubs } from "@/lib/push";
 import {
-  sendEmail, conviteEmail, escaladoEmail, lembreteEmail, pedidoRecebidoEmail,
+  sendEmail, conviteEmail, escaladoEmail, lembreteEmail,
   siteUrl, linkDeEntrada, DIAS_LINK_ENTRADA,
 } from "@/lib/email";
 import { churchDateISO, fmtEventWhen } from "@/lib/format";
@@ -228,12 +228,6 @@ export async function solicitarEntrada(input: {
     p_desired_team_id: input.desiredTeamId || undefined,
   });
   if (error) return { ok: false, error: error.message };
-
-  // Recibo por e-mail (best-effort, igual ao resto): a tela de confirmação some
-  // quando ela fecha a aba, e sem nada na caixa de entrada o único jeito de
-  // conferir se mandou é mandar de novo. Era o que faltava para fechar o ciclo.
-  const recibo = pedidoRecebidoEmail({ nome });
-  await sendEmail({ to: email, subject: recibo.subject, html: recibo.html });
 
   return { ok: true, estado: "novo" };
 }

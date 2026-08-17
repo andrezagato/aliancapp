@@ -217,35 +217,6 @@ export function conviteEmail(opts: {
   };
 }
 
-/**
- * "Recebemos seu pedido" — o recibo que faltava.
- *
- * Até aqui, quem preenchia o formulário só via uma tela de confirmação: fechava a
- * aba e não sobrava NADA na caixa de entrada. Sem recibo, o único jeito de
- * conferir se mandou é mandar de novo — e foi exatamente isso que gerou pedido
- * duplicado. O recibo também responde a pergunta que fica no ar, que é "e agora,
- * eu espero o quê?".
- */
-export function pedidoRecebidoEmail(opts: { nome: string }): { subject: string; html: string } {
-  const nome = opts.nome?.trim() ? esc(opts.nome.trim()) : "Olá";
-  return {
-    subject: `${BRAND} — recebemos seu pedido de entrada`,
-    html: layout({
-      title: `${nome}, recebemos seu pedido`,
-      intro:
-        `Seu pedido chegou pra liderança da igreja. Agora é com eles: assim que liberarem ` +
-        `seu acesso, você recebe <strong>outro e-mail</strong> com um botão que já te coloca ` +
-        `dentro do app. Não precisa fazer mais nada — e não precisa pedir de novo.`,
-      secondary: {
-        label: "Enquanto isso, veja como funciona",
-        href: demoUrl(),
-        note: "1 minuto: entrar, confirmar sua escala e acompanhar o culto",
-      },
-      footer: `Você recebeu este e-mail porque pediu entrada no ${BRAND}. Se não foi você, é só ignorar.`,
-    }),
-  };
-}
-
 /** Aviso de escalação (canal garantido no iPhone, complementa o sino). */
 export function escaladoEmail(opts: {
   evento: string;

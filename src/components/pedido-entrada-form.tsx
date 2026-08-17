@@ -81,7 +81,7 @@ export function PedidoEntradaForm({
             ? "A liderança já aprovou você. Procure na sua caixa de entrada o e-mail do Sirvo com o botão “Entrar no Sirvo” — ele te coloca direto no app."
             : enviado === "ja_pendente"
               ? "Você já tinha pedido, e o pedido continua com a liderança — não criamos outro. Assim que liberarem, chega um e-mail com um botão que já te coloca dentro."
-              : "Seu pedido foi pra liderança e você recebeu um e-mail confirmando. Assim que liberarem seu acesso, chega outro e-mail com um botão que já te coloca dentro. Não precisa pedir de novo."}
+              : "Seu pedido foi pra liderança. Assim que liberarem seu acesso, chega um e-mail com um botão que já te coloca dentro do app. Não precisa pedir de novo."}
         </p>
         <div className="mt-2 w-full space-y-2">
           <p className="text-sm text-muted-foreground">Aproveite a espera e veja o passo a passo:</p>
