@@ -92,6 +92,17 @@ const SWATCHES = [...CATEGORY_HEXES, CATEGORY_NEUTRAL];
  */
 const TRAVA_TTL_MS = 2 * 60_000;
 
+/**
+ * Quanto tempo o auto-scroll pro bloco ao vivo fica em silêncio depois de UM
+ * TIQUE NOSSO (F3 do DECISOES-TIQUE.md).
+ *
+ * Sem isto, marcar um bloco como feito troca `blocoAtivoId` na hora, o efeito de
+ * centralização dispara no mesmo quadro e a lista desliza debaixo do dedo que
+ * acabou de tocar — o segundo toque, se vier, acerta outro bloco. ~700ms cobre
+ * o tempo de o dedo sair da tela depois do toque.
+ */
+const SEGURA_SCROLL_MS = 700;
+
 /** Nome de quem está com o bloco na mão agora, ou `null` se está livre. */
 function quemEstaEditando(item: RundownItem, meId: string): string | null {
   if (!item.editingBy || !item.editingAt || item.editingBy === meId) return null;
@@ -250,6 +261,11 @@ export function RundownGrid({
   // reexecutar o efeito (ele depende da TROCA de bloco, não de `ocupado`).
   const ocupadoRef = useRef(ocupado);
   ocupadoRef.current = ocupado;
+  // TIQUE NOSSO (F3): fica `true` por `SEGURA_SCROLL_MS` depois que ESTE
+  // aparelho marca um bloco como feito, pra segurar o auto-scroll abaixo — não
+  // é sobre outro alguém ticando em outro aparelho, é sobre não competir com o
+  // dedo que acabou de tocar aqui.
+  const tiqueNossoRef = useRef(false);
 
   const listRef = useRef(list);
   listRef.current = list;
@@ -394,12 +410,22 @@ export function RundownGrid({
 
   const toggleDone = (it: RundownItem) => {
     const done = !it.doneAt;
+    // Marca que o PRÓXIMO troco de bloco ao vivo veio de um toque aqui, e
+    // segura o auto-scroll por um instante — ver `SEGURA_SCROLL_MS` (F3).
+    tiqueNossoRef.current = true;
+    window.setTimeout(() => {
+      tiqueNossoRef.current = false;
+    }, SEGURA_SCROLL_MS);
     setList((prev) =>
       prev.map((x) => (x.id === it.id ? { ...x, doneAt: done ? new Date().toISOString() : null } : x)),
     );
     startTx(async () => {
-      await marcarBlocoFeito(it.id, eventId, done);
-      router.refresh();
+      const r = await marcarBlocoFeito(it.id, eventId, done);
+      // Sem isto o bloco "destica sozinho" quando a action falha — o próximo
+      // `items` do servidor (sem a marca) sobrescreve o palpite otimista de
+      // cima, e ninguém entende por quê (F2).
+      if (r.ok) router.refresh();
+      else showToast(r.error);
     });
   };
 
@@ -488,7 +514,7 @@ export function RundownGrid({
   // arraste já mantém.
   const blocoAtivoId = rows.find((r) => r.status === "live")?.it.id ?? null;
   useEffect(() => {
-    if (!blocoAtivoId || !started || ended || ocupadoRef.current) return;
+    if (!blocoAtivoId || !started || ended || ocupadoRef.current || tiqueNossoRef.current) return;
     itemRefs.current.get(blocoAtivoId)?.scrollIntoView({ block: "center", behavior: "smooth" });
   }, [blocoAtivoId, started, ended]);
 
