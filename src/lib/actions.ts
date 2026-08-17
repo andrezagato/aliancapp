@@ -1849,7 +1849,15 @@ export async function marcarBlocoFeito(id: string, eventId: string, done: boolea
     .update({ done_at: done ? new Date().toISOString() : null })
     .eq("id", id);
   if (error) return fail(error.message);
+  // `/control` também — e a falta dela era o grosso dos ~2s que a Produção
+  // sentia ao encerrar um bloco. Todas as outras nove ações do roteiro já
+  // revalidavam as duas rotas; esta, que é a MAIS usada durante o culto, não.
+  // Sem ela a resposta da action não traz árvore nova pra régia, e a tela só
+  // muda no `router.refresh()` seguinte — uma segunda ida ao servidor, que
+  // refaz as seis consultas de /control. Com ela, a árvore volta junto com a
+  // resposta, numa ida só.
   revalidatePath("/cronograma");
+  revalidatePath("/control");
   return ok;
 }
 
