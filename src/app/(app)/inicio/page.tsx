@@ -579,7 +579,7 @@ async function AdminSection({
 
       {eventRequests.length > 0 ? (
         <Link
-          href="/calendario"
+          href="/escalas"
           className="flex items-center gap-3 rounded-2xl border border-primary/30 bg-primary/10 p-3.5"
         >
           <span className="inline-flex size-9 items-center justify-center rounded-full bg-primary/15 text-primary">

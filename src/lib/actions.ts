@@ -1162,11 +1162,12 @@ export async function solicitarEvento(input: {
       kind: "evento_solicitado",
       title: "Novo pedido de evento",
       body: `${session.profile.full_name || "Um líder"} sugeriu: ${title} (${fmtEventWhen(desiredAt)}).`,
-      link: "/calendario",
+      link: "/escalas",
     },
   );
 
-  revalidatePath("/calendario");
+  revalidatePath("/escalas");
+  revalidatePath("/inicio");
   return ok;
 }
 
@@ -1242,10 +1243,9 @@ export async function resolverEventoSolicitado(
     body: aprovar
       ? `"${req.title}" entrou no calendário.${nota ? ` ${nota}` : ""}`
       : `"${req.title}" não foi aprovado agora.${nota ? ` ${nota}` : ""}`,
-    link: aprovar && createdEventId ? `/escalas/${createdEventId}` : "/calendario",
+    link: aprovar && createdEventId ? `/escalas/${createdEventId}` : "/inicio",
   });
 
-  revalidatePath("/calendario");
   revalidatePath("/escalas");
   revalidatePath("/inicio");
   return { ok: true, eventId: createdEventId ?? undefined };
@@ -1305,7 +1305,6 @@ export async function arquivarEvento(eventId: string, arquivar: boolean): Promis
     .eq("id", eventId);
   if (error) return fail(error.message);
   revalidatePath("/escalas");
-  revalidatePath("/calendario");
   revalidatePath("/inicio");
   return ok;
 }
@@ -1338,7 +1337,6 @@ export async function excluirEvento(eventId: string): Promise<ActionResult> {
   }
 
   revalidatePath("/escalas");
-  revalidatePath("/calendario");
   revalidatePath("/inicio");
   return ok;
 }
