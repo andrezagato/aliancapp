@@ -35,6 +35,21 @@ function visibleTeamIds(session: Session): string[] | null {
   return memberTeamIds(session.profile);
 }
 
+/**
+ * Equipes que o usuário enxerga DENTRO da escala de um culto — regra própria,
+ * mais larga que a de cima. Líder abre um culto e vê o culto INTEIRO: todas as
+ * equipes, quem está escalado, em que posição, se confirmou. Só ver: quem MEXE
+ * continua sendo `canManage` (admin ou líder daquela equipe), que não mudou.
+ *
+ * NÃO é `visibleTeamIds`, de propósito. Aquela alimenta `assembleEventList` —
+ * home e calendário —, que continuam mostrando só as equipes do líder. Ver o
+ * culto inteiro vale quando ele ABRE o culto, não no relance da home.
+ */
+function eventVisibleTeamIds(session: Session): string[] | null {
+  if (session.role === "admin" || session.role === "leader") return null;
+  return memberTeamIds(session.profile);
+}
+
 // =============================================================================
 // EQUIPES / POSIÇÕES
 // =============================================================================
@@ -1328,6 +1343,8 @@ export type DetailTeam = {
   color: string;
   icon: string;
   canManage: boolean;
+  /** Só observa: não gerencia e não é membro desta equipe (outra equipe do mesmo culto). */
+  viewOnly: boolean;
   needed: number;
   assigned: number;
   confirmed: number;
@@ -1368,25 +1385,75 @@ export async function getEventDetail(session: Session, eventId: string): Promise
     .maybeSingle();
   if (!ev) return null;
 
-  const [{ data: reqs }, { data: assigns }, teams] = await Promise.all([
+  const [{ data: reqs }, escala, teams] = await Promise.all([
     supabase
       .from("event_requirements")
       .select("id, team_id, position_id, needed_count, status, note, position:positions ( name, sort_order )")
       .eq("event_id", eventId),
-    supabase
+    // migration 0054 — o líder vê o CULTO INTEIRO (as outras equipes, em modo
+    // leitura). A RPC já mascara telefone e justificativa de quem não gerencia
+    // a equipe; o app remascara embaixo (cinto e suspensório) e cobre o
+    // caminho de fallback abaixo.
+    supabase.rpc("escala_do_culto", { p_event: eventId }),
+    listTeams(),
+  ]);
+
+  // Rede de proteção do deploy (decisão do dono, DECISOES-LIDER.md #6): se a
+  // RPC falhar — por exemplo, a migration 0054 ainda não foi aplicada quando
+  // este código já subiu —, cai na leitura direta de hoje (só as equipes do
+  // próprio usuário) em vez de deixar a escala INTEIRA sumir da tela. Mesma
+  // família de falha silenciosa das migrations 0029 e 0049. Pode sair depois
+  // que a 0054 estiver confirmada em produção.
+  let assignRows: {
+    id: string;
+    team_id: string;
+    position_id: string;
+    profile_id: string | null;
+    status: AssignmentStatus;
+    decline_reason: string | null;
+    full_name: string | null;
+    avatar_url: string | null;
+    phone: string | null;
+  }[];
+  if (escala.error) {
+    console.error("[getEventDetail] escala_do_culto falhou, usando fallback de leitura direta:", escala.error);
+    const { data: assigns } = await supabase
       .from("assignments")
       .select(
         "id, team_id, position_id, profile_id, status, decline_reason, profile:profiles!assignments_profile_id_fkey ( full_name, avatar_url, phone )",
       )
-      .eq("event_id", eventId),
-    listTeams(),
-  ]);
+      .eq("event_id", eventId);
+    assignRows = (
+      (assigns ?? []) as {
+        id: string;
+        team_id: string;
+        position_id: string;
+        profile_id: string | null;
+        status: AssignmentStatus;
+        decline_reason: string | null;
+        profile: { full_name: string; avatar_url: string | null; phone: string | null } | null;
+      }[]
+    ).map((a) => ({
+      id: a.id,
+      team_id: a.team_id,
+      position_id: a.position_id,
+      profile_id: a.profile_id,
+      status: a.status,
+      decline_reason: a.decline_reason,
+      full_name: a.profile?.full_name ?? null,
+      avatar_url: a.profile?.avatar_url ?? null,
+      phone: a.profile?.phone ?? null,
+    }));
+  } else {
+    assignRows = (escala.data ?? []) as typeof assignRows;
+  }
 
   const teamMeta = new Map(teams.map((t) => [t.id, t]));
-  const visible = visibleTeamIds(session);
+  const visible = eventVisibleTeamIds(session);
   const canSee = (teamId: string) => visible === null || visible.includes(teamId);
   const canManage = (teamId: string) =>
     session.role === "admin" || session.profile.teams.some((t) => t.id === teamId && t.role === "leader");
+  const isMember = (teamId: string) => session.profile.teams.some((t) => t.id === teamId);
 
   const reqRows = (reqs ?? []) as {
     id: string;
@@ -1396,15 +1463,6 @@ export async function getEventDetail(session: Session, eventId: string): Promise
     status: RequirementStatus;
     note: string | null;
     position: { name: string; sort_order: number } | null;
-  }[];
-  const assignRows = (assigns ?? []) as {
-    id: string;
-    team_id: string;
-    position_id: string;
-    profile_id: string | null;
-    status: AssignmentStatus;
-    decline_reason: string | null;
-    profile: { full_name: string; avatar_url: string | null; phone: string | null } | null;
   }[];
 
   // Check-ins e trocas pendentes por escalação.
@@ -1450,6 +1508,7 @@ export async function getEventDetail(session: Session, eventId: string): Promise
       const meta = teamMeta.get(teamId);
       if (!meta) return null;
       const canMng = canManage(teamId);
+      const viewOnly = !canMng && !isMember(teamId);
       const teamReqs = reqRows
         .filter((r) => r.team_id === teamId)
         .sort((a, b) => (a.position?.sort_order ?? 0) - (b.position?.sort_order ?? 0));
@@ -1459,17 +1518,22 @@ export async function getEventDetail(session: Session, eventId: string): Promise
       let confirmed = 0;
 
       const positions: DetailPosition[] = teamReqs.map((req) => {
+        // A escala agora traz o culto inteiro — sem o `team_id` aqui, uma
+        // posição pegaria escalação de OUTRA equipe (mesmo id de posição
+        // reaproveitado entre equipes).
         const posAssigns = assignRows.filter(
-          (a) => a.position_id === req.position_id && a.profile_id,
+          (a) => a.position_id === req.position_id && a.team_id === teamId && a.profile_id,
         );
         const filled: SlotPerson[] = posAssigns.map((a) => ({
           assignmentId: a.id,
           profileId: a.profile_id,
-          name: a.profile?.full_name || "Alguém",
-          avatarUrl: a.profile?.avatar_url ?? null,
-          phone: a.profile?.phone ?? null,
+          name: a.full_name || "Alguém",
+          avatarUrl: a.avatar_url,
+          // Cinto e suspensório: a RPC já masca quem não gerencia a equipe,
+          // mas o app remasca — e é isso que cobre o caminho de fallback.
+          phone: canMng ? a.phone : null,
           status: a.status,
-          declineReason: a.decline_reason,
+          declineReason: canMng ? a.decline_reason : null,
           isMe: a.profile_id === session.userId,
           checkedIn: checkedInSet.has(a.id),
           swap: swapByAssignment.get(a.id) ?? null,
@@ -1510,16 +1574,22 @@ export async function getEventDetail(session: Session, eventId: string): Promise
         color: meta.color,
         icon: meta.icon,
         canManage: canMng,
+        viewOnly,
         needed,
         assigned,
         confirmed,
         tone: confirmTone(needed, confirmed, assigned),
-        whatsappGroup: meta.whatsapp_group,
+        // Grupo de WhatsApp é "de dentro" da equipe — quem só observa não vê.
+        whatsappGroup: viewOnly ? null : meta.whatsapp_group,
         positions: visiblePositions,
       } satisfies DetailTeam;
     })
     .filter((t): t is DetailTeam => t !== null)
-    .sort((a, b) => (teamMeta.get(a.teamId)?.sort_order ?? 0) - (teamMeta.get(b.teamId)?.sort_order ?? 0));
+    .sort((a, b) => {
+      // As equipes do próprio usuário vêm primeiro; as "de fora" (viewOnly) depois.
+      if (a.viewOnly !== b.viewOnly) return a.viewOnly ? 1 : -1;
+      return (teamMeta.get(a.teamId)?.sort_order ?? 0) - (teamMeta.get(b.teamId)?.sort_order ?? 0);
+    });
 
   const responsible = (ev as { responsible?: { full_name: string } | null }).responsible;
   const confirmer = (ev as { confirmer?: { full_name: string } | null }).confirmer;

@@ -2197,6 +2197,21 @@ export type Database = {
         }
         Returns: undefined
       }
+      // migration 0054 — líder vê o culto inteiro (outras equipes, em modo leitura)
+      escala_do_culto: {
+        Args: { p_event: string }
+        Returns: {
+          avatar_url: string | null
+          decline_reason: string | null
+          full_name: string | null
+          id: string
+          phone: string | null
+          position_id: string
+          profile_id: string
+          status: Database["public"]["Enums"]["assignment_status"]
+          team_id: string
+        }[]
+      }
     }
     Enums: {
       assignment_status:
