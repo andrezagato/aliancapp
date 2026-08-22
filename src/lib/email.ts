@@ -127,14 +127,19 @@ function esc(s: string): string {
 // frontmatter do DESIGN.md — creme de parede, creme de carta, linha quente,
 // grafite quente, pedra, vinho. O template antigo era cinza-azulado de
 // biblioteca: o convite é o PRIMEIRO contato com o app e não parecia com ele.
+// Cada valor é a conversão EXATA do HSL do frontmatter do DESIGN.md — conferida,
+// não estimada. Três deles estavam errados por 1 unidade (vinho, creme, pedra):
+// invisível a olho, mas fora da paleta, e drift de 1 é como drift de 10 começa.
+// O hook não pega esses, porque eles entram no HTML por `${C.x}` e ele só lê
+// literal — então a checagem aqui é a conversão, não o alarme.
 const C = {
-  creme: "#FAF6EA",
-  cremeCarta: "#FDFCF7",
-  cremeClaro: "#FCF4E8",
-  linha: "#E8DEC9",
-  grafite: "#372725",
-  pedra: "#736459",
-  vinho: "#701425",
+  creme: "#F9F6EB",       // hsl(44 56% 95%)
+  cremeCarta: "#FDFCF7",  // hsl(48 60% 98%)
+  cremeClaro: "#FCF4E8",  // hsl(36 78% 95%)
+  linha: "#E8DEC9",       // hsl(40 40% 85%)
+  grafite: "#372725",     // hsl(8 20% 18%)  — grafite-quente
+  pedra: "#736559",       // hsl(27 13% 40%)
+  vinho: "#711425",       // hsl(349 70% 26%)
 } as const;
 
 function layout(opts: {
@@ -153,18 +158,18 @@ function layout(opts: {
 }): string {
   const { title, intro, body, cta, secondary, note, footer } = opts;
   return `
-  <div style="margin:0;padding:24px 0;background:${C.creme};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <div style="margin:0;padding:24px 0;background:${C.creme};font-family:'Alegreya Sans',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;">
     <div style="max-width:480px;margin:0 auto;background:${C.cremeCarta};border-radius:16px;overflow:hidden;border:1px solid ${C.linha};">
       <div style="padding:20px 28px;border-bottom:1px solid ${C.linha};">
-        <span style="font-size:18px;font-weight:700;color:${C.vinho};letter-spacing:-0.01em;">${BRAND}</span>
+        <span style="font-size:17px;font-weight:800;color:${C.vinho};letter-spacing:-0.01em;">${BRAND}</span>
       </div>
       <div style="padding:28px;">
-        <h1 style="margin:0 0 12px;font-size:20px;line-height:1.3;color:${C.grafite};font-family:Alegreya,Georgia,serif;">${title}</h1>
+        <h1 style="margin:0 0 12px;font-size:22px;line-height:1.1;font-weight:800;color:${C.grafite};font-family:Alegreya,Georgia,serif;">${title}</h1>
         <p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:${C.grafite};">${intro}</p>
         ${body ?? ""}
         ${
           cta
-            ? `<a href="${cta.href}" style="display:inline-block;background:${C.vinho};color:${C.cremeClaro};text-decoration:none;font-size:15px;font-weight:600;padding:12px 22px;border-radius:10px;">${esc(cta.label)}</a>`
+            ? `<a href="${cta.href}" style="display:inline-block;background:${C.vinho};color:${C.cremeClaro};text-decoration:none;font-size:15px;font-weight:600;padding:12px 20px;border-radius:999px;">${esc(cta.label)}</a>`
             : ""
         }
         ${
