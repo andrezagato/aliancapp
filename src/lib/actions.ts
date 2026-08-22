@@ -2458,6 +2458,148 @@ export async function aprovarJoinRequest(joinId: string, teams: InviteTeamInput[
   return ok;
 }
 
+/**
+ * RECONVIDAR — a cura dos dois estados travados de `listStuckEntries`.
+ *
+ * Devolve uma chave viva pra quem foi aprovado e mesmo assim não entrou: renova
+ * o convite que existe, ou cria um novo se o antigo foi cancelado, e manda o
+ * e-mail com o link que ENTRA. Um toque, do mesmo lugar onde o problema aparece.
+ *
+ * O E-MAIL NUNCA VEM DO CLIENTE — e isto não é preciosismo. `invites` é gravável
+ * por qualquer líder direto no PostgREST (policy `invites_insert_leader`), e o
+ * `invites.token` abre sessão sem senha. Se esta action aceitasse um e-mail como
+ * parâmetro, um líder mandaria o link de entrada do ADMIN pra caixa dele. Por
+ * isso ela recebe só o ID de uma linha que já existe e lê o e-mail de lá: o
+ * destino é sempre a caixa de quem a liderança já tinha aprovado.
+ *
+ * Líder reconvida (não só olha) de propósito: mostrar um problema pra quem não
+ * pode resolver é criar um segundo lugar onde a coisa trava. O que ele NÃO pode
+ * é escolher para quem — que é exatamente o que o parágrafo acima garante.
+ */
+export async function reconvidar(alvo: { tipo: "convite" | "pedido"; id: string }): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return fail("Sessão expirada.");
+  if (session.role !== "admin" && session.role !== "leader") return fail("Sem permissão.");
+  if (!session.profile.church_id) return fail("Sua conta não está ligada a uma igreja.");
+  const supabase = await createClient();
+  const isAdmin = session.role === "admin";
+  const prazo = prazoDoConvite();
+
+  let email: string;
+  let nome: string;
+  let inviteId: string | null = null;
+
+  if (alvo.tipo === "convite") {
+    const { data: inv } = await supabase
+      .from("invites")
+      .select("id, email, full_name, system_role, invite_teams ( team_id )")
+      .eq("id", alvo.id)
+      .maybeSingle();
+    if (!inv) return fail("Convite não encontrado.");
+    // Convite de admin não passa por aqui: o link que ENTRA vale 7 dias e abre
+    // quantas vezes quiser, então um e-mail encaminhado por engano viraria uma
+    // conta de administrador. Mesma regra do `criarConvite`.
+    if (inv.system_role === "admin") return fail("Convite de administrador tem que ser reenviado em Convidar.");
+    if (!isAdmin) {
+      const equipes = (inv.invite_teams ?? []) as { team_id: string }[];
+      // Convite sem equipe nenhuma não tem dono — aí quem responde é o pedido.
+      const peloConvite = equipes.some((t) => canManageTeam(session, t.team_id));
+      const { data: jr } = await supabase
+        .from("join_requests")
+        .select("desired_team_id")
+        .ilike("email", comoTexto(inv.email))
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const peloPedido = !!jr?.desired_team_id && canManageTeam(session, jr.desired_team_id);
+      if (!peloConvite && !peloPedido) return fail("Você só pode reconvidar gente da sua equipe.");
+    }
+    email = inv.email;
+    nome = inv.full_name ?? inv.email;
+    inviteId = inv.id;
+  } else {
+    const { data: jr } = await supabase
+      .from("join_requests")
+      .select("id, full_name, email, desired_team_id")
+      .eq("id", alvo.id)
+      .maybeSingle();
+    if (!jr) return fail("Solicitação não encontrada.");
+    if (!jr.email) return fail("Essa solicitação não tem email — não dá pra casar no login.");
+    if (!isAdmin && !(jr.desired_team_id && canManageTeam(session, jr.desired_team_id))) {
+      return fail("Você só pode reconvidar gente da sua equipe.");
+    }
+    email = jr.email.trim().toLowerCase();
+    nome = jr.full_name;
+  }
+
+  let token: string | null = null;
+
+  if (inviteId) {
+    // Renovar é melhor que recriar: preserva as equipes que já foram marcadas no
+    // `invite_teams` e o histórico da linha.
+    const { data: renovado } = await supabase
+      .from("invites")
+      .update({ expires_at: prazo, status: "pendente" })
+      .eq("id", inviteId)
+      .select("token")
+      .single();
+    token = renovado?.token ?? null;
+  } else {
+    const { data: inv, error } = await supabase
+      .from("invites")
+      .insert({
+        church_id: session.profile.church_id,
+        email,
+        full_name: nome,
+        created_by: session.userId,
+        expires_at: prazo,
+      })
+      .select("id, token")
+      .single();
+    if (error || !inv) return fail(error?.message || "Não consegui criar o convite.");
+    inviteId = inv.id;
+    token = inv.token;
+
+    // As equipes que alguém já tinha marcado no convite anterior (o cancelado)
+    // são trabalho feito — refazer à mão seria punir quem já tinha decidido.
+    const { data: antigo } = await supabase
+      .from("invites")
+      .select("id, invite_teams ( team_id, role )")
+      .ilike("email", comoTexto(email))
+      .neq("id", inv.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const equipes = (
+      (antigo?.invite_teams ?? []) as { team_id: string; role: "leader" | "volunteer" }[]
+    ).filter((t) => isAdmin || canManageTeam(session, t.team_id));
+    if (equipes.length > 0) {
+      await supabase
+        .from("invite_teams")
+        .insert(equipes.map((t) => ({ invite_id: inv.id, team_id: t.team_id, role: t.role })));
+    }
+  }
+
+  if (!token) return fail("Não consegui gerar o link de acesso do convite.");
+
+  // O pedido volta a valer como aprovado — se ele tiver sido reaberto pra fila,
+  // reconvidar é a decisão de aprovar de novo, e deixar os dois abertos faria a
+  // pessoa aparecer na fila E na lista de travados ao mesmo tempo.
+  if (alvo.tipo === "pedido") {
+    await supabase
+      .from("join_requests")
+      .update({ status: "aprovado", resolved_by: session.userId })
+      .eq("id", alvo.id);
+  }
+
+  const convite = conviteEmail({ nome, href: linkDeEntrada(token) });
+  await sendEmail({ to: email, subject: convite.subject, html: convite.html });
+
+  revalidatePath("/equipes");
+  revalidatePath("/inicio");
+  return ok;
+}
+
 export async function recusarJoinRequest(joinId: string): Promise<ActionResult> {
   const session = await getSession();
   if (!session) return fail("Sem permissão.");

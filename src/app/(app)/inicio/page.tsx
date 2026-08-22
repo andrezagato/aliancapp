@@ -268,6 +268,37 @@ function MyScheduleList({ mine, title }: { mine: MyAssignment[]; title: string }
 // -----------------------------------------------------------------------------
 // LÍDER
 // -----------------------------------------------------------------------------
+/**
+ * TRAVADOS — o aviso que faz a lista existir.
+ *
+ * A lista em Equipes sozinha teria o mesmo defeito do bug que ela conserta:
+ * ninguém sabia que era pra olhar. O Tiago ficou 5 dias preso numa tela que
+ * estava lá o tempo todo. É este número, aparecendo onde a pessoa já está todo
+ * dia, que transforma "dava pra descobrir" em "não dá pra não ver".
+ *
+ * Separado do banner de aprovações de propósito: "querem entrar" é fila normal
+ * de trabalho; isto é conserto. Somar os dois num contador só devolveria o
+ * travado pro meio da rotina, que é onde ele já tinha sumido.
+ */
+function TravadosBanner({ total }: { total: number }) {
+  if (total < 1) return null;
+  return (
+    <Link
+      href="/equipes"
+      className="flex items-center gap-3 rounded-2xl border border-destructive/30 bg-destructive/10 p-3.5"
+    >
+      <span className="inline-flex size-9 items-center justify-center rounded-full bg-destructive/15 text-destructive-ink">
+        <UserPlus className="size-5" />
+      </span>
+      <span className="flex-1 text-sm font-medium">
+        {total} {total > 1 ? "pessoas foram aprovadas e não entraram" : "pessoa foi aprovada e não entrou"} — toque
+        para reconvidar
+      </span>
+      <ChevronRight className="size-5 shrink-0 text-muted-foreground" />
+    </Link>
+  );
+}
+
 async function LeaderSection({
   hideHeroForEventId,
   mes,
@@ -320,6 +351,7 @@ async function LeaderSection({
     <>
       {nextTeamEvent ? <NextEventHero ev={nextTeamEvent} kicker="Próximo da sua equipe" caption="confirmados" /> : null}
 
+      <TravadosBanner total={home.stuckEntries} />
       <FaltaConfirmarCard people={unconfirmed} />
       {rawNext ? <EscalaHojeCard event={rawNext} isToday={churchDateISO(rawNext.starts_at) === todayISO} /> : null}
 
@@ -559,6 +591,8 @@ async function AdminSection({
           templates={templates}
         />
       </section>
+
+      <TravadosBanner total={home.stuckEntries} />
 
       {/* Aprovações pendentes — acionável */}
       {home.pendingJoinRequests > 0 ? (

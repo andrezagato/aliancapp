@@ -1932,6 +1932,8 @@ export async function listUnconfirmedForEvent(session: Session, eventId: string)
 // =============================================================================
 export type LeaderHome = {
   events: EventListItem[]; // já filtrados pras equipes que ele lidera
+  /** Gente da equipe dele que foi aprovada e não entrou — ver `listStuckEntries`. */
+  stuckEntries: number;
   openVacancies: number;
   awaitingConfirmation: number;
   interests: {
@@ -2036,7 +2038,14 @@ export async function getLeaderHome(session: Session): Promise<LeaderHome> {
     }));
   }
 
-  return { events: leaderEvents, openVacancies, awaitingConfirmation, interests, resolvedInterests };
+  return {
+    events: leaderEvents,
+    stuckEntries: (await listStuckEntries(session)).length,
+    openVacancies,
+    awaitingConfirmation,
+    interests,
+    resolvedInterests,
+  };
 }
 
 // =============================================================================
@@ -2045,6 +2054,8 @@ export async function getLeaderHome(session: Session): Promise<LeaderHome> {
 export type AdminHome = {
   pendingJoinRequests: number;
   pendingInvites: number;
+  /** Gente aprovada que mesmo assim não entrou — ver `listStuckEntries`. */
+  stuckEntries: number;
   upcomingCount: number;
   coverageHoles: { eventId: string; title: string; startsAt: string; missing: number }[];
   awaitingResponsible: { eventId: string; title: string; startsAt: string; responsibleName: string | null }[];
@@ -2065,9 +2076,12 @@ export async function getAdminHome(session: Session): Promise<AdminHome> {
     .filter((e) => e.missing > 0)
     .slice(0, 6);
 
-  const [{ count: joinCount }, { count: inviteCount }, { data: awaitingRows }] = await Promise.all([
+  const [{ count: joinCount }, { count: inviteCount }, stuck, { data: awaitingRows }] = await Promise.all([
     supabase.from("join_requests").select("id", { count: "exact", head: true }).eq("status", "pendente"),
     supabase.from("invites").select("id", { count: "exact", head: true }).eq("status", "pendente"),
+    // O contador tem que incluir os travados, senão a home diz "tudo certo" com
+    // gente presa há dias — que foi exatamente o que aconteceu com o Tiago.
+    listStuckEntries(session),
     supabase
       .from("events")
       .select("id, title, starts_at, responsible:profiles!events_responsible_id_fkey ( full_name )")
@@ -2093,6 +2107,7 @@ export async function getAdminHome(session: Session): Promise<AdminHome> {
   return {
     pendingJoinRequests: joinCount ?? 0,
     pendingInvites: inviteCount ?? 0,
+    stuckEntries: stuck.length,
     upcomingCount: events.length,
     coverageHoles,
     awaitingResponsible,
@@ -2313,17 +2328,37 @@ export type InviteRow = {
   createdAt: string;
   /** Dias desde o convite — sem isso "pendente" não diz se é de ontem ou de abril. */
   diasEsperando: number;
+  /**
+   * A pessoa já é membro ativo, apesar do convite seguir `pendente`.
+   *
+   * Acontece de verdade: o `handle_new_user` só carimba o convite como `aceito`
+   * no signup, então quem entrou por OUTRO caminho (ou ANTES de o convite ser
+   * criado) deixa a linha pendente pra sempre. Foi o que houve com o Tiago em
+   * 21/08 — ele criou a conta às 19:45 e o convite nasceu às 20:27, meia hora
+   * DEPOIS, e nunca teve como ser consumido.
+   *
+   * Uma fila que mostra trabalho que não é trabalho ensina a ignorar a fila.
+   */
+  jaEntrou: boolean;
   teams: { name: string; color: string; role: string }[];
 };
 
 export async function listInvites(): Promise<InviteRow[]> {
   const supabase = await createClient();
-  const { data } = await supabase
-    .from("invites")
-    .select(
-      "id, email, full_name, system_role, status, created_at, invite_teams ( role, team:teams ( name, color ) )",
-    )
-    .order("created_at", { ascending: false });
+  const [{ data }, { data: ativos }] = await Promise.all([
+    supabase
+      .from("invites")
+      .select(
+        "id, email, full_name, system_role, status, created_at, invite_teams ( role, team:teams ( name, color ) )",
+      )
+      .order("created_at", { ascending: false }),
+    supabase.from("profiles").select("email").eq("status", "ativo"),
+  ]);
+  const jaMembro = new Set(
+    ((ativos ?? []) as { email: string | null }[])
+      .map((p) => (p.email ?? "").trim().toLowerCase())
+      .filter(Boolean),
+  );
   return ((data ?? []) as {
     id: string;
     email: string;
@@ -2344,11 +2379,148 @@ export async function listInvites(): Promise<InviteRow[]> {
         0,
         Math.floor((Date.now() - new Date(i.created_at).getTime()) / 86_400_000),
       ),
+      jaEntrou: jaMembro.has(i.email.trim().toLowerCase()),
       teams: (i.invite_teams ?? [])
         .filter((t) => t.team)
         .map((t) => ({ name: t.team!.name, color: t.team!.color, role: t.role })),
     };
   });
+}
+
+// -----------------------------------------------------------------------------
+// ENTRADAS TRAVADAS — "eu já agi e não deu em nada"
+// -----------------------------------------------------------------------------
+/**
+ * POR QUE ISTO EXISTE. As três listas de "Entrando na igreja" (pedido, perfil
+ * pendente, convite) perguntam todas a MESMA coisa: "está esperando eu agir?".
+ * Quem já foi agido e mesmo assim não entrou some das três de uma vez.
+ *
+ * Foi o que houve com o Tiago, aprovado em 16/08: pedido virou `aprovado` (some
+ * da fila), convite acabou `cancelado` (some da lista de convites), e ele nunca
+ * criou conta (não vira perfil pendente). Ficou invisível no app inteiro por 5
+ * dias, e só apareceu porque ele reclamou por fora.
+ *
+ * DOIS ESTADOS, UMA CURA. Reconvidar resolve os dois — por isso não viraram
+ * seções separadas:
+ *   • `aprovado_sem_chave` — foi aprovado e não existe convite vivo pra ele;
+ *   • `link_vencido`       — o convite existe, mas o prazo passou.
+ *
+ * "NÃO ENTROU" É AUSÊNCIA DE PERFIL ATIVO, não ausência de conta. A Marina e o
+ * Gui têm conta no auth (órfã, sem perfil) e nunca entraram de verdade —
+ * medir por `auth.users` os daria como resolvidos. E `profiles` é tabela que o
+ * app já lê; `auth.users` exigiria uma RPC nova pra dar uma resposta pior.
+ *
+ * `expires_at` NULO CONTA COMO VENCIDO. Os 39 convites anteriores a 16/08 têm
+ * prazo nulo, e a `/auth/entrar/[token]` recusa todos eles (route.ts:71). Um
+ * link que a rota recusa está morto — tratar nulo como "não expira" mostraria
+ * como saudável exatamente o convite que não abre.
+ */
+export type StuckEntry = {
+  id: string;
+  motivo: "aprovado_sem_chave" | "link_vencido";
+  fullName: string;
+  email: string;
+  desiredTeamId: string | null;
+  /** Dias desde a aprovação / desde o convite — "travado" sem idade não pauta nada. */
+  diasParado: number;
+  /** Alvo do Reconvidar. O e-mail NUNCA viaja pelo cliente — ver `reconvidar`. */
+  alvo: { tipo: "convite" | "pedido"; id: string };
+};
+
+export async function listStuckEntries(session: Session): Promise<StuckEntry[]> {
+  const isAdmin = session.role === "admin";
+  const leadIds = leadTeamIds(session.profile);
+  if (!isAdmin && leadIds.length === 0) return [];
+  const supabase = await createClient();
+
+  const [{ data: aprovados }, { data: convites }, { data: ativos }] = await Promise.all([
+    supabase
+      .from("join_requests")
+      .select("id, full_name, email, desired_team_id, created_at")
+      .eq("status", "aprovado"),
+    supabase
+      .from("invites")
+      .select("id, email, full_name, created_at, expires_at, invite_teams ( team_id )")
+      .eq("status", "pendente"),
+    // Só os e-mails: é uma lista de exclusão, não um roster.
+    supabase.from("profiles").select("email").eq("status", "ativo"),
+  ]);
+
+  const chave = (e: string | null) => (e ?? "").trim().toLowerCase();
+  const jaEntrou = new Set((ativos ?? []).map((p) => chave(p.email)).filter(Boolean));
+  const agora = Date.now();
+  const dias = (iso: string) => Math.max(0, Math.floor((agora - new Date(iso).getTime()) / 86_400_000));
+
+  type ConviteRow = {
+    id: string;
+    email: string;
+    full_name: string | null;
+    created_at: string;
+    expires_at: string | null;
+    invite_teams: { team_id: string }[];
+  };
+  const conviteRows = (convites ?? []) as ConviteRow[];
+  const vivo = (c: ConviteRow) => !!c.expires_at && new Date(c.expires_at).getTime() > agora;
+  const comConviteVivo = new Set(conviteRows.filter(vivo).map((c) => chave(c.email)));
+
+  type PedidoRow = {
+    id: string;
+    full_name: string;
+    email: string | null;
+    desired_team_id: string | null;
+    created_at: string;
+  };
+  const pedidoRows = ((aprovados ?? []) as PedidoRow[]).filter((j) => chave(j.email));
+
+  // Um pedido do líder é o que pediu a equipe dele. Vale também pra decidir se
+  // ele enxerga o CONVITE da mesma pessoa (abaixo).
+  const pedidoVisivel = (j: PedidoRow) =>
+    isAdmin || (!!j.desired_team_id && leadIds.includes(j.desired_team_id));
+  const emailsDosMeusPedidos = new Set(pedidoRows.filter(pedidoVisivel).map((j) => chave(j.email)));
+
+  // Chaveado por e-mail: quem tem pedido aprovado E convite vencido é UMA pessoa
+  // travada, não duas linhas. O convite ganha porque carrega o id que o
+  // Reconvidar renova em vez de recriar do zero.
+  const porEmail = new Map<string, StuckEntry>();
+
+  for (const j of pedidoRows) {
+    const email = chave(j.email);
+    if (jaEntrou.has(email) || comConviteVivo.has(email)) continue;
+    if (!pedidoVisivel(j)) continue;
+    porEmail.set(email, {
+      id: `s-pedido-${j.id}`,
+      motivo: "aprovado_sem_chave",
+      fullName: j.full_name,
+      email: j.email!,
+      desiredTeamId: j.desired_team_id,
+      diasParado: dias(j.created_at),
+      alvo: { tipo: "pedido", id: j.id },
+    });
+  }
+
+  for (const c of conviteRows) {
+    if (vivo(c)) continue;
+    const email = chave(c.email);
+    if (!email || jaEntrou.has(email)) continue;
+    // Convite sem equipe nenhuma (o `aprovarJoinRequest` cria assim quando não se
+    // marca equipe) não teria dono pro líder. Nesse caso o pedido dele responde.
+    const meu =
+      isAdmin ||
+      (c.invite_teams ?? []).some((t) => leadIds.includes(t.team_id)) ||
+      emailsDosMeusPedidos.has(email);
+    if (!meu) continue;
+    porEmail.set(email, {
+      id: `s-convite-${c.id}`,
+      motivo: "link_vencido",
+      fullName: c.full_name || c.email,
+      email: c.email,
+      desiredTeamId: porEmail.get(email)?.desiredTeamId ?? null,
+      diasParado: dias(c.created_at),
+      alvo: { tipo: "convite", id: c.id },
+    });
+  }
+
+  return [...porEmail.values()].sort((a, b) => b.diasParado - a.diasParado);
 }
 
 /** Aniversariantes do mês (igreja toda). */
