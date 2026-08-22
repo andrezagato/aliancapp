@@ -51,8 +51,14 @@ export async function GET(
   // exatamente por quê ("cancelado", "sem prazo") — essa resposta morria aqui,
   // dentro do redirect. `porque` é o que sobrevive; `motivo` é só o que a
   // pessoa lê na tela.
-  const recusa = (motivo: string, porque: string, quem?: string | null) => {
-    void registrarFalha({
+  const recusa = async (motivo: string, porque: string, quem?: string | null) => {
+    // AGUARDADO, não `void`. Numa função da Vercel a instância pode ser congelada
+    // assim que a resposta sai — e sob tráfego baixo (uma igreja de 51 pessoas,
+    // 19h de um sábado) a promise pendurada simplesmente some. O gravador
+    // perderia preferencialmente o PRIMEIRO evento de cada incidente, que é
+    // justamente o que se quer registrar. O banco responde em 25-70ms, num
+    // caminho que acabou de fazer round-trip no GoTrue: o custo é ruído.
+    await registrarFalha({
       kind: "convite_link",
       detail: `${motivo}: ${porque}`,
       subject: quem ?? null,
@@ -71,7 +77,7 @@ export async function GET(
   }
 
   const { data: convite } = await admin
-    .from("invites").select("email, status, expires_at").eq("token", token).maybeSingle();
+    .from("invites").select("email, status, expires_at, system_role").eq("token", token).maybeSingle();
 
   if (!convite) return recusa("invalido", "nenhum convite com este token");
   if (convite.status === "cancelado" || convite.status === "expirado") {
@@ -87,6 +93,26 @@ export async function GET(
   if (new Date(convite.expires_at).getTime() < Date.now()) {
     return recusa("expirado", `venceu em ${convite.expires_at}`, convite.email);
   }
+  // ESCALADA DE PRIVILÉGIO — a trava que faltava.
+  //
+  // A regra "só primeiro acesso" (mais abaixo) impede reusar este link contra
+  // conta EXISTENTE. Ela não cobre o convite de ADMIN pra um e-mail que ainda
+  // NÃO tem conta: ali o GoTrue devolve 'signup', a trava deixa passar, e o
+  // `handle_new_user` provisiona o perfil com o `system_role` do convite.
+  //
+  // Some a isso a policy `invites_read_leader`, que é SELECT pra qualquer líder,
+  // sem escopo de igreja e sem esconder a coluna `token`: qualquer um dos 13
+  // líderes lê o token de um convite de admin pendente com a chave anônima,
+  // abre esta rota com `?trocar=1` (que desloga a sessão dele) e sai admin.
+  // A janela abria por 7 dias a cada admin convidado.
+  //
+  // Aqui é o lugar certo de fechar, porque é AQUI que o resgate acontece —
+  // fechar só na leitura dependeria de estreitar uma policy que outras telas
+  // usam. Admin entra pelo caminho que exige a caixa de entrada dele.
+  if (convite.system_role === "admin") {
+    return recusa("ja_tem_conta", "convite de admin não abre sessão por link", convite.email);
+  }
+
   // Status 'aceito' continua valendo de propósito: o link pode ter sido aberto
   // por um antivírus (que já casou o convite) antes da pessoa tocar nele. Quem
   // limita é o prazo, não o status — senão a pessoa acha um link morto.

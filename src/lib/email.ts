@@ -45,14 +45,16 @@ export async function sendEmail(input: SendEmailInput): Promise<void> {
       html: input.html,
       ...(input.text ? { text: input.text } : {}),
     });
-    // O SDK do Resend NÃO lança quando a API recusa — ele devolve `{ data, error }`.
-    // Este `if` não existia, e por isso domínio não verificado, rate limit e
-    // endereço malformado eram exatamente iguais a "enviado": o catch abaixo só
-    // pega erro de rede. Era o buraco mais fundo do best-effort — a falha nem
-    // chegava ao console.
+    // O SDK do Resend NÃO lança — nunca. Ele devolve `{ data, error }` até em
+    // falha de rede (o `fetchRequest` dele tem o fetch inteiro num try/catch e
+    // converte tudo em `error.name = "application_error"`). Este `if` não
+    // existia, então domínio não verificado, rate limit, endereço malformado E
+    // rede fora eram todos idênticos a "enviado", e a falha nem chegava ao
+    // console. O `catch` abaixo é cinto e suspensório pra um erro de programação
+    // aqui dentro — não é ele que pega falha de envio.
     if (error) {
       console.error("[email] o Resend recusou:", error.message);
-      void registrarFalha({
+      await registrarFalha({
         kind: "email",
         detail: `${error.name ?? "erro"}: ${error.message}`,
         subject: recipients[0],
@@ -64,7 +66,7 @@ export async function sendEmail(input: SendEmailInput): Promise<void> {
     console.error("[email] falha ao enviar:", err);
     // Best-effort continua: não relança, não derruba a ação. Mas best-effort
     // deixa de ser best-FORGET — a partir daqui a falha vai pro digest.
-    void registrarFalha({ kind: "email", detail: msg, subject: recipients[0], origem: input.subject });
+    await registrarFalha({ kind: "email", detail: msg, subject: recipients[0], origem: input.subject });
   }
 }
 

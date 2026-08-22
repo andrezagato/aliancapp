@@ -2224,6 +2224,11 @@ export type Database = {
         }
         Returns: undefined
       }
+      // migration 0056 — renovar convite: o Reconvidar do líder, que a RLS matava
+      renovar_convite: {
+        Args: { p_invite: string }
+        Returns: string
+      }
       // migration 0054 — líder vê o culto inteiro (outras equipes, em modo leitura)
       escala_do_culto: {
         Args: { p_event: string }

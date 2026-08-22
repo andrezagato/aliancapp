@@ -39,7 +39,13 @@ export const dynamic = "force-dynamic";
  * consulta — deixar passar string arbitrária é entregar esse controle a quem
  * monta o link.
  */
-const TIPOS: readonly EmailOtpType[] = ["magiclink", "signup", "email", "recovery", "invite", "email_change"];
+// SÓ os dois que os nossos templates emitem. Aceitar `recovery`/`invite`/
+// `email_change` transformaria esta rota num resgatador genérico de OTP: qualquer
+// token de um fluxo do GoTrue que o app NUNCA inicia (um "Invite user" do painel,
+// uma confirmação de troca de e-mail) viraria sessão — e `email_change` ainda
+// MUTA a conta como efeito colateral de algo que a rota chama de "login".
+// Alargue quando um template novo precisar, não antes.
+const TIPOS: readonly EmailOtpType[] = ["magiclink", "signup"];
 
 /**
  * `next` volta a ser um caminho DESTE app, nunca um destino livre: sem isto,
@@ -65,9 +71,14 @@ export async function GET(request: Request) {
   const tipo = TIPOS.find((t) => t === tipoBruto);
   if (!tokenHash || !tipo) {
     console.error("[confirm] link sem token_hash ou com type inesperado:", tipoBruto);
-    void registrarFalha({
+    // O `type` vem da URL e é escolhido por quem monta o link — ele NÃO entra
+    // cru no detail, senão texto de estranho aterrissa no e-mail que o admin
+    // lê como confiável ("Falha conhecida — ligue para o suporte…"). O valor só
+    // acompanha quando parece de verdade com um type.
+    const tipoSeguro = /^[a-z_]{1,32}$/.test(tipoBruto ?? "") ? tipoBruto : "(fora do formato)";
+    await registrarFalha({
       kind: "login_link",
-      detail: `link sem token_hash ou com type inesperado: ${tipoBruto ?? "(ausente)"}`,
+      detail: tokenHash ? `type inesperado: ${tipoSeguro}` : "link sem token_hash",
       origem: "/auth/confirm",
     });
     return recusa("invalido");
@@ -81,7 +92,10 @@ export async function GET(request: Request) {
     // "já venceu, peça outro" é uma instrução; "não consegui" é um beco.
     const venceu = /expired|invalid/i.test(error.message);
     console.error("[confirm] verifyOtp falhou:", error.message);
-    void registrarFalha({ kind: "login_link", detail: error.message, origem: "/auth/confirm" });
+    // AGUARDADO, não `void`: numa função da Vercel a instância pode ser congelada
+    // quando a resposta sai, e sob tráfego baixo a promise pendurada some. Ver
+    // src/lib/failure-log.ts.
+    await registrarFalha({ kind: "login_link", detail: error.message, origem: "/auth/confirm" });
     return recusa(venceu ? "expirado" : "falhou");
   }
 

@@ -48,7 +48,7 @@ export async function GET(request: Request) {
     const msg = e instanceof Error ? e.message : "falha desconhecida";
     // O vigia que morre calado é o pior de todos: sem esta linha, um digest
     // quebrado seria indistinguível de um digest que não tinha nada a dizer.
-    void registrarFalha({ kind: "cron", detail: msg, origem: "/api/cron/digest" });
+    await registrarFalha({ kind: "cron", detail: msg, origem: "/api/cron/digest" });
     return NextResponse.json({ erro: msg }, { status: 500 });
   }
 }

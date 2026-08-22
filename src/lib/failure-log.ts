@@ -15,9 +15,23 @@ import { createAdminClient } from "@/lib/supabase/admin";
  *    transformaria "o e-mail não saiu" em "a escalação quebrou". O `catch` vazio
  *    no fim é a única coisa aqui que é intencionalmente surda.
  *
- * 2. NUNCA É AGUARDADA POR QUEM CHAMA — use `void registrarFalha(...)`. Gravar
- *    não pode atrasar a resposta de um login que já está com problema. A pessoa
- *    está esperando na tela.
+ * 2. SEMPRE AGUARDADA POR QUEM CHAMA — `await registrarFalha(...)`.
+ *
+ *    Esta regra já foi o contrário, e estava errada. `void` numa função da
+ *    Vercel entrega a resposta e a instância pode ser CONGELADA na hora: o
+ *    insert em voo é cancelado. Pior que perder sempre — o Fluid compute reusa
+ *    instância quente, então sob tráfego o registro chega, e **sob tráfego baixo
+ *    ele some**. Uma igreja de 51 pessoas num sábado à noite é tráfego baixo:
+ *    o gravador perderia justamente o PRIMEIRO evento de cada incidente, que é
+ *    o único que importa. Perda não-determinística é muito mais difícil de
+ *    notar que perda total — o teste passa e a produção mente.
+ *
+ *    O medo que justificava o `void` (atrasar quem espera na tela) não
+ *    sobrevive à conta: o banco responde em 25-70ms, num caminho que acabou de
+ *    fazer round-trip no GoTrue e vai emitir um redirect que o navegador ainda
+ *    precisa seguir. Se um dia isso incomodar, o jeito certo é `after()` do
+ *    `next/server` — que existe exatamente pra estender a vida da invocação —,
+ *    nunca voltar pro `void`.
  *
  * 3. GRAVA A MENSAGEM CRUA. Traduzir aqui destrói o valor: foi o literal
  *    "both auth code and code verifier should be non-empty" que apontou o PKCE.

@@ -31,6 +31,7 @@ import {
   sendEmail, conviteEmail, escaladoEmail, lembreteEmail,
   siteUrl, linkDeEntrada, DIAS_LINK_ENTRADA,
 } from "@/lib/email";
+import { registrarFalha } from "@/lib/failure-log";
 import { churchDateISO, fmtEventWhen } from "@/lib/format";
 import type { DeliveryChannel } from "@/lib/supabase/database.types";
 import type {
@@ -2483,114 +2484,119 @@ export async function reconvidar(alvo: { tipo: "convite" | "pedido"; id: string 
   if (!session.profile.church_id) return fail("Sua conta não está ligada a uma igreja.");
   const supabase = await createClient();
   const isAdmin = session.role === "admin";
-  const prazo = prazoDoConvite();
-
-  let email: string;
-  let nome: string;
-  let inviteId: string | null = null;
 
   if (alvo.tipo === "convite") {
+    // TUDO ISTO MORA NA RPC `renovar_convite` (migration 0056), e não aqui.
+    //
+    // A versão anterior fazia `.update(...)` direto e conferia nada. Só que
+    // `invites` não tem policy de UPDATE pra líder — então o update casava 0
+    // linhas, o erro sumia, e os 13 líderes ganhavam "Não consegui gerar o link"
+    // pra sempre. Botão morto, com mensagem que nem dizia que era permissão.
+    // É a MESMA classe das 0029/0049 (app libera, RLS bloqueia, ninguém avisa),
+    // escrita justamente por quem estava construindo o remédio pra ela.
+    //
+    // A RPC é `security definer`: ela CARREGA a autorização em vez de depender
+    // de uma policy larga. E é lá que moram as duas recusas que não podem
+    // depender de alguém lembrar — convite de admin (janela de escalada de 7
+    // dias) e convite não-pendente (ressuscitar cancelado desfaz revogação).
+    const { data: tokenRpc, error: erroRpc } = await supabase.rpc("renovar_convite", {
+      p_invite: alvo.id,
+    });
+    if (erroRpc || !tokenRpc) {
+      // A mensagem da RPC é escrita pra ser lida por gente ("você só pode
+      // reconvidar gente da sua equipe"), então ela sobe pra tela como está.
+      await registrarFalha({
+        kind: "convite_link",
+        detail: `renovar_convite: ${erroRpc?.message ?? "sem token"}`,
+        origem: "reconvidar",
+      });
+      return fail(erroRpc?.message || "Não consegui renovar esse convite.");
+    }
+
+    // O e-mail vem do banco DEPOIS da RPC autorizar — nunca do cliente. É isto
+    // que impede um líder de fazer o link de entrada de outra pessoa chegar
+    // numa caixa que ele escolhe.
     const { data: inv } = await supabase
       .from("invites")
-      .select("id, email, full_name, system_role, invite_teams ( team_id )")
+      .select("email, full_name")
       .eq("id", alvo.id)
       .maybeSingle();
     if (!inv) return fail("Convite não encontrado.");
-    // Convite de admin não passa por aqui: o link que ENTRA vale 7 dias e abre
-    // quantas vezes quiser, então um e-mail encaminhado por engano viraria uma
-    // conta de administrador. Mesma regra do `criarConvite`.
-    if (inv.system_role === "admin") return fail("Convite de administrador tem que ser reenviado em Convidar.");
-    if (!isAdmin) {
-      const equipes = (inv.invite_teams ?? []) as { team_id: string }[];
-      // Convite sem equipe nenhuma não tem dono — aí quem responde é o pedido.
-      const peloConvite = equipes.some((t) => canManageTeam(session, t.team_id));
-      const { data: jr } = await supabase
-        .from("join_requests")
-        .select("desired_team_id")
-        .ilike("email", comoTexto(inv.email))
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      const peloPedido = !!jr?.desired_team_id && canManageTeam(session, jr.desired_team_id);
-      if (!peloConvite && !peloPedido) return fail("Você só pode reconvidar gente da sua equipe.");
-    }
-    email = inv.email;
-    nome = inv.full_name ?? inv.email;
-    inviteId = inv.id;
-  } else {
-    const { data: jr } = await supabase
-      .from("join_requests")
-      .select("id, full_name, email, desired_team_id")
-      .eq("id", alvo.id)
-      .maybeSingle();
-    if (!jr) return fail("Solicitação não encontrada.");
-    if (!jr.email) return fail("Essa solicitação não tem email — não dá pra casar no login.");
-    if (!isAdmin && !(jr.desired_team_id && canManageTeam(session, jr.desired_team_id))) {
-      return fail("Você só pode reconvidar gente da sua equipe.");
-    }
-    email = jr.email.trim().toLowerCase();
-    nome = jr.full_name;
+
+    const msg = conviteEmail({ nome: inv.full_name || inv.email, href: linkDeEntrada(tokenRpc) });
+    await sendEmail({ to: inv.email, subject: msg.subject, html: msg.html });
+    revalidatePath("/equipes");
+    revalidatePath("/inicio");
+    return ok;
   }
 
-  let token: string | null = null;
+  // Daqui pra baixo é só o ramo `pedido`: alguém aprovado que ficou SEM convite
+  // vivo (o caso do Tiago). Aqui não há o que renovar — há o que criar.
+  const { data: jr } = await supabase
+    .from("join_requests")
+    .select("id, full_name, email, desired_team_id")
+    .eq("id", alvo.id)
+    .maybeSingle();
+  if (!jr) return fail("Solicitação não encontrada.");
+  if (!jr.email) return fail("Essa solicitação não tem email — não dá pra casar no login.");
+  if (!isAdmin && !(jr.desired_team_id && canManageTeam(session, jr.desired_team_id))) {
+    return fail("Você só pode reconvidar gente da sua equipe.");
+  }
+  const email = jr.email.trim().toLowerCase();
+  const nome = jr.full_name;
 
-  if (inviteId) {
-    // Renovar é melhor que recriar: preserva as equipes que já foram marcadas no
-    // `invite_teams` e o histórico da linha.
-    const { data: renovado } = await supabase
-      .from("invites")
-      .update({ expires_at: prazo, status: "pendente" })
-      .eq("id", inviteId)
-      .select("token")
-      .single();
-    token = renovado?.token ?? null;
-  } else {
-    const { data: inv, error } = await supabase
-      .from("invites")
-      .insert({
-        church_id: session.profile.church_id,
-        email,
-        full_name: nome,
-        created_by: session.userId,
-        expires_at: prazo,
-      })
-      .select("id, token")
-      .single();
-    if (error || !inv) return fail(error?.message || "Não consegui criar o convite.");
-    inviteId = inv.id;
-    token = inv.token;
-
-    // As equipes que alguém já tinha marcado no convite anterior (o cancelado)
-    // são trabalho feito — refazer à mão seria punir quem já tinha decidido.
-    const { data: antigo } = await supabase
-      .from("invites")
-      .select("id, invite_teams ( team_id, role )")
-      .ilike("email", comoTexto(email))
-      .neq("id", inv.id)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    const equipes = (
-      (antigo?.invite_teams ?? []) as { team_id: string; role: "leader" | "volunteer" }[]
-    ).filter((t) => isAdmin || canManageTeam(session, t.team_id));
-    if (equipes.length > 0) {
-      await supabase
-        .from("invite_teams")
-        .insert(equipes.map((t) => ({ invite_id: inv.id, team_id: t.team_id, role: t.role })));
-    }
+  // `system_role` fica no default ('member') de propósito e NUNCA vem de fora:
+  // a policy `invites_insert_leader` já exige isso, mas depender só dela é
+  // deixar a regra num lugar onde ninguém lê ao editar esta função.
+  const { data: inv, error } = await supabase
+    .from("invites")
+    .insert({
+      church_id: session.profile.church_id,
+      email,
+      full_name: nome,
+      created_by: session.userId,
+      expires_at: prazoDoConvite(),
+    })
+    .select("id, token")
+    .single();
+  if (error || !inv) {
+    await registrarFalha({
+      kind: "convite_link",
+      detail: `insert de convite: ${error?.message ?? "sem linha"}`,
+      subject: email,
+      origem: "reconvidar",
+    });
+    return fail("Não consegui criar o convite.");
   }
 
-  if (!token) return fail("Não consegui gerar o link de acesso do convite.");
+  // As equipes que alguém já tinha marcado no convite anterior (o cancelado) são
+  // trabalho feito — refazer à mão seria punir quem já tinha decidido.
+  const { data: antigo } = await supabase
+    .from("invites")
+    .select("id, invite_teams ( team_id, role )")
+    .ilike("email", comoTexto(email))
+    .neq("id", inv.id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const equipes = (
+    (antigo?.invite_teams ?? []) as { team_id: string; role: "leader" | "volunteer" }[]
+  ).filter((t) => isAdmin || canManageTeam(session, t.team_id));
+  if (equipes.length > 0) {
+    await supabase
+      .from("invite_teams")
+      .insert(equipes.map((t) => ({ invite_id: inv.id, team_id: t.team_id, role: t.role })));
+  }
 
   // O pedido volta a valer como aprovado — se ele tiver sido reaberto pra fila,
   // reconvidar é a decisão de aprovar de novo, e deixar os dois abertos faria a
   // pessoa aparecer na fila E na lista de travados ao mesmo tempo.
-  if (alvo.tipo === "pedido") {
-    await supabase
-      .from("join_requests")
-      .update({ status: "aprovado", resolved_by: session.userId })
-      .eq("id", alvo.id);
-  }
+  await supabase
+    .from("join_requests")
+    .update({ status: "aprovado", resolved_by: session.userId })
+    .eq("id", alvo.id);
+
+  const token = inv.token;
 
   const convite = conviteEmail({ nome, href: linkDeEntrada(token) });
   await sendEmail({ to: email, subject: convite.subject, html: convite.html });
