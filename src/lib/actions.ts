@@ -227,7 +227,7 @@ export async function reenviarLinkDeAcesso(emailBruto: string): Promise<ActionRe
     convidado: true,
     semLinkDireto: ehAdmin,
   });
-  const envio = await sendEmail({ to: convite.email, subject: msg.subject, html: msg.html });
+  const envio = await sendEmail({ to: convite.email, subject: msg.subject, html: msg.html, text: msg.text });
   if (!envio.ok) return fail("Não consegui reenviar agora. Tente de novo em alguns minutos.");
   return ok;
 }
@@ -903,7 +903,7 @@ export async function lembrarPendentes(eventId: string): Promise<ActionResult> {
     const emails = (profs ?? []).map((p) => p.email).filter((e): e is string => !!e);
     if (emails.length > 0) {
       const em = lembreteEmail({ evento: titulo, quando, href: `${siteUrl()}/escalas/${eventId}` });
-      await sendEmail({ to: emails, subject: em.subject, html: em.html });
+      await sendEmail({ to: emails, subject: em.subject, html: em.html, text: em.text });
     }
   } catch {
     /* best-effort — falha de e-mail não derruba o lembrete */
@@ -1047,7 +1047,7 @@ export async function escalarVoluntario(
       });
       // Ver a nota gêmea em cobranca.ts: o catch abaixo não alcança falha de
       // entrega, porque o SDK do Resend devolve `{data,error}` em vez de lançar.
-      const envio = await sendEmail({ to: prof.email, subject: esc.subject, html: esc.html });
+      const envio = await sendEmail({ to: prof.email, subject: esc.subject, html: esc.html, text: esc.text });
       await registrarEntrega({
         ...ctxEmail,
         channel: "email",
@@ -2420,7 +2420,7 @@ export async function criarConvite(input: CriarConviteInput): Promise<ActionResu
         convidado: true,
         semLinkDireto: ehAdminR,
       });
-      const envio = await sendEmail({ to: email, subject: reenvio.subject, html: reenvio.html });
+      const envio = await sendEmail({ to: email, subject: reenvio.subject, html: reenvio.html, text: reenvio.text });
       revalidatePath("/equipes");
       // Ver a nota nos irmãos abaixo: o e-mail é o entregável.
       if (!envio.ok) return fail("O convite foi renovado, mas o e-mail não saiu. Tente de novo.");
@@ -2481,7 +2481,7 @@ export async function criarConvite(input: CriarConviteInput): Promise<ActionResu
     convidado: true,
     semLinkDireto: ehAdmin,
   });
-  const envioConvite = await sendEmail({ to: email, subject: convite.subject, html: convite.html });
+  const envioConvite = await sendEmail({ to: email, subject: convite.subject, html: convite.html, text: convite.text });
 
   revalidatePath("/equipes");
   // O e-mail É o entregável aqui: sem ele a pessoa fica sem chave. Devolver `ok`
@@ -2684,7 +2684,7 @@ export async function aprovarJoinRequest(joinId: string, teams: InviteTeamInput[
     return fail("Não consegui gerar o link de acesso do convite.");
   }
   const convite = conviteEmail({ nome: jr.full_name, href: linkDeEntrada(inviteToken) });
-  const envioAprov = await sendEmail({ to: email, subject: convite.subject, html: convite.html });
+  const envioAprov = await sendEmail({ to: email, subject: convite.subject, html: convite.html, text: convite.text });
 
   revalidatePath("/equipes");
   revalidatePath("/inicio");
@@ -2782,7 +2782,7 @@ export async function reconvidar(alvo: { tipo: "convite" | "pedido"; id: string 
       nome: renovado.full_name || renovado.email,
       href: linkDeEntrada(renovado.token),
     });
-    const envio = await sendEmail({ to: renovado.email, subject: msg.subject, html: msg.html });
+    const envio = await sendEmail({ to: renovado.email, subject: msg.subject, html: msg.html, text: msg.text });
     revalidatePath("/equipes");
     revalidatePath("/inicio");
     // Aqui o e-mail É o entregável: o convite foi renovado, mas se o link não
@@ -2875,7 +2875,7 @@ export async function reconvidar(alvo: { tipo: "convite" | "pedido"; id: string 
     // cancelar — e cancelar a trazia de volta pra tentar de novo, deixando um
     // convite morto por volta.
     const msgJa = conviteEmail({ nome, href: linkDeEntrada(jaTem.token) });
-    const envioJa = await sendEmail({ to: email, subject: msgJa.subject, html: msgJa.html });
+    const envioJa = await sendEmail({ to: email, subject: msgJa.subject, html: msgJa.html, text: msgJa.text });
 
     // Escrituração DEPOIS, e ela nunca impede o retorno de sucesso do envio.
     const { data: fechado, error: erroFechar } = await supabase
@@ -2974,7 +2974,7 @@ export async function reconvidar(alvo: { tipo: "convite" | "pedido"; id: string 
   // deixar de mandar o link porque a escrituração falhou é trocar um problema
   // de fila por uma pessoa sem chave.
   const convite = conviteEmail({ nome, href: linkDeEntrada(inv.token) });
-  const envioPedido = await sendEmail({ to: email, subject: convite.subject, html: convite.html });
+  const envioPedido = await sendEmail({ to: email, subject: convite.subject, html: convite.html, text: convite.text });
 
   const { data: resolvido, error: erroResolve } = await supabase
     .from("join_requests")

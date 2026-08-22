@@ -260,8 +260,9 @@ export function conviteEmail(opts: {
   convidado?: boolean;
   /** true = o href leva à tela de login, não é link que entra (convite de admin). */
   semLinkDireto?: boolean;
-}): { subject: string; html: string } {
+}): { subject: string; html: string; text: string } {
   const nome = opts.nome?.trim() ? esc(opts.nome.trim()) : "Olá";
+  const nomeCru = opts.nome?.trim() || "Olá";
   const abertura = opts.convidado
     ? `A liderança te convidou pra servir com a gente no <strong>${BRAND}</strong>.`
     : `A liderança aprovou seu pedido e liberou seu acesso ao <strong>${BRAND}</strong>.`;
@@ -285,6 +286,29 @@ export function conviteEmail(opts: {
           `<a href="${siteUrl()}/entrar" style="color:${C.vinho};font-weight:600;">${entrar}/entrar</a> ` +
           `e informe este mesmo e-mail — seu acesso continua liberado.`,
     }),
+    // VERSÃO EM TEXTO PURO. E-mail só-HTML é sinal de spam por si só — filtro
+    // espera `multipart/alternative`. Não é o fator dominante (o dominante é o
+    // link apontar pra um domínio diferente do remetente), mas é de graça.
+    text: opts.semLinkDireto
+      ? `${nomeCru}, seu acesso ao ${BRAND} está liberado.
+
+` +
+        `Abra ${siteUrl()}/entrar e informe este mesmo e-mail pra receber seu link de acesso.
+
+` +
+        `Primeira vez? Veja como funciona: ${demoUrl()}`
+      : `${nomeCru}, seu acesso ao ${BRAND} está liberado.
+
+` +
+        `Entre por aqui — sem criar senha:
+${opts.href}
+
+` +
+        `O link é só seu e vale por ${DIAS_LINK_ENTRADA} dias. Se expirar, abra ` +
+        `${siteUrl()}/entrar e informe este mesmo e-mail.
+
+` +
+        `Primeira vez? Veja como funciona: ${demoUrl()}`,
   };
 }
 
@@ -293,9 +317,15 @@ export function escaladoEmail(opts: {
   evento: string;
   quando: string;
   href: string;
-}): { subject: string; html: string } {
+}): { subject: string; html: string; text: string } {
   const evento = esc(opts.evento);
   return {
+    text:
+      `Você foi escalado para ${opts.evento}` +
+      (opts.quando ? ` — ${opts.quando}` : "") +
+      `.
+
+Confirme sua presença: ${opts.href}`,
     subject: `${BRAND} — você foi escalado: ${opts.evento}`,
     html: layout({
       title: "Você foi escalado 📅",
@@ -379,9 +409,15 @@ export function lembreteEmail(opts: {
   evento: string;
   quando: string;
   href: string;
-}): { subject: string; html: string } {
+}): { subject: string; html: string; text: string } {
   const evento = esc(opts.evento);
   return {
+    text:
+      `Você ainda não confirmou presença em ${opts.evento}` +
+      (opts.quando ? ` — ${opts.quando}` : "") +
+      `.
+
+Confirme ou avise que não vai poder: ${opts.href}`,
     subject: `${BRAND} — confirme sua presença: ${opts.evento}`,
     html: layout({
       title: "Falta você confirmar 🙏",

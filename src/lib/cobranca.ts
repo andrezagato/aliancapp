@@ -280,7 +280,7 @@ export async function rodarCobranca({ dry = false }: { dry?: boolean } = {}): Pr
             // Resend nunca lança, então o catch abaixo jamais viu falha de
             // entrega — e a delivery_log gravava "enviado" pra e-mail que não
             // saiu. É a tabela de onde saiu a análise de canal de 10/ago.
-            const envio = await sendEmail({ to: pessoa.email, subject: em.subject, html: em.html });
+            const envio = await sendEmail({ to: pessoa.email, subject: em.subject, html: em.html, text: em.text });
             await registrarEntregaAdmin(admin, {
               ...ctx,
               channel: "email",

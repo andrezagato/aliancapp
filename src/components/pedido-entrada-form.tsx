@@ -106,12 +106,17 @@ export function PedidoEntradaForm({
         ) : null}
         {!jaAprovado ? (
           /* A saída pro typo. Sem ela, quem errou o endereço só descobre
-             esperando um e-mail que nunca vem. */
+             esperando um e-mail que nunca vem.
+             O RÓTULO É NA VOZ DA PESSOA, não do sistema. "Esse e-mail está
+             errado" lia como veredito do servidor — como se o app tivesse
+             validado o endereço e reprovado. Quem chega aqui digitou certo do
+             ponto de vista dele; o que ele pode querer é CORRIGIR. Verbo na
+             primeira pessoa, e o possessivo, deixam claro de quem é a ação. */
           <button
             onClick={() => setEnviado(null)}
             className="text-sm font-semibold text-primary underline-offset-4 hover:underline"
           >
-            Esse e-mail está errado
+            Corrigir meu e-mail
           </button>
         ) : null}
         <div className="mt-2 w-full space-y-2">
