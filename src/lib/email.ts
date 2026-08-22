@@ -42,7 +42,11 @@ export async function sendEmail(input: SendEmailInput): Promise<EnvioResult> {
     // está no failure_log" e não havia motivo nenhum lá.
     const motivo = "nenhum destinatário válido";
     console.error(`[email] ${motivo} — não enviado: "${input.subject}"`);
-    await registrarFalha({ kind: "email", detail: `${motivo}: "${input.subject}"`, origem: "sendEmail" });
+    // Mesma guarda do ramo da chave ausente, por coerência: o dev local aponta
+    // pro banco de PRODUÇÃO, então testar aqui sujaria a failure_log real.
+    if (process.env.VERCEL_ENV === "production") {
+      await registrarFalha({ kind: "email", detail: `${motivo}: "${input.subject}"`, origem: "sendEmail" });
+    }
     return { ok: false, motivo };
   }
 
@@ -79,7 +83,7 @@ export async function sendEmail(input: SendEmailInput): Promise<EnvioResult> {
     // aqui dentro — não é ele que pega falha de envio.
     if (error) {
       console.error("[email] o Resend recusou:", error.message);
-      await registrarFalha({
+      if (process.env.VERCEL_ENV === "production") await registrarFalha({
         kind: "email",
         detail: `${error.name ?? "erro"}: ${error.message}`,
         subject: recipients[0],

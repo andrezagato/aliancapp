@@ -2293,7 +2293,7 @@ export async function criarConvite(input: CriarConviteInput): Promise<ActionResu
   if (!email || !email.includes("@")) return fail("Informe um email válido.");
 
   const supabase = await createClient();
-  const { data: existing } = await supabase
+  const { data: existing, error: erroExisting } = await supabase
     .from("invites")
     .select("id, token")
     .eq("church_id", session.profile.church_id)
@@ -2303,7 +2303,15 @@ export async function criarConvite(input: CriarConviteInput): Promise<ActionResu
     // é armadilha esperando mudança de contexto.
     .ilike("email", comoTexto(email))
     .eq("status", "pendente")
+    // `.order().limit(1)` obrigatórios: `.maybeSingle()` sozinho LANÇA quando há
+    // dois pendentes do mesmo e-mail, o erro era descartado, `existing` vinha
+    // null e esta função INSERIA um terceiro. E "duas linhas pendentes pro mesmo
+    // e-mail" é a pré-condição de toda a escalada que esta branch fecha — a
+    // função do admin fabricava a condição sozinha.
+    .order("created_at", { ascending: false })
+    .limit(1)
     .maybeSingle();
+  if (erroExisting) return fail("Não consegui conferir os convites existentes. Tente de novo.");
   // Convite pendente que já existe deixa de ser erro e passa a ser REENVIO: com
   // o link ganhando prazo (7 dias), recusar aqui deixaria o admin sem nenhuma
   // forma de renovar — só cancelar e recriar, que perde as equipes já marcadas.
@@ -2412,17 +2420,46 @@ export async function aprovarJoinRequest(joinId: string, teams: InviteTeamInput[
 
   const email = jr.email.trim().toLowerCase();
   const prazo = prazoDoConvite();
+
+  // A MESMA GUARDA DO `reconvidar`, que faltava aqui — e este é o caminho pior.
+  //
+  // `join_requests` aceita INSERT anônimo com `WITH CHECK (true)` e não tem
+  // constraint nenhuma no e-mail. Então um estranho planta um pedido com o
+  // e-mail de quem você convidou como ADMIN e a equipe de um líder qualquer; o
+  // líder aprova de boa-fé; e a busca abaixo reaproveitava aquele convite de
+  // admin e mandava o LINK DIRETO dele por e-mail. É exatamente o que o
+  // `criarConvite` evita com `semLinkDireto: ehAdmin` e a RPC com
+  // `system_role <> 'member'` — e quem escolhia a hora era o estranho.
+  const { data: adminPend, error: erroAdminPend } = await supabase
+    .from("invites")
+    .select("id")
+    .eq("status", "pendente")
+    .eq("system_role", "admin")
+    .ilike("email", comoTexto(email));
+  if (erroAdminPend) return fail("Não consegui conferir os convites pendentes. Tente de novo.");
+  if (adminPend && adminPend.length > 0) {
+    return fail("Já existe um convite de administrador pendente para esse e-mail.");
+  }
+
   // `.order().limit(1)` antes do `.maybeSingle()`: essa busca decide qual token
   // vai no e-mail, e `.maybeSingle()` sozinho DÁ ERRO se houver dois convites
   // pendentes do mesmo e-mail.
-  const { data: existing } = await supabase
+  //
+  // `system_role` e `church_id` no filtro porque `invites_read_leader` é
+  // `USING (is_any_leader())` — sem escopo de igreja e sem esconder `token`.
+  // Sem eles, esta busca enxergava e reaproveitava convite de admin e de OUTRA
+  // igreja.
+  const { data: existing, error: erroExist } = await supabase
     .from("invites")
     .select("id, token")
+    .eq("church_id", session.profile.church_id)
+    .eq("system_role", "member")
     .ilike("email", comoTexto(email))
     .eq("status", "pendente")
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
+  if (erroExist) return fail("Não consegui conferir os convites existentes. Tente de novo.");
 
   let inviteId = existing?.id ?? null;
   let inviteToken = existing?.token ?? null;
@@ -2430,7 +2467,26 @@ export async function aprovarJoinRequest(joinId: string, teams: InviteTeamInput[
   if (inviteId) {
     // Convite reaproveitado: renova o prazo, senão o link que estamos mandando
     // AGORA já nasceria vencido (ou com `expires_at` nulo de antes desta mudança).
-    await supabase.from("invites").update({ expires_at: prazo }).eq("id", inviteId);
+    //
+    // `.select("id")` + conferência porque LÍDER NÃO TEM POLICY DE UPDATE em
+    // `invites`. Sem isto, pra líder o update casava 0 LINHAS SEM ERRO, a função
+    // seguia e mandava um link cujo prazo nunca foi renovado — a rota então
+    // recusava com "convite sem prazo" e a action já tinha dito `ok`. É a classe
+    // 0029/0049 outra vez, viva, neste arquivo.
+    const { data: renov, error: erroRenov } = await supabase
+      .from("invites")
+      .update({ expires_at: prazo })
+      .eq("id", inviteId)
+      .select("id");
+    if (erroRenov || !renov || renov.length === 0) {
+      await registrarFalha({
+        kind: "convite_link",
+        detail: `renovar prazo em aprovarJoinRequest: ${erroRenov?.message ?? "0 linhas (sem policy de UPDATE?)"}`,
+        subject: email,
+        origem: "aprovarJoinRequest",
+      });
+      return fail("Não consegui renovar o prazo do convite. Use Reconvidar em Equipes.");
+    }
   } else {
     const { data: inv, error } = await supabase
       .from("invites")
@@ -2443,19 +2499,54 @@ export async function aprovarJoinRequest(joinId: string, teams: InviteTeamInput[
       })
       .select("id, token")
       .single();
-    if (error || !inv) return fail(error?.message || "Não consegui criar o convite.");
+    if (error || !inv) {
+      await registrarFalha({
+        kind: "convite_link",
+        detail: `insert em aprovarJoinRequest: ${error?.message ?? "sem linha"}`,
+        subject: email,
+        origem: "aprovarJoinRequest",
+      });
+      return fail("Não consegui criar o convite.");
+    }
     inviteId = inv.id;
     inviteToken = inv.token;
   }
 
   const picked = teams.filter((t) => t.teamId && (session.role === "admin" || canManageTeam(session, t.teamId)));
   if (inviteId && picked.length > 0) {
-    await supabase.from("invite_teams").insert(
+    // O filtro acima é `canManageTeam` NO APP; a policy é `is_team_leader` NO
+    // BANCO. Se divergirem, as equipes somem em silêncio e a pessoa entra sem
+    // equipe nenhuma — com `ok` na tela.
+    const { error: erroTimes } = await supabase.from("invite_teams").insert(
       picked.map((t) => ({ invite_id: inviteId, team_id: t.teamId, role: t.role })),
     );
+    if (erroTimes) {
+      await registrarFalha({
+        kind: "convite_link",
+        detail: `invite_teams em aprovarJoinRequest: ${erroTimes.message}`,
+        subject: email,
+        origem: "aprovarJoinRequest",
+      });
+      return fail("Convite criado, mas não consegui marcar as equipes. Ajuste em Equipes.");
+    }
   }
 
-  await supabase.from("join_requests").update({ status: "aprovado", resolved_by: session.userId }).eq("id", joinId);
+  // Sem conferência aqui o pedido continuava na fila E aparecia em "travados" —
+  // o duplo-aparecimento que o comentário abaixo diz estar evitando.
+  const { data: resolvido, error: erroResolve } = await supabase
+    .from("join_requests")
+    .update({ status: "aprovado", resolved_by: session.userId })
+    .eq("id", joinId)
+    .select("id");
+  if (erroResolve || !resolvido || resolvido.length === 0) {
+    await registrarFalha({
+      kind: "convite_link",
+      detail: `marcar pedido como aprovado: ${erroResolve?.message ?? "0 linhas"}`,
+      subject: email,
+      origem: "aprovarJoinRequest",
+    });
+    return fail("Não consegui marcar o pedido como aprovado. Tente de novo.");
+  }
 
   // UM e-mail, não dois. Antes daqui o botão levava a `/entrar`: a pessoa tinha
   // que digitar o e-mail de novo e esperar um SEGUNDO e-mail pra passar. A
@@ -2623,30 +2714,64 @@ export async function reconvidar(alvo: { tipo: "convite" | "pedido"; id: string 
 
   // As equipes que alguém já tinha marcado no convite anterior (o cancelado) são
   // trabalho feito — refazer à mão seria punir quem já tinha decidido.
-  const { data: antigo } = await supabase
+  // Best-effort de verdade (herdar equipes é bônus, não requisito), mas o erro
+  // deixa de sumir: sem isto, as equipes já decididas desapareciam caladas.
+  const { data: antigo, error: erroAntigo } = await supabase
     .from("invites")
     .select("id, invite_teams ( team_id, role )")
+    .eq("church_id", session.profile.church_id)
+    .eq("system_role", "member")
     .ilike("email", comoTexto(email))
     .neq("id", inv.id)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
+  if (erroAntigo) {
+    await registrarFalha({
+      kind: "convite_link",
+      detail: `herdar equipes do convite anterior: ${erroAntigo.message}`,
+      subject: email,
+      origem: "reconvidar",
+    });
+  }
   const equipes = (
     (antigo?.invite_teams ?? []) as { team_id: string; role: "leader" | "volunteer" }[]
   ).filter((t) => isAdmin || canManageTeam(session, t.team_id));
   if (equipes.length > 0) {
-    await supabase
+    // `canManageTeam` no app × `is_team_leader` na policy: se divergirem, as
+    // equipes somem sem ninguém saber. Não derruba a ação (o convite já vale),
+    // mas registra.
+    const { error: erroTimes } = await supabase
       .from("invite_teams")
       .insert(equipes.map((t) => ({ invite_id: inv.id, team_id: t.team_id, role: t.role })));
+    if (erroTimes) {
+      await registrarFalha({
+        kind: "convite_link",
+        detail: `invite_teams em reconvidar: ${erroTimes.message}`,
+        subject: email,
+        origem: "reconvidar",
+      });
+    }
   }
 
   // O pedido volta a valer como aprovado — se ele tiver sido reaberto pra fila,
   // reconvidar é a decisão de aprovar de novo, e deixar os dois abertos faria a
-  // pessoa aparecer na fila E na lista de travados ao mesmo tempo.
-  await supabase
+  // pessoa aparecer na fila E na lista de travados ao mesmo tempo. Que é
+  // exatamente o que acontecia quando este update casava 0 linhas em silêncio.
+  const { data: resolvido, error: erroResolve } = await supabase
     .from("join_requests")
     .update({ status: "aprovado", resolved_by: session.userId })
-    .eq("id", alvo.id);
+    .eq("id", alvo.id)
+    .select("id");
+  if (erroResolve || !resolvido || resolvido.length === 0) {
+    await registrarFalha({
+      kind: "convite_link",
+      detail: `marcar pedido como aprovado: ${erroResolve?.message ?? "0 linhas"}`,
+      subject: email,
+      origem: "reconvidar",
+    });
+    return fail("O convite foi criado, mas não consegui fechar o pedido. Confira em Equipes.");
+  }
 
   const token = inv.token;
 
