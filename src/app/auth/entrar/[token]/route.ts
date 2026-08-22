@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { registrarFalha } from "@/lib/failure-log";
 
 /**
  * O LINK QUE ENTRA. Um toque no botão do e-mail de acesso liberado e a pessoa
@@ -45,8 +46,20 @@ export async function GET(
   const trocar = searchParams.get("trocar") === "1";
   const { token } = await params;
   // Nenhuma recusa é beco sem saída: todas caem no campo de e-mail de /entrar,
-  // que é o plano B escrito na letra miúda do próprio e-mail.
-  const recusa = (motivo: string) => NextResponse.redirect(`${origin}/entrar?link=${motivo}`);
+  // que é o plano B escrito na letra miúda do próprio e-mail. E nenhuma é muda:
+  // o convite do Tiago foi recusado em silêncio por 5 dias, e o app sabia
+  // exatamente por quê ("cancelado", "sem prazo") — essa resposta morria aqui,
+  // dentro do redirect. `porque` é o que sobrevive; `motivo` é só o que a
+  // pessoa lê na tela.
+  const recusa = (motivo: string, porque: string, quem?: string | null) => {
+    void registrarFalha({
+      kind: "convite_link",
+      detail: `${motivo}: ${porque}`,
+      subject: quem ?? null,
+      origem: "/auth/entrar/[token]",
+    });
+    return NextResponse.redirect(`${origin}/entrar?link=${motivo}`);
+  };
 
   const admin = createAdminClient();
   // Aqui a falta de service-role FECHA a porta — ao contrário de
@@ -54,22 +67,26 @@ export async function GET(
   // senha: sem conferir o convite, ela aceitaria qualquer token chutado.
   if (!admin) {
     console.error("[entrada] SUPABASE_SERVICE_ROLE_KEY ausente — link de entrada desligado.");
-    return recusa("indisponivel");
+    return recusa("indisponivel", "SUPABASE_SERVICE_ROLE_KEY ausente");
   }
 
   const { data: convite } = await admin
     .from("invites").select("email, status, expires_at").eq("token", token).maybeSingle();
 
-  if (!convite) return recusa("invalido");
-  if (convite.status === "cancelado" || convite.status === "expirado") return recusa("invalido");
+  if (!convite) return recusa("invalido", "nenhum convite com este token");
+  if (convite.status === "cancelado" || convite.status === "expirado") {
+    return recusa("invalido", `convite ${convite.status}`, convite.email);
+  }
 
   // `expires_at` só começou a ser preenchido NESTA mudança. Os 38 convites que já
   // estão no banco têm prazo NULL e um token válido — e um `&&` otimista faria
   // NULL virar "não expira nunca": 26 logins sem senha, eternos, um deles de um
   // admin. Sem prazo, o convite não é deste desenho; e o que não é deste desenho
   // não abre porta.
-  if (!convite.expires_at) return recusa("invalido");
-  if (new Date(convite.expires_at).getTime() < Date.now()) return recusa("expirado");
+  if (!convite.expires_at) return recusa("invalido", "convite sem prazo (anterior a 16/08)", convite.email);
+  if (new Date(convite.expires_at).getTime() < Date.now()) {
+    return recusa("expirado", `venceu em ${convite.expires_at}`, convite.email);
+  }
   // Status 'aceito' continua valendo de propósito: o link pode ter sido aberto
   // por um antivírus (que já casou o convite) antes da pessoa tocar nele. Quem
   // limita é o prazo, não o status — senão a pessoa acha um link morto.
@@ -95,7 +112,7 @@ export async function GET(
   });
   if (erroLink || !gerado?.properties) {
     console.error("[entrada] generateLink falhou:", erroLink?.message);
-    return recusa("falhou");
+    return recusa("falhou", `generateLink: ${erroLink?.message ?? "sem detalhe"}`, convite.email);
   }
 
   // O GoTrue troca 'magiclink' por 'signup' quando o e-mail ainda não tem conta.
@@ -122,7 +139,7 @@ export async function GET(
   // ele devolver 'magiclink', a conta existe.
   if (tipo !== "signup") {
     if (tipo !== "magiclink") console.error("[entrada] verification_type inesperado:", tipo);
-    return recusa("ja_tem_conta");
+    return recusa("ja_tem_conta", `verification_type=${tipo}`, convite.email);
   }
 
   const { error: erroVerify } = await supabase.auth.verifyOtp({
@@ -131,7 +148,7 @@ export async function GET(
   });
   if (erroVerify) {
     console.error("[entrada] verifyOtp falhou:", erroVerify.message);
-    return recusa("falhou");
+    return recusa("falhou", `verifyOtp: ${erroVerify.message}`, convite.email);
   }
 
   // /inicio: o layout de (app) decide entre a home e /aguardando conforme o

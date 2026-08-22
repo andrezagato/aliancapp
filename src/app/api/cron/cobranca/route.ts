@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { rodarCobranca } from "@/lib/cobranca";
+import { registrarFalha } from "@/lib/failure-log";
 
 /**
  * Cobrança diária da escala (ver src/lib/cobranca.ts).
@@ -37,6 +38,10 @@ export async function GET(request: Request) {
     return NextResponse.json(resumo);
   } catch (e) {
     const msg = e instanceof Error ? e.message : "falha desconhecida";
+    // Este 500 ia pro log da Vercel e morria lá. A cobrança já passou 3 dias
+    // sem rodar (31/jul–03/ago) sem ninguém notar — agora a falha aparece no
+    // digest da manhã seguinte.
+    void registrarFalha({ kind: "cron", detail: msg, origem: "/api/cron/cobranca" });
     return NextResponse.json({ erro: msg }, { status: 500 });
   }
 }

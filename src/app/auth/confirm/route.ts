@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { EmailOtpType } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
+import { registrarFalha } from "@/lib/failure-log";
 
 /**
  * O LINK DE LOGIN DO E-MAIL — ABERTO DE QUALQUER NAVEGADOR.
@@ -64,6 +65,11 @@ export async function GET(request: Request) {
   const tipo = TIPOS.find((t) => t === tipoBruto);
   if (!tokenHash || !tipo) {
     console.error("[confirm] link sem token_hash ou com type inesperado:", tipoBruto);
+    void registrarFalha({
+      kind: "login_link",
+      detail: `link sem token_hash ou com type inesperado: ${tipoBruto ?? "(ausente)"}`,
+      origem: "/auth/confirm",
+    });
     return recusa("invalido");
   }
 
@@ -75,6 +81,7 @@ export async function GET(request: Request) {
     // "já venceu, peça outro" é uma instrução; "não consegui" é um beco.
     const venceu = /expired|invalid/i.test(error.message);
     console.error("[confirm] verifyOtp falhou:", error.message);
+    void registrarFalha({ kind: "login_link", detail: error.message, origem: "/auth/confirm" });
     return recusa(venceu ? "expirado" : "falhou");
   }
 

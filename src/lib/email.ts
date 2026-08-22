@@ -2,6 +2,8 @@ import "server-only";
 
 import { Resend } from "resend";
 
+import { registrarFalha } from "@/lib/failure-log";
+
 type SendEmailInput = {
   to: string | (string | null | undefined)[];
   subject: string;
@@ -36,16 +38,33 @@ export async function sendEmail(input: SendEmailInput): Promise<void> {
   }
 
   try {
-    await resend.emails.send({
+    const { error } = await resend.emails.send({
       from: fromDefault,
       to: recipients,
       subject: input.subject,
       html: input.html,
       ...(input.text ? { text: input.text } : {}),
     });
+    // O SDK do Resend NÃO lança quando a API recusa — ele devolve `{ data, error }`.
+    // Este `if` não existia, e por isso domínio não verificado, rate limit e
+    // endereço malformado eram exatamente iguais a "enviado": o catch abaixo só
+    // pega erro de rede. Era o buraco mais fundo do best-effort — a falha nem
+    // chegava ao console.
+    if (error) {
+      console.error("[email] o Resend recusou:", error.message);
+      void registrarFalha({
+        kind: "email",
+        detail: `${error.name ?? "erro"}: ${error.message}`,
+        subject: recipients[0],
+        origem: input.subject,
+      });
+    }
   } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
     console.error("[email] falha ao enviar:", err);
-    /* silencioso de propósito — best-effort */
+    // Best-effort continua: não relança, não derruba a ação. Mas best-effort
+    // deixa de ser best-FORGET — a partir daqui a falha vai pro digest.
+    void registrarFalha({ kind: "email", detail: msg, subject: recipients[0], origem: input.subject });
   }
 }
 
@@ -108,19 +127,27 @@ function esc(s: string): string {
 // frontmatter do DESIGN.md — creme de parede, creme de carta, linha quente,
 // grafite quente, pedra, vinho. O template antigo era cinza-azulado de
 // biblioteca: o convite é o PRIMEIRO contato com o app e não parecia com ele.
+// Cada valor é a conversão EXATA do HSL do frontmatter do DESIGN.md — conferida,
+// não estimada. Três deles estavam errados por 1 unidade (vinho, creme, pedra):
+// invisível a olho, mas fora da paleta, e drift de 1 é como drift de 10 começa.
+// O hook não pega esses, porque eles entram no HTML por `${C.x}` e ele só lê
+// literal — então a checagem aqui é a conversão, não o alarme.
 const C = {
-  creme: "#FAF6EA",
-  cremeCarta: "#FDFCF7",
-  cremeClaro: "#FCF4E8",
-  linha: "#E8DEC9",
-  grafite: "#372725",
-  pedra: "#736459",
-  vinho: "#701425",
+  creme: "#F9F6EB",       // hsl(44 56% 95%)
+  cremeCarta: "#FDFCF7",  // hsl(48 60% 98%)
+  cremeClaro: "#FCF4E8",  // hsl(36 78% 95%)
+  linha: "#E8DEC9",       // hsl(40 40% 85%)
+  grafite: "#372725",     // hsl(8 20% 18%)  — grafite-quente
+  pedra: "#736559",       // hsl(27 13% 40%)
+  vinho: "#711425",       // hsl(349 70% 26%)
 } as const;
 
 function layout(opts: {
   title: string;
   intro: string;
+  /** HTML solto entre a intro e o CTA. Só o digest usa — os outros templates
+   *  são um parágrafo e um botão, e não devem virar reféns dele. */
+  body?: string;
   cta?: { label: string; href: string };
   /** Link discreto abaixo do CTA — hoje usado pela demo "Primeiros passos". */
   secondary?: { label: string; href: string; note?: string };
@@ -129,19 +156,20 @@ function layout(opts: {
   note?: string;
   footer?: string;
 }): string {
-  const { title, intro, cta, secondary, note, footer } = opts;
+  const { title, intro, body, cta, secondary, note, footer } = opts;
   return `
-  <div style="margin:0;padding:24px 0;background:${C.creme};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <div style="margin:0;padding:24px 0;background:${C.creme};font-family:'Alegreya Sans',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;">
     <div style="max-width:480px;margin:0 auto;background:${C.cremeCarta};border-radius:16px;overflow:hidden;border:1px solid ${C.linha};">
       <div style="padding:20px 28px;border-bottom:1px solid ${C.linha};">
-        <span style="font-size:18px;font-weight:700;color:${C.vinho};letter-spacing:-0.01em;">${BRAND}</span>
+        <span style="font-size:17px;font-weight:800;color:${C.vinho};letter-spacing:-0.01em;">${BRAND}</span>
       </div>
       <div style="padding:28px;">
-        <h1 style="margin:0 0 12px;font-size:20px;line-height:1.3;color:${C.grafite};font-family:Alegreya,Georgia,serif;">${title}</h1>
+        <h1 style="margin:0 0 12px;font-size:22px;line-height:1.1;font-weight:800;color:${C.grafite};font-family:Alegreya,Georgia,serif;">${title}</h1>
         <p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:${C.grafite};">${intro}</p>
+        ${body ?? ""}
         ${
           cta
-            ? `<a href="${cta.href}" style="display:inline-block;background:${C.vinho};color:${C.cremeClaro};text-decoration:none;font-size:15px;font-weight:600;padding:12px 22px;border-radius:10px;">${esc(cta.label)}</a>`
+            ? `<a href="${cta.href}" style="display:inline-block;background:${C.vinho};color:${C.cremeClaro};text-decoration:none;font-size:15px;font-weight:600;padding:12px 20px;border-radius:999px;">${esc(cta.label)}</a>`
             : ""
         }
         ${
@@ -237,6 +265,58 @@ export function escaladoEmail(opts: {
         href: demoUrl(),
         note: "o passo a passo em 1 minuto",
       },
+    }),
+  };
+}
+
+/**
+ * O DIGEST DIÁRIO — o único e-mail do Sirvo que é bom quando NÃO chega.
+ *
+ * Ele existe porque nenhum dos incidentes deste mês precisou ser DETECTADO:
+ * todos já eram sabidos pelo sistema no instante em que aconteceram, e foram
+ * descartados. O digest é o destino desse conhecimento.
+ *
+ * A REGRA QUE O MANTÉM ÚTIL: silêncio significa saudável. Se ele chegar todo dia
+ * com ruído, em três semanas ninguém abre — e aí é PIOR que não existir, porque
+ * cria a sensação de estar coberto. Por isso o cron só manda quando há o que
+ * dizer... com uma exceção deliberada, o domingo (ver a rota do cron).
+ *
+ * Sem CTA de propósito. Cada linha já diz o nome de quem travou e o motivo cru;
+ * um botão "ver no app" só somaria um toque entre ler e agir.
+ */
+export function digestEmail(opts: {
+  /** Blocos já prontos. Bloco vazio não deve chegar aqui — filtre antes. */
+  blocos: { titulo: string; linhas: string[] }[];
+  /** Domingo manda mesmo sem novidade, e aí o e-mail precisa explicar por quê. */
+  heartbeat: boolean;
+}): { subject: string; html: string } {
+  const { blocos, heartbeat } = opts;
+  const tudoCerto = blocos.length === 0;
+
+  const body = blocos
+    .map(
+      (b) =>
+        `<p style="margin:18px 0 6px;font-size:14px;font-weight:700;color:${C.grafite};">${esc(b.titulo)}</p>` +
+        `<ul style="margin:0;padding-left:18px;font-size:14px;line-height:1.65;color:${C.grafite};">` +
+        b.linhas.map((l) => `<li style="margin:2px 0;">${esc(l)}</li>`).join("") +
+        `</ul>`,
+    )
+    .join("");
+
+  return {
+    subject: tudoCerto
+      ? `${BRAND} — tudo certo por aqui`
+      : `${BRAND} — ${blocos.length === 1 ? "1 coisa" : `${blocos.length} coisas`} pra olhar`,
+    html: layout({
+      title: tudoCerto ? "Tudo certo ✅" : "Resumo do dia 🔎",
+      intro: tudoCerto
+        ? "Nada travado, nenhuma falha registrada nas últimas 24h."
+        : "O que o app registrou e que ninguém teria visto de outro jeito:",
+      body,
+      note: heartbeat
+        ? "Este resumo chega <strong>todo domingo</strong> mesmo sem novidade. Se um domingo ele não chegar, quem parou foi o próprio digest — e aí é isso que precisa de olhar."
+        : undefined,
+      footer: "Você recebe este resumo porque administra o Sirvo.",
     }),
   };
 }

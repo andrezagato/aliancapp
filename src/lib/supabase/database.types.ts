@@ -1482,6 +1482,33 @@ export type Database = {
           },
         ]
       }
+      failure_log: {
+        Row: {
+          created_at: string
+          detail: string
+          id: string
+          kind: Database["public"]["Enums"]["failure_kind"]
+          origem: string | null
+          subject: string | null
+        }
+        Insert: {
+          created_at?: string
+          detail: string
+          id?: string
+          kind: Database["public"]["Enums"]["failure_kind"]
+          origem?: string | null
+          subject?: string | null
+        }
+        Update: {
+          created_at?: string
+          detail?: string
+          id?: string
+          kind?: Database["public"]["Enums"]["failure_kind"]
+          origem?: string | null
+          subject?: string | null
+        }
+        Relationships: []
+      }
       reminder_log: {
         Row: {
           event_id: string
@@ -2214,6 +2241,7 @@ export type Database = {
       }
     }
     Enums: {
+      failure_kind: "login_link" | "convite_link" | "email" | "cron"
       assignment_status:
         | "convidado"
         | "confirmado"
