@@ -4,9 +4,11 @@ import {
   JoinRequestActions,
   PendingProfileActions,
   CancelInviteButton,
+  ReconvidarButton,
   EntradaRow,
   type TeamOpt,
 } from "@/components/people-controls";
+import { Badge } from "@/components/ui/badge";
 import { TeamManager } from "@/components/team-manager";
 import { getSession } from "@/lib/auth";
 import {
@@ -18,6 +20,7 @@ import {
   listPendingJoinRequests,
   listPendingProfiles,
   listInvites,
+  listStuckEntries,
   listTeams,
 } from "@/lib/data";
 import { VolunteerTeamsView } from "@/components/volunteer-teams-view";
@@ -53,10 +56,11 @@ export default async function EquipesPage() {
 
   // Aprovações: admin vê tudo; líder só o que pediu a equipe dele. Convites
   // (criar/cancelar) continuam só pro admin.
-  const [joins, pendingProfiles, invites, allTeams] = await Promise.all([
+  const [joins, pendingProfiles, invites, stuck, allTeams] = await Promise.all([
     canApprove ? listPendingJoinRequests(session) : Promise.resolve([]),
     canApprove ? listPendingProfiles(session) : Promise.resolve([]),
     isAdmin ? listInvites() : Promise.resolve([]),
+    canApprove ? listStuckEntries(session) : Promise.resolve([]),
     isAdmin ? listTeams() : Promise.resolve([]),
   ]);
   const teamOpts: TeamOpt[] = allTeams.map((t) => ({ id: t.id, name: t.name, color: t.color }));
@@ -64,12 +68,42 @@ export default async function EquipesPage() {
     ? teamOpts
     : teams.map((t) => ({ id: t.id, name: t.name, color: t.color }));
   const teamById = new Map(approvalTeamOpts.map((t) => [t.id, t]));
-  const pendingInvites = invites.filter((i) => i.status === "pendente");
+  // `!jaEntrou`: convite pendente de quem JÁ é membro não é gente chegando, é
+  // linha morta — e uma fila com linha morta dentro deixa de ser lida.
+  const pendingInvites = invites.filter((i) => i.status === "pendente" && !i.jaEntrou);
 
   // "Entrando na igreja" — pedido de entrada, perfil pendente e convite são a
   // mesma coisa vista de fora (gente chegando); a origem vira texto na 2ª
   // linha, não uma seção própria.
+  // TRAVADOS PRIMEIRO. As outras linhas são "decida sobre esta pessoa"; estas
+  // são "você já decidiu e não chegou nela". Enterrar isso no fim da lista
+  // repetiria o defeito que ela conserta — o problema estava visível, só que
+  // longe demais pra alguém tropeçar nele.
   const entradaRows = [
+    ...stuck.map((s) => {
+      const team = s.desiredTeamId ? teamById.get(s.desiredTeamId) : null;
+      const espera = s.diasParado === 0 ? "hoje" : `há ${s.diasParado} ${s.diasParado === 1 ? "dia" : "dias"}`;
+      return {
+        id: s.id,
+        fullName: s.fullName,
+        email: s.email,
+        phone: null as string | null,
+        message: null as string | null,
+        teamDot: team?.color ?? null,
+        chip: <Badge variant="warning">Travado</Badge>,
+        // O motivo em português, porque "por que travou" é o que decide se
+        // Reconvidar basta ou se é caso de ligar pra pessoa.
+        line2: [
+          team ? `Quer ${team.name}` : null,
+          s.motivo === "link_vencido"
+            ? `o link venceu · aprovado ${espera}`
+            : `sem convite ativo · aprovado ${espera}`,
+        ]
+          .filter(Boolean)
+          .join(" · "),
+        actions: <ReconvidarButton alvo={s.alvo} />,
+      };
+    }),
     ...joins.map((j) => {
       const team = j.desiredTeamId ? teamById.get(j.desiredTeamId) : null;
       return {

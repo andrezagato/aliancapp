@@ -16,6 +16,7 @@ import {
   recusarJoinRequest,
   aprovarProfilePendente,
   excluirPessoa,
+  reconvidar,
 } from "@/lib/actions";
 import type { InviteTeamInput } from "@/lib/types";
 
@@ -515,6 +516,42 @@ export function CancelInviteButton({ inviteId }: { inviteId: string }) {
 }
 
 // -----------------------------------------------------------------------------
+// Reconvidar — devolve uma chave viva pra quem travou
+// -----------------------------------------------------------------------------
+/**
+ * Sólido, não fantasma como o "Cancelar" ao lado: numa lista onde todo o resto
+ * é "decida sobre esta pessoa", esta é a única linha em que a decisão já foi
+ * tomada e o que falta é consertar. O botão que conserta é o que se vê primeiro.
+ *
+ * O alvo é um ID, nunca o e-mail — quem escolhe pra qual caixa o link vai é o
+ * servidor, lendo a linha (ver `reconvidar` em actions.ts).
+ */
+export function ReconvidarButton({ alvo }: { alvo: { tipo: "convite" | "pedido"; id: string } }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [erro, setErro] = useState<string | null>(null);
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <Button
+        size="sm"
+        disabled={pending}
+        onClick={() =>
+          start(async () => {
+            setErro(null);
+            const r = await reconvidar(alvo);
+            if (r.ok) router.refresh();
+            else setErro(r.error);
+          })
+        }
+      >
+        {pending ? "Enviando…" : "Reconvidar"}
+      </Button>
+      {erro ? <span className="text-[11px] text-destructive-ink">{erro}</span> : null}
+    </div>
+  );
+}
+
+// -----------------------------------------------------------------------------
 // Linha unificada de "Entrando na igreja" (pedido de entrada, perfil pendente
 // ou convite) — mesma origem visual, email/telefone/recado atrás do toque.
 // -----------------------------------------------------------------------------
@@ -526,6 +563,7 @@ export function EntradaRow({
   message,
   teamDot,
   line2,
+  chip,
   actions,
 }: {
   fullName: string;
@@ -535,6 +573,8 @@ export function EntradaRow({
   message?: string | null;
   teamDot?: string | null;
   line2: string;
+  /** Selo ao lado do nome. Hoje só o "Travado" usa — ver `listStuckEntries`. */
+  chip?: ReactNode;
   actions: ReactNode;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -550,7 +590,10 @@ export function EntradaRow({
         >
           <Avatar name={fullName} src={avatarUrl} className="size-9" />
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm font-bold text-foreground">{fullName}</span>
+            <span className="flex items-center gap-1.5">
+              <span className="min-w-0 truncate text-sm font-bold text-foreground">{fullName}</span>
+              {chip}
+            </span>
             <span className="mt-0.5 flex items-center gap-1.5 truncate text-[12px] text-muted-foreground">
               {teamDot ? <TeamDot color={teamDot} /> : null}
               {line2}
