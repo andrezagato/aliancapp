@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
 import { TeamDot } from "@/components/coverage-badge";
 import { Modal } from "@/components/modal";
+import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 import {
   criarConvite,
@@ -530,6 +531,13 @@ export function ReconvidarButton({ alvo }: { alvo: { tipo: "convite" | "pedido";
   const router = useRouter();
   const [pending, start] = useTransition();
   const [erro, setErro] = useState<string | null>(null);
+  // TOAST ALÉM DO ERRO NA LINHA. Várias actions chamam `revalidatePath` no
+  // caminho de FALHA, de propósito — a instrução costuma pedir pra olhar outra
+  // linha. Só que revalidar REMONTA esta linha (a chave muda de `s-pedido-…`
+  // pra `s-convite-…` quando a pessoa passa a ter convite), e o `useState` do
+  // erro morre antes de alguém ler. O toast mora no layout do app e sobrevive à
+  // remontagem; o texto na linha fica como reforço pra quando ela não remonta.
+  const { showToast } = useToast();
   return (
     <div className="flex flex-col items-end gap-1">
       <Button
@@ -539,8 +547,12 @@ export function ReconvidarButton({ alvo }: { alvo: { tipo: "convite" | "pedido";
           start(async () => {
             setErro(null);
             const r = await reconvidar(alvo);
-            if (r.ok) router.refresh();
-            else setErro(r.error);
+            if (r.ok) {
+              router.refresh();
+            } else {
+              setErro(r.error);
+              showToast(r.error);
+            }
           })
         }
       >

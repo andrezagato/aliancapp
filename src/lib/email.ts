@@ -44,7 +44,7 @@ export async function sendEmail(input: SendEmailInput): Promise<EnvioResult> {
     console.error(`[email] ${motivo} — não enviado: "${input.subject}"`);
     // Mesma guarda do ramo da chave ausente, por coerência: o dev local aponta
     // pro banco de PRODUÇÃO, então testar aqui sujaria a failure_log real.
-    if (process.env.NODE_ENV === "production") {
+    if ((process.env.VERCEL_ENV ?? process.env.NODE_ENV) === "production") {
       await registrarFalha({ kind: "email", detail: `${motivo}: "${input.subject}"`, origem: "sendEmail" });
     }
     return { ok: false, motivo };
@@ -60,7 +60,7 @@ export async function sendEmail(input: SendEmailInput): Promise<EnvioResult> {
     // Só registra em PRODUÇÃO: no dev local a chave costuma faltar de propósito,
     // e o service-role daqui aponta pro banco de PRODUÇÃO — sem esta guarda,
     // cada e-mail de teste sujaria a failure_log real e apareceria no digest.
-    if (process.env.NODE_ENV === "production") {
+    if ((process.env.VERCEL_ENV ?? process.env.NODE_ENV) === "production") {
       await registrarFalha({ kind: "email", detail: motivo, subject: recipients[0], origem: "sendEmail" });
     }
     return { ok: false, motivo };
@@ -83,7 +83,7 @@ export async function sendEmail(input: SendEmailInput): Promise<EnvioResult> {
     // aqui dentro — não é ele que pega falha de envio.
     if (error) {
       console.error("[email] o Resend recusou:", error.message);
-      if (process.env.NODE_ENV === "production") {
+      if ((process.env.VERCEL_ENV ?? process.env.NODE_ENV) === "production") {
         await registrarFalha({
           kind: "email",
           detail: `${error.name ?? "erro"}: ${error.message}`,
@@ -104,7 +104,7 @@ export async function sendEmail(input: SendEmailInput): Promise<EnvioResult> {
     // deixa de ser best-FORGET — a partir daqui a falha vai pro digest.
     // Mesma guarda dos outros três ramos: o dev local aponta pro banco de
     // PRODUÇÃO, e sem isto testar aqui sujaria a failure_log real.
-    if (process.env.NODE_ENV === "production") {
+    if ((process.env.VERCEL_ENV ?? process.env.NODE_ENV) === "production") {
       await registrarFalha({ kind: "email", detail: msg, subject: recipients[0], origem: "sendEmail" });
     }
     return { ok: false, motivo: msg };
