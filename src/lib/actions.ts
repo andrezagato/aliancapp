@@ -67,8 +67,19 @@ const fail = (error: string): ActionResult => ({ ok: false, error });
  *
  * Esta lista de quatro e completa: o LIKE do Postgres so conhece `%`, `_` e a
  * barra de escape, e do safe-set do URLSearchParams so `*` significa algo pro
- * PostgREST. Escapar `*` faz um e-mail que realmente CONTENHA `*` deixar de
- * casar — falha FECHADO, que e o lado certo pra uma guarda.
+ * PostgREST.
+ *
+ * MECANICA EXATA, porque a versao anterior deste comentario errava: o PostgREST
+ * troca `*` por `%` de forma CEGA no valor, entao o `*` escapado que sai daqui
+ * chega ao Postgres como um `%` escapado — que o LIKE le como `%` LITERAL, e nao
+ * como `*` literal. Escapar `*` nao faz `*` casar consigo mesmo; faz casar com
+ * `%`. Medido em producao: `a*b@x.com` NAO casa o padrao, `a%b@x.com` casa.
+ *
+ * A conclusao nao muda — falha FECHADO, que e o lado certo pra uma guarda — e
+ * hoje e inofensivo: nao existe UM endereco com esses quatro caracteres em
+ * `invites`, `profiles` ou `join_requests`, entao isto e no-op em todo e-mail
+ * real. Se um dia existir, o sintoma e falso negativo, nunca falso positivo de
+ * permissao.
  */
 const comoTexto = (e: string) => e.replace(/([\\%_*])/g, "\\$1");
 
@@ -2407,7 +2418,19 @@ export async function criarConvite(input: CriarConviteInput): Promise<ActionResu
     const { error: itErr } = await supabase.from("invite_teams").insert(
       teams.map((t) => ({ invite_id: inv.id, team_id: t.teamId, role: t.role })),
     );
-    if (itErr) return fail(itErr.message);
+    if (itErr) {
+      // Pós-escrita: o convite JÁ foi inserido acima. Sem `revalidatePath` a
+      // lista fica velha e o segundo clique cai no ramo `existing`, que nunca
+      // insere `invite_teams` — as equipes somem e a tela fica verde.
+      await registrarFalha({
+        kind: "convite_link",
+        detail: `invite_teams em criarConvite: ${itErr.message}`,
+        subject: email,
+        origem: "criarConvite",
+      });
+      revalidatePath("/equipes");
+      return fail("O convite foi criado, mas não consegui marcar as equipes. Ajuste em Equipes.");
+    }
   }
 
   // Convite de ADMIN não leva o link que entra: ele vale 7 dias e abre quantas
@@ -2601,7 +2624,12 @@ export async function aprovarJoinRequest(joinId: string, teams: InviteTeamInput[
   //
   // O link só existe DEPOIS do convite: quem ativa o perfil no primeiro acesso é
   // o trigger handle_new_user, procurando um convite 'pendente' com este e-mail.
-  if (!inviteToken) return fail("Não consegui gerar o link de acesso do convite.");
+  if (!inviteToken) {
+    // Pós-escrita também: o pedido já virou `aprovado` e o `invite_teams` já
+    // entrou. Na prática inalcançável, mas a regra é a mesma.
+    revalidatePath("/equipes");
+    return fail("Não consegui gerar o link de acesso do convite.");
+  }
   const convite = conviteEmail({ nome: jr.full_name, href: linkDeEntrada(inviteToken) });
   const envioAprov = await sendEmail({ to: email, subject: convite.subject, html: convite.html });
 
@@ -2754,9 +2782,36 @@ export async function reconvidar(alvo: { tipo: "convite" | "pedido"; id: string 
       // Vencido é o caso `link_vencido`, que tem botão próprio e passa pela RPC
       // (líder não tem policy de UPDATE em `invites`, então renovar daqui casaria
       // 0 linhas em silêncio). Mandar pra lá em vez de criar uma segunda linha.
+      // `revalidatePath` obrigatório: o botão só dá `router.refresh()` quando o
+      // retorno é `ok`, então sem isto a pessoa lê "use o Reconvidar da linha do
+      // convite" com a tela velha, onde essa linha ainda não apareceu.
+      revalidatePath("/equipes");
       return fail("Essa pessoa já tem um convite vencido. Use o Reconvidar da linha do convite.");
     }
     // Vivo: reenviar o que existe é idempotente, e é o que o segundo clique quer.
+    //
+    // MAS FECHANDO O PEDIDO ANTES. Este retorno antecipado pulava o update de
+    // `join_requests` que o caminho longo faz — então a sequência "primeiro
+    // clique cria o convite e falha ao fechar o pedido; segundo clique acha o
+    // convite vivo e reenvia" devolvia `ok` com o pedido ainda aberto, pra
+    // sempre, reportando sucesso a cada tentativa. Eu reintroduzi "diz ok e não
+    // fez" DENTRO do conserto de "diz ok e não fez".
+    const { data: fechado, error: erroFechar } = await supabase
+      .from("join_requests")
+      .update({ status: "aprovado", resolved_by: session.userId })
+      .eq("id", alvo.id)
+      .select("id");
+    if (erroFechar || !fechado || fechado.length === 0) {
+      await registrarFalha({
+        kind: "convite_link",
+        detail: `fechar pedido (ramo convite vivo): ${erroFechar?.message ?? "0 linhas"}`,
+        subject: email,
+        origem: "reconvidar",
+      });
+      revalidatePath("/equipes");
+      return fail("Essa pessoa já tinha convite ativo, mas não consegui fechar o pedido. Confira em Equipes.");
+    }
+
     const msgJa = conviteEmail({ nome, href: linkDeEntrada(jaTem.token) });
     const envioJa = await sendEmail({ to: email, subject: msgJa.subject, html: msgJa.html });
     revalidatePath("/equipes");
@@ -2869,8 +2924,14 @@ export async function recusarJoinRequest(joinId: string): Promise<ActionResult> 
   const session = await getSession();
   if (!session) return fail("Sem permissão.");
   const supabase = await createClient();
+  // Uma leitura só, servindo a checagem de permissão E o `subject` do registro
+  // de falha lá embaixo — o propósito da 0055 é dizer de QUEM é a falha.
+  const { data: jr } = await supabase
+    .from("join_requests")
+    .select("desired_team_id, email")
+    .eq("id", joinId)
+    .maybeSingle();
   if (session.role !== "admin") {
-    const { data: jr } = await supabase.from("join_requests").select("desired_team_id").eq("id", joinId).maybeSingle();
     if (!jr?.desired_team_id || !canManageTeam(session, jr.desired_team_id)) {
       return fail("Você só pode recusar pedidos da sua equipe.");
     }
@@ -2888,6 +2949,9 @@ export async function recusarJoinRequest(joinId: string): Promise<ActionResult> 
     await registrarFalha({
       kind: "convite_link",
       detail: `recusar pedido: ${error?.message ?? "0 linhas"}`,
+      // `subject` porque o propósito da 0055 é dizer DE QUEM é a falha; sem ele
+      // o digest reporta "houve 1 falha" em vez de nomear a pessoa.
+      subject: jr?.email ?? null,
       origem: "recusarJoinRequest",
     });
     return fail("Não consegui recusar esse pedido. Tente de novo.");

@@ -56,7 +56,12 @@ export async function registrarFalha(input: {
   try {
     const admin = createAdminClient();
     if (!admin) return;
-    await admin.from("failure_log").insert({
+    // O RESULTADO DESTE INSERT É LIDO. O postgrest-js não lança quando o banco
+    // recusa — devolve `{error}` —, então sem destruturar, um registro rejeitado
+    // (RLS, constraint, tabela fora) sumia sem o `catch` nunca ver. O gravador
+    // de falhas silenciosas falhando em silêncio é a piada que este arquivo não
+    // pode ser. Console, não `registrarFalha`: chamar a si mesmo aqui é laço.
+    const { error } = await admin.from("failure_log").insert({
       kind: input.kind,
       // O banco recusa `detail` nulo de propósito: registro sem motivo é ruído
       // com carimbo de data. Se não há mensagem, ao menos diga isso.
@@ -64,6 +69,7 @@ export async function registrarFalha(input: {
       subject: input.subject?.trim().toLowerCase() || null,
       origem: input.origem ?? null,
     });
+    if (error) console.error("[failure-log] o banco recusou o registro:", error.message);
   } catch {
     /* surdo de propósito — ver regra 1 */
   }
