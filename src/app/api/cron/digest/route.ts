@@ -43,6 +43,13 @@ export async function GET(request: Request) {
   const dry = url.searchParams.get("dry") === "1";
   try {
     const resumo = await rodarDigest({ dry });
+    // 200 pra e-mail que não saiu é a mentira que este arquivo inteiro existe
+    // pra combater. Um 500 não avisa ninguém sozinho (a Vercel não retenta nem
+    // alerta cron que falha), mas para de mentir na resposta que se lê no
+    // `?dry=1` — e o motivo já está no failure_log, posto lá pelo sendEmail.
+    if (resumo.falhaEnvio) {
+      return NextResponse.json({ ...resumo, erro: `e-mail não saiu: ${resumo.falhaEnvio}` }, { status: 500 });
+    }
     return NextResponse.json(resumo);
   } catch (e) {
     const msg = e instanceof Error ? e.message : "falha desconhecida";

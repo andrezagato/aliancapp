@@ -4,6 +4,7 @@ import { Resend } from "resend";
 
 import { registrarFalha } from "@/lib/failure-log";
 
+
 type SendEmailInput = {
   to: string | (string | null | undefined)[];
   subject: string;
@@ -19,22 +20,34 @@ const fromDefault = process.env.RESEND_FROM_EMAIL ?? "onboarding@resend.dev";
 const resend = apiKey ? new Resend(apiKey) : null;
 
 /**
- * Envia um e-mail via Resend. Best-effort: uma falha NÃO derruba a ação principal
- * (mesma filosofia do `notify` do sino). Se não houver RESEND_API_KEY, é no-op.
+ * O que aconteceu com o envio. Existe porque `Promise<void>` obrigava todo
+ * chamador a fingir que deu certo — e o digest chegou a responder
+ * `enviado: true` para e-mail que nunca saiu.
+ *
+ * Continua best-effort: quem não quiser saber ignora o retorno, e nenhuma ação
+ * principal cai por causa de e-mail. O que muda é que agora dá PRA saber.
  */
-export async function sendEmail(input: SendEmailInput): Promise<void> {
+export type EnvioResult = { ok: true } | { ok: false; motivo: string };
+
+/**
+ * Envia um e-mail via Resend. Best-effort: uma falha NÃO derruba a ação
+ * principal (mesma filosofia do `notify` do sino).
+ */
+export async function sendEmail(input: SendEmailInput): Promise<EnvioResult> {
   const recipients = (Array.isArray(input.to) ? input.to : [input.to]).filter(
     (e): e is string => typeof e === "string" && e.includes("@"),
   );
-  if (recipients.length === 0) return;
+  if (recipients.length === 0) return { ok: false, motivo: "nenhum destinatário válido" };
 
   if (!resend) {
-    if (process.env.NODE_ENV !== "production") {
-      console.warn(
-        `[email] RESEND_API_KEY ausente — e-mail não enviado: "${input.subject}"`,
-      );
-    }
-    return;
+    // ESTE ERA O NO-OP MAIS SILENCIOSO DO REPO. O `console.warn` estava atrás de
+    // `NODE_ENV !== "production"`, então em PRODUÇÃO a chave ausente não
+    // produzia log nenhum, nem registro, nem retorno — e é justamente em
+    // produção que ela some (alguém mexe nas envs da Vercel). Agora fala.
+    const motivo = "RESEND_API_KEY ausente";
+    console.error(`[email] ${motivo} — não enviado: "${input.subject}"`);
+    await registrarFalha({ kind: "email", detail: motivo, subject: recipients[0], origem: "sendEmail" });
+    return { ok: false, motivo };
   }
 
   try {
@@ -58,15 +71,21 @@ export async function sendEmail(input: SendEmailInput): Promise<void> {
         kind: "email",
         detail: `${error.name ?? "erro"}: ${error.message}`,
         subject: recipients[0],
-        origem: input.subject,
+        // `origem` é LUGAR, não assunto. Mandar `input.subject` aqui fragmentava
+        // o agrupamento do digest por texto de e-mail em vez de por ponto do
+        // código, que é o oposto do que a coluna serve.
+        origem: "sendEmail",
       });
+      return { ok: false, motivo: error.message };
     }
+    return { ok: true };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[email] falha ao enviar:", err);
     // Best-effort continua: não relança, não derruba a ação. Mas best-effort
     // deixa de ser best-FORGET — a partir daqui a falha vai pro digest.
-    await registrarFalha({ kind: "email", detail: msg, subject: recipients[0], origem: input.subject });
+    await registrarFalha({ kind: "email", detail: msg, subject: recipients[0], origem: "sendEmail" });
+    return { ok: false, motivo: msg };
   }
 }
 
@@ -305,10 +324,20 @@ export function digestEmail(opts: {
     )
     .join("");
 
+  // A DATA NO ASSUNTO NÃO É ENFEITE. O Gmail agrupa por remetente+assunto: dez
+  // domingos de "tudo certo por aqui" viram UMA conversa colapsada, e a ausência
+  // de um domingo — que é o sinal inteiro do heartbeat — fica ainda menos
+  // visível do que já é. Assunto único por dia mantém cada um como mensagem.
+  const dia = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "short",
+  }).format(new Date());
+
   return {
     subject: tudoCerto
-      ? `${BRAND} — tudo certo por aqui`
-      : `${BRAND} — ${blocos.length === 1 ? "1 coisa" : `${blocos.length} coisas`} pra olhar`,
+      ? `${BRAND} — tudo certo · ${dia}`
+      : `${BRAND} — ${blocos.length === 1 ? "1 coisa" : `${blocos.length} coisas`} pra olhar · ${dia}`,
     html: layout({
       title: tudoCerto ? "Tudo certo ✅" : "Resumo do dia 🔎",
       intro: tudoCerto

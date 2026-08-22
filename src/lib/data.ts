@@ -2501,7 +2501,13 @@ export async function listStuckEntries(session: Session): Promise<StuckEntry[]> 
   for (const c of conviteRows) {
     if (vivo(c)) continue;
     const email = chave(c.email);
-    if (!email || jaEntrou.has(email)) continue;
+    // `comConviteVivo` também aqui: a MESMA pessoa pode ter duas linhas
+    // `pendente` — uma vencida e uma viva. Sem isto a vencida era mostrada como
+    // travada enquanto ela tinha link bom na mão. Já houve dois convites
+    // simultâneos no banco (marinathomazi3@, 24/07).
+    // ⚠ `src/lib/digest.ts` repete esta regra (ele roda com service-role e não
+    // pode reusar esta função). Mudou aqui, mude lá.
+    if (!email || jaEntrou.has(email) || comConviteVivo.has(email)) continue;
     // Convite sem equipe nenhuma (o `aprovarJoinRequest` cria assim quando não se
     // marca equipe) não teria dono pro líder. Nesse caso o pedido dele responde.
     const meu =
