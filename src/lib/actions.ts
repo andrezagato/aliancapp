@@ -903,7 +903,18 @@ export async function lembrarPendentes(eventId: string): Promise<ActionResult> {
     const emails = (profs ?? []).map((p) => p.email).filter((e): e is string => !!e);
     if (emails.length > 0) {
       const em = lembreteEmail({ evento: titulo, quando, href: `${siteUrl()}/escalas/${eventId}` });
-      await sendEmail({ to: emails, subject: em.subject, html: em.html, text: em.text });
+      // Envio em lote (um e-mail pra vários): aqui um `fail` não serve — a ação
+      // é "lembrar todo mundo", e derrubá-la porque um endereço recusou seria
+      // pior. Mas o resultado deixa de sumir: o `sendEmail` já registra a falha
+      // no `failure_log`, e o `delivery_log` passa a dizer a verdade.
+      const envioLote = await sendEmail({ to: emails, subject: em.subject, html: em.html, text: em.text });
+      if (!envioLote.ok) {
+        await registrarFalha({
+          kind: "email",
+          detail: `lembrete em lote não saiu: ${envioLote.motivo}`,
+          origem: "lembrarPendentes",
+        });
+      }
     }
   } catch {
     /* best-effort — falha de e-mail não derruba o lembrete */
@@ -2384,13 +2395,28 @@ export async function criarConvite(input: CriarConviteInput): Promise<ActionResu
   // o link ganhando prazo (7 dias), recusar aqui deixaria o admin sem nenhuma
   // forma de renovar — só cancelar e recriar, que perde as equipes já marcadas.
   if (existing) {
-    const { data: renovado } = await supabase
+    // O erro ia pro lixo na desestruturação, e o `return ok` lá embaixo dizia
+    // que deu certo mesmo sem ter renovado nem enviado. E este é justamente o
+    // caminho pra onde TRÊS mensagens novas mandam a pessoa ("use Convidar com
+    // o mesmo e-mail pra reenviar") — o contrato foi reescrito em volta do
+    // buraco sem fechá-lo.
+    const { data: renovado, error: erroRenovado } = await supabase
       .from("invites")
       .update({ expires_at: prazoDoConvite() })
       .eq("id", existing.id)
       .select("token")
       .single();
-    if (renovado?.token) {
+    if (erroRenovado || !renovado?.token) {
+      await registrarFalha({
+        kind: "convite_link",
+        detail: `renovar no reenvio de criarConvite: ${erroRenovado?.message ?? "sem token"}`,
+        subject: email,
+        origem: "criarConvite",
+      });
+      revalidatePath("/equipes");
+      return fail("Não consegui renovar esse convite. Tente de novo.");
+    }
+    {
       // AS EQUIPES TAMBÉM. Este ramo nunca tocava `invite_teams`, então o
       // movimento natural do admin — "convidar de novo pra acrescentar uma
       // equipe" — descartava as equipes escolhidas e devolvia tela verde. E a
@@ -2398,9 +2424,15 @@ export async function criarConvite(input: CriarConviteInput): Promise<ActionResu
       // não há tela que edite as equipes de um convite pendente.
       const equipesNovas = (input.teams ?? []).filter((t) => t.teamId);
       if (equipesNovas.length > 0) {
+        // `ignoreDuplicates` porque o formulário de Convidar NASCE VAZIO — ele
+        // não pré-carrega as equipes do convite existente, e marcar uma equipe
+        // defaulta pra `volunteer`. Sem isto, o admin que reconvida alguém pra
+        // ACRESCENTAR uma equipe rebaixaria de `leader` pra `volunteer` a que já
+        // estava marcada, com tela verde. Só ADICIONA o que falta; mudar papel
+        // de convite pendente continua sendo cancelar e refazer.
         const { error: erroTimesR } = await supabase.from("invite_teams").upsert(
           equipesNovas.map((t) => ({ invite_id: existing.id, team_id: t.teamId, role: t.role })),
-          { onConflict: "invite_id,team_id" },
+          { onConflict: "invite_id,team_id", ignoreDuplicates: true },
         );
         if (erroTimesR) {
           await registrarFalha({
@@ -2465,7 +2497,7 @@ export async function criarConvite(input: CriarConviteInput): Promise<ActionResu
         origem: "criarConvite",
       });
       revalidatePath("/equipes");
-      return fail("O convite foi criado, mas não consegui marcar as equipes. Ajuste em Equipes.");
+      return fail("O convite foi criado, mas não consegui marcar as equipes. Cancele o convite e crie de novo com as equipes certas.");
     }
   }
 
@@ -2647,7 +2679,7 @@ export async function aprovarJoinRequest(joinId: string, teams: InviteTeamInput[
         origem: "aprovarJoinRequest",
       });
       revalidatePath("/equipes");
-      return fail("Convite criado, mas não consegui marcar as equipes. Ajuste em Equipes.");
+      return fail("Convite criado, mas não consegui marcar as equipes. Cancele o convite e crie de novo com as equipes certas.");
     }
   }
 

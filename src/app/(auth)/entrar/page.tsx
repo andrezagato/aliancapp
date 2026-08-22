@@ -157,15 +157,26 @@ export default function EntrarPage() {
   }
 
   /**
-   * Reenvia o e-mail de acesso liberado. A action responde `ok` mesmo quando não
-   * acha convite nenhum (pra não virar um oráculo de "este e-mail existe na
-   * igreja?"), então aqui a tela sempre confirma — o que ela promete é "mandamos
-   * de novo pra quem tinha", não "existe alguém com esse e-mail".
+   * Reenvia o e-mail de acesso liberado.
+   *
+   * A action responde `ok` quando NÃO ACHA convite, pra não virar um oráculo de
+   * "este e-mail existe na igreja?" — e essa parte continua igual: a tela
+   * confirma sem afirmar que a pessoa existe.
+   *
+   * O QUE MUDOU: quando ela acha o convite e o ENVIO FALHA, ela devolve `fail`,
+   * e agora a tela lê isso. Antes o retorno era descartado e o "Pronto,
+   * enviamos de novo" aparecia mesmo com o Resend fora do ar — e esta é a única
+   * porta de quem não usa Google, então a pessoa esperava pra sempre um e-mail
+   * que nunca tinha saído.
    */
   async function reenviar() {
     setLoading("reenvio");
-    await reenviarLinkDeAcesso(email.trim());
+    const r = await reenviarLinkDeAcesso(email.trim());
     setLoading(null);
+    if (!r.ok) {
+      setError(r.error);
+      return;
+    }
     setReenviado(true);
   }
 
@@ -228,6 +239,11 @@ export default function EntrarPage() {
               {loading === "reenvio" ? "Reenviando…" : "Não achei o e-mail — reenviar"}
             </button>
           )}
+          {/* Sem isto o `setError` do `reenviar()` não tem onde escrever, e o
+              conserto da action morre uma camada acima. */}
+          {error ? (
+            <p className="w-full rounded-2xl bg-destructive/10 px-4 py-3 text-sm text-destructive-ink">{error}</p>
+          ) : null}
           <button
             onClick={voltarAoInicio}
             className="text-sm text-muted-foreground underline-offset-4 hover:underline"

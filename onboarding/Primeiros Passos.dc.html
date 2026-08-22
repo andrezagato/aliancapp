@@ -524,7 +524,7 @@
 </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:402,&quot;height&quot;:864},&quot;personName&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Rafa&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;teamName&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Mídia&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;positionName&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Câmera&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;eventTitle&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Culto de Domingo&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;appUrl&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;https://app.ministerioalianca.com&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Final&quot;}}">
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:402,&quot;height&quot;:864},&quot;personName&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Rafa&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;teamName&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Mídia&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;positionName&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Câmera&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;eventTitle&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Culto de Domingo&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;appUrl&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;/&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Final&quot;}}">
 class Component extends DCLogic {
   constructor(p) {
     super(p);
@@ -676,7 +676,7 @@ class Component extends DCLogic {
 
       personName: person, teamName: team, positionName: position, eventTitle: event,
       initials, fullName: person + " Nascimento",
-      appUrl: this.props.appUrl || "https://app.ministerioalianca.com",
+      appUrl: this.props.appUrl || "/",
 
       pressGoogle: id === "login" && at(2000, 2700),
       logging: id === "login" && t >= 2700,

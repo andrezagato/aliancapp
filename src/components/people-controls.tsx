@@ -369,12 +369,21 @@ export function JoinRequestActions({
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  // Mesmo motivo do `ReconvidarButton`: `aprovarJoinRequest` revalida ANTES de
+  // devolver `fail` nos caminhos pós-escrita (o pedido já virou `aprovado`), a
+  // linha some da fila, este componente desmonta, e o `setError` não tem onde
+  // escrever. O toast mora no layout e sobrevive.
+  const { showToast } = useToast();
+  const falhou = (msg: string) => {
+    setError(msg);
+    showToast(msg);
+  };
 
   function approve(picked: InviteTeamInput[]) {
     setError(null);
     start(async () => {
       const r = await aprovarJoinRequest(joinId, picked);
-      if (!r.ok) setError(r.error ?? "Erro");
+      if (!r.ok) falhou(r.error ?? "Erro");
       else {
         setOpen(false);
         router.refresh();
@@ -385,7 +394,7 @@ export function JoinRequestActions({
     setError(null);
     start(async () => {
       const r = await recusarJoinRequest(joinId);
-      if (!r.ok) setError(r.error ?? "Erro");
+      if (!r.ok) falhou(r.error ?? "Erro");
       else router.refresh();
     });
   }

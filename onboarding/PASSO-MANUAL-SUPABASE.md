@@ -95,6 +95,14 @@ Cada template tem **dois** links fixos em `https://app.ministerioalianca.com`: o
 produção — o template do Supabase é global (não tem preview por branch), então o link fixo é o certo
 aqui. **Se o domínio mudar, são 4 lugares** (2 links × 2 templates).
 
+### ⚠️ `NEXT_PUBLIC_SITE_URL` SÓ VALE DEPOIS DE UM REDEPLOY
+
+Variável `NEXT_PUBLIC_*` é **embutida no build** pelo Next. Trocar o valor no
+painel da Vercel **não muda nada** no deploy que já está no ar — é preciso
+**Redeploy** depois de salvar. Sem isso, os links gerados pelo código continuam
+apontando pro domínio antigo enquanto os templates apontam pro novo, e aí você
+tem o pior dos dois: metade dos links fora do domínio do remetente.
+
 ### ⚠️ O DOMÍNIO DO LINK TEM QUE BATER COM O DO REMETENTE
 
 Isto não é preferência, é entregabilidade. Em 22/08/2026 um convite de teste caiu no **spam** do
