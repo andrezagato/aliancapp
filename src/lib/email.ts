@@ -4,7 +4,6 @@ import { Resend } from "resend";
 
 import { registrarFalha } from "@/lib/failure-log";
 
-
 type SendEmailInput = {
   to: string | (string | null | undefined)[];
   subject: string;

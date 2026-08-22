@@ -124,11 +124,31 @@ export async function GET(
   // diagnostica ("meu link não abre e o do meu irmão abre"). O `actions.ts` tem
   // um `comoTexto` que escapa isso; aqui a lista é pequena o bastante pra não
   // precisar de curinga nenhum, que é melhor que escapar direito.
-  const { data: adminsPendentes } = await admin
+  const { data: adminsPendentes, error: erroAdmins } = await admin
     .from("invites")
     .select("email")
     .eq("status", "pendente")
     .eq("system_role", "admin");
+
+  // FALHA FECHADO. Sem este `if`, `data` nulo por erro de query virava `?? []`,
+  // o `.some()` dava falso, e a rota seguia pro `generateLink` — ou seja, um
+  // timeout de 8s do `authenticator`, um 5xx do PostgREST ou uma service-role
+  // key inválida DESLIGAVAM a única trava de escalada desta rota, em silêncio.
+  //
+  // E é a única mesmo: `generateLink` já cria a linha em `auth.users`, então o
+  // `handle_new_user` dispara ANTES do `verifyOtp`. Não há segunda chance depois.
+  //
+  // Mesma doutrina do `if (!admin)` lá em cima: esta é a rota que abre sessão
+  // sem senha, e aqui não saber é motivo pra não abrir.
+  if (erroAdmins) {
+    console.error("[entrada] não consegui conferir convites de admin:", erroAdmins.message);
+    return recusa("falhou", `checagem de convite admin falhou: ${erroAdmins.message}`, convite.email);
+  }
+
+  // `invites.email` é canônico por constraint desde a 0058 (minúsculo, sem
+  // espaço, ASCII), então esta comparação e a do `handle_new_user` são a mesma
+  // sobre os mesmos bytes. O `trim().toLowerCase()` fica como cinto: ele só
+  // aperta, nunca afrouxa.
   const alvo = convite.email.trim().toLowerCase();
   if ((adminsPendentes ?? []).some((a) => (a.email ?? "").trim().toLowerCase() === alvo)) {
     return recusa("ja_tem_conta", "há convite de admin pendente para este e-mail", convite.email);

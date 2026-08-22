@@ -2322,7 +2322,11 @@ export async function criarConvite(input: CriarConviteInput): Promise<ActionResu
         convidado: true,
         semLinkDireto: ehAdminR,
       });
-      await sendEmail({ to: email, subject: reenvio.subject, html: reenvio.html });
+      const envio = await sendEmail({ to: email, subject: reenvio.subject, html: reenvio.html });
+      revalidatePath("/equipes");
+      // Ver a nota nos irmãos abaixo: o e-mail é o entregável.
+      if (!envio.ok) return fail("O convite foi renovado, mas o e-mail não saiu. Tente de novo.");
+      return ok;
     }
     revalidatePath("/equipes");
     return ok;
@@ -2367,9 +2371,13 @@ export async function criarConvite(input: CriarConviteInput): Promise<ActionResu
     convidado: true,
     semLinkDireto: ehAdmin,
   });
-  await sendEmail({ to: email, subject: convite.subject, html: convite.html });
+  const envioConvite = await sendEmail({ to: email, subject: convite.subject, html: convite.html });
 
   revalidatePath("/equipes");
+  // O e-mail É o entregável aqui: sem ele a pessoa fica sem chave. Devolver `ok`
+  // pra e-mail que não saiu é a mentira que este dia foi sobre — e agora dá pra
+  // saber, então não dá mais pra fingir que não.
+  if (!envioConvite.ok) return fail("O convite foi criado, mas o e-mail não saiu. Reenvie em Equipes.");
   return ok;
 }
 
@@ -2459,10 +2467,14 @@ export async function aprovarJoinRequest(joinId: string, teams: InviteTeamInput[
   // o trigger handle_new_user, procurando um convite 'pendente' com este e-mail.
   if (!inviteToken) return fail("Não consegui gerar o link de acesso do convite.");
   const convite = conviteEmail({ nome: jr.full_name, href: linkDeEntrada(inviteToken) });
-  await sendEmail({ to: email, subject: convite.subject, html: convite.html });
+  const envioAprov = await sendEmail({ to: email, subject: convite.subject, html: convite.html });
 
   revalidatePath("/equipes");
   revalidatePath("/inicio");
+  // O e-mail É o entregável aqui: sem ele a pessoa fica sem chave. Devolver `ok`
+  // pra e-mail que não saiu é a mentira que este dia foi sobre — e agora dá pra
+  // saber, então não dá mais pra fingir que não.
+  if (!envioAprov.ok) return fail("Aprovado, mas o e-mail de acesso não saiu. Use Reconvidar em Equipes.");
   return ok;
 }
 
@@ -2523,13 +2535,16 @@ export async function reconvidar(alvo: { tipo: "convite" | "pedido"; id: string 
         detail: `renovar_convite: ${erroRpc?.message ?? "sem linha"}`,
         origem: "reconvidar",
       });
-      // As mensagens dos `raise exception` da RPC são escritas pra gente ler
-      // ("você só pode reconvidar gente da sua igreja"), então sobem pra tela.
-      // Qualquer OUTRO erro do Postgres (grant perdido, timeout, conexão) vira
-      // texto genérico: mensagem crua de banco na tela de voluntário não ajuda
-      // ninguém e conta mais do que deveria.
-      const doNosso = /convite|igreja|liderança|pendente|administrador/i.test(erroRpc?.message ?? "");
-      return fail(doNosso ? erroRpc!.message : "Não consegui renovar esse convite.");
+      // SQLSTATE 'SIRVO' marca os `raise` que NÓS escrevemos (migration 0058) —
+      // esses são frases pra gente ler e sobem pra tela. Qualquer outro erro do
+      // Postgres vira texto genérico.
+      //
+      // Antes isto era um regex sobre a mensagem, e ele casava com o nome da
+      // própria função: `permission denied for function renovar_convite` contém
+      // "convite", então o erro cru do banco ia verbatim pra tela do voluntário
+      // — justamente o caso que o comentário prometia genericizar.
+      const nosso = (erroRpc as { code?: string } | null)?.code === "SIRVO";
+      return fail(nosso ? erroRpc!.message : "Não consegui renovar esse convite.");
     }
 
     // E-mail e nome vêm DA RPC, na mesma linha do token. Antes havia um SELECT
@@ -2539,9 +2554,13 @@ export async function reconvidar(alvo: { tipo: "convite" | "pedido"; id: string 
       nome: renovado.full_name || renovado.email,
       href: linkDeEntrada(renovado.token),
     });
-    await sendEmail({ to: renovado.email, subject: msg.subject, html: msg.html });
+    const envio = await sendEmail({ to: renovado.email, subject: msg.subject, html: msg.html });
     revalidatePath("/equipes");
     revalidatePath("/inicio");
+    // Aqui o e-mail É o entregável: o convite foi renovado, mas se o link não
+    // saiu a pessoa continua sem chave. Dizer "pronto" seria a mentira que este
+    // dia inteiro foi sobre.
+    if (!envio.ok) return fail("O convite foi renovado, mas o e-mail não saiu. Tente de novo.");
     return ok;
   }
 
@@ -2559,6 +2578,24 @@ export async function reconvidar(alvo: { tipo: "convite" | "pedido"; id: string 
   }
   const email = jr.email.trim().toLowerCase();
   const nome = jr.full_name;
+
+  // A MESMA GUARDA DO RAMO IRMÃO, e ela faltava justamente onde é mais grave.
+  // A RPC recusa RENOVAR convite quando há um de admin pendente pro mesmo
+  // e-mail; aqui a gente CRIA um do zero, o que é estritamente pior. E o gate
+  // de equipe acima não protege: `join_requests` aceita INSERT anônimo com
+  // `WITH CHECK (true)`, então qualquer um planta um pedido com o e-mail do
+  // admin e a equipe do líder, e o `canManageTeam` passa.
+  const { data: adminPend, error: erroAdminPend } = await supabase
+    .from("invites")
+    .select("id")
+    .eq("status", "pendente")
+    .eq("system_role", "admin")
+    .ilike("email", comoTexto(email));
+  // Falha fechado, igual à rota: não conseguir conferir não é permissão.
+  if (erroAdminPend) return fail("Não consegui conferir os convites pendentes. Tente de novo.");
+  if (adminPend && adminPend.length > 0) {
+    return fail("Já existe um convite de administrador pendente para esse e-mail.");
+  }
 
   // `system_role` fica no default ('member') de propósito e NUNCA vem de fora:
   // a policy `invites_insert_leader` já exige isso, mas depender só dela é
@@ -2614,10 +2651,14 @@ export async function reconvidar(alvo: { tipo: "convite" | "pedido"; id: string 
   const token = inv.token;
 
   const convite = conviteEmail({ nome, href: linkDeEntrada(token) });
-  await sendEmail({ to: email, subject: convite.subject, html: convite.html });
+  const envioPedido = await sendEmail({ to: email, subject: convite.subject, html: convite.html });
 
   revalidatePath("/equipes");
   revalidatePath("/inicio");
+  // O e-mail É o entregável aqui: sem ele a pessoa fica sem chave. Devolver `ok`
+  // pra e-mail que não saiu é a mentira que este dia foi sobre — e agora dá pra
+  // saber, então não dá mais pra fingir que não.
+  if (!envioPedido.ok) return fail("O convite foi criado, mas o e-mail não saiu. Tente de novo.");
   return ok;
 }
 
