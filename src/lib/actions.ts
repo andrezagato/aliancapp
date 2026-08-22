@@ -999,8 +999,15 @@ export async function escalarVoluntario(
         quando: fmtEventWhen(evInfo?.starts_at),
         href: `${siteUrl()}${comVia(link, "email")}`,
       });
-      await sendEmail({ to: prof.email, subject: esc.subject, html: esc.html });
-      await registrarEntrega({ ...ctxEmail, channel: "email", outcome: "enviado" });
+      // Ver a nota gêmea em cobranca.ts: o catch abaixo não alcança falha de
+      // entrega, porque o SDK do Resend devolve `{data,error}` em vez de lançar.
+      const envio = await sendEmail({ to: prof.email, subject: esc.subject, html: esc.html });
+      await registrarEntrega({
+        ...ctxEmail,
+        channel: "email",
+        outcome: envio.ok ? "enviado" : "falhou",
+        ...(envio.ok ? {} : { detail: envio.motivo.slice(0, 200) }),
+      });
     }
   } catch (e) {
     /* best-effort — falha de e-mail não derruba a escalação, mas deixa rastro */

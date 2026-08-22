@@ -37,7 +37,15 @@ export async function sendEmail(input: SendEmailInput): Promise<EnvioResult> {
   const recipients = (Array.isArray(input.to) ? input.to : [input.to]).filter(
     (e): e is string => typeof e === "string" && e.includes("@"),
   );
-  if (recipients.length === 0) return { ok: false, motivo: "nenhum destinatário válido" };
+  if (recipients.length === 0) {
+    // O ramo IRMÃO do de baixo, e ele tinha ficado mudo. `DIGEST_EMAIL` com um
+    // typo sem "@" cai aqui: a rota do cron respondia 500 dizendo "o motivo já
+    // está no failure_log" e não havia motivo nenhum lá.
+    const motivo = "nenhum destinatário válido";
+    console.error(`[email] ${motivo} — não enviado: "${input.subject}"`);
+    await registrarFalha({ kind: "email", detail: `${motivo}: "${input.subject}"`, origem: "sendEmail" });
+    return { ok: false, motivo };
+  }
 
   if (!resend) {
     // ESTE ERA O NO-OP MAIS SILENCIOSO DO REPO. O `console.warn` estava atrás de
@@ -46,7 +54,12 @@ export async function sendEmail(input: SendEmailInput): Promise<EnvioResult> {
     // produção que ela some (alguém mexe nas envs da Vercel). Agora fala.
     const motivo = "RESEND_API_KEY ausente";
     console.error(`[email] ${motivo} — não enviado: "${input.subject}"`);
-    await registrarFalha({ kind: "email", detail: motivo, subject: recipients[0], origem: "sendEmail" });
+    // Só registra em PRODUÇÃO: no dev local a chave costuma faltar de propósito,
+    // e o service-role daqui aponta pro banco de PRODUÇÃO — sem esta guarda,
+    // cada e-mail de teste sujaria a failure_log real e apareceria no digest.
+    if (process.env.VERCEL_ENV === "production") {
+      await registrarFalha({ kind: "email", detail: motivo, subject: recipients[0], origem: "sendEmail" });
+    }
     return { ok: false, motivo };
   }
 

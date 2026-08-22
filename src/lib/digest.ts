@@ -68,7 +68,8 @@ function destino(): string {
 }
 
 const chave = (e: string | null | undefined) => (e ?? "").trim().toLowerCase();
-const diasDesde = (iso: string) => Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
+const diasDesde = (iso: string) =>
+  Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000));
 
 /** Corta a lista e diz que cortou. Bloco de 10 mil linhas não é aviso, é DoS. */
 function limitar(linhas: string[], teto = TETO_LINHAS_POR_BLOCO): string[] {
@@ -123,10 +124,26 @@ export async function montarDigest(): Promise<Bloco[]> {
       .from("failure_log")
       .select("id", { count: "exact", head: true })
       .gte("created_at", desde),
-    admin.from("join_requests").select("full_name, email, created_at").eq("status", "aprovado"),
-    admin.from("invites").select("email, full_name, created_at, expires_at").eq("status", "pendente"),
+    // `.order()` em todas: `limitar()` corta o FIM da lista, então sem ordem
+    // definida ele guardava 25 linhas arbitrárias — e o convite que vence
+    // amanhã podia ser justamente o descartado. Mais velho primeiro, que é a
+    // ordem em que estas coisas importam.
+    admin
+      .from("join_requests")
+      .select("full_name, email, created_at")
+      .eq("status", "aprovado")
+      .order("created_at", { ascending: true }),
+    admin
+      .from("invites")
+      .select("email, full_name, created_at, expires_at")
+      .eq("status", "pendente")
+      .order("expires_at", { ascending: true, nullsFirst: true }),
     admin.from("profiles").select("email").eq("status", "ativo"),
-    admin.from("join_requests").select("full_name, created_at").eq("status", "pendente"),
+    admin
+      .from("join_requests")
+      .select("full_name, created_at")
+      .eq("status", "pendente")
+      .order("created_at", { ascending: true }),
   ]);
 
   const falhas = usar(rFalhas, "falhas das últimas horas");
@@ -135,7 +152,13 @@ export async function montarDigest(): Promise<Bloco[]> {
   const ativos = usar(rAtivos, "membros ativos");
   const pedidos = usar(rPedidos, "pedidos pendentes");
   if (rTotalFalhas.error) naoPerguntou.push(`contagem de falhas: ${rTotalFalhas.error.message}`);
-  const totalFalhas = rTotalFalhas.count ?? falhas.length;
+  // NÃO caia pra `falhas.length` quando `count` vem nulo: isso concluiria
+  // "total == lido" e desligaria a detecção de truncamento afirmando que não
+  // truncou. É exatamente o `?? []` que este arquivo veio consertar, de novo.
+  const totalFalhas = rTotalFalhas.count;
+  if (totalFalhas == null && !rTotalFalhas.error) {
+    naoPerguntou.push("não consegui contar as falhas — não sei dizer se li todas");
+  }
 
   const jaEntrou = new Set(ativos.map((p) => chave(p.email)).filter(Boolean));
   const agora = Date.now();
@@ -160,12 +183,19 @@ export async function montarDigest(): Promise<Bloco[]> {
     return `${v.n}× ${k}${quem} · "${v.exemplo.slice(0, 140)}"`;
   });
   if (linhasFalha.length > 0) {
-    if (totalFalhas > falhas.length) {
-      linhasFalha.push(
+    // Corta PRIMEIRO, avisa DEPOIS: o aviso ia no fim da lista e o `limitar()`
+    // guarda o começo, então com muitos grupos o aviso de truncamento era
+    // justamente a linha truncada.
+    const linhas = limitar(linhasFalha);
+    if (totalFalhas != null && totalFalhas > falhas.length) {
+      linhas.push(
         `⚠ ${totalFalhas} falhas no período, mas só li as ${falhas.length} mais recentes — o agrupamento acima está incompleto.`,
       );
     }
-    blocos.push({ titulo: "Falhas nas últimas 24h", linhas: limitar(linhasFalha) });
+    // O título diz a janela REAL. Num arquivo cuja regra é "não afirmar sem ter
+    // olhado", cabeçalho anunciando período que o código não usa é a mesma
+    // mentira em miniatura.
+    blocos.push({ titulo: `Falhas nas últimas ${JANELA_HORAS}h`, linhas });
   }
 
   // ---------------------------------------------------------------------------
@@ -201,8 +231,17 @@ export async function montarDigest(): Promise<Bloco[]> {
   //    é avisar tarde: o link vale 7 dias porque o culto é semanal.
   // ---------------------------------------------------------------------------
   const limite = agora + DIAS_CONVITE_VENCENDO * 86_400_000;
+  const jaAvisado = new Set<string>();
   const vencendo = convites
-    .filter((c) => conviteVivo(c) && new Date(c.expires_at!).getTime() <= limite && !jaEntrou.has(chave(c.email)))
+    .filter((c) => {
+      const e = chave(c.email);
+      if (!conviteVivo(c) || jaEntrou.has(e) || jaAvisado.has(e)) return false;
+      if (new Date(c.expires_at!).getTime() > limite) return false;
+      // Dedupe por pessoa, igual ao bloco 2: dois convites vivos do mesmo
+      // e-mail são UM aviso. O precedente é real (marinathomazi3@, 24/07).
+      jaAvisado.add(e);
+      return true;
+    })
     .map((c) => `${c.full_name || c.email} — o link vence em menos de ${DIAS_CONVITE_VENCENDO} dias`);
   if (vencendo.length > 0) {
     blocos.push({ titulo: "Convites prestes a vencer", linhas: limitar(vencendo) });
@@ -235,7 +274,10 @@ async function podar(): Promise<void> {
   const admin = createAdminClient();
   if (!admin) return;
   const corte = new Date(Date.now() - DIAS_RETENCAO * 86_400_000).toISOString();
-  await admin.from("failure_log").delete().lt("created_at", corte);
+  const { error } = await admin.from("failure_log").delete().lt("created_at", corte);
+  // O erro aqui ia pro lixo — a mesma classe de bug do resto deste commit. Poda
+  // quebrada é crescimento que o próprio vigia não enxerga.
+  if (error) await registrarFalha({ kind: "cron", detail: `poda: ${error.message}`, origem: "/api/cron/digest" });
 }
 
 /**
@@ -274,12 +316,35 @@ export async function rodarDigest(opts: { dry?: boolean; hoje?: Date } = {}): Pr
   }
 
   const para = destino();
-  const msg = digestEmail({ blocos, heartbeat });
-  const envio = await sendEmail({ to: para, subject: msg.subject, html: msg.html });
+
+  // O TRY VAI ATÉ AQUI, e não só até a coleta. `digestEmail` monta um
+  // `Intl.DateTimeFormat` e `sendEmail` fala com a rede: se qualquer um dos
+  // dois lançar, o domingo não sai — que é precisamente o que este try existe
+  // pra impedir. "O heartbeat é a última coisa que pode morrer" só vale se ele
+  // estiver dentro da guarda.
+  let envio: { ok: true } | { ok: false; motivo: string };
+  try {
+    const msg = digestEmail({ blocos, heartbeat });
+    envio = await sendEmail({ to: para, subject: msg.subject, html: msg.html });
+  } catch (e) {
+    const motivo = e instanceof Error ? e.message : String(e);
+    await registrarFalha({ kind: "cron", detail: `envio do digest: ${motivo}`, origem: "/api/cron/digest" });
+    envio = { ok: false, motivo };
+  }
 
   // Poda depois de mandar: se o envio falhar, os registros continuam lá pro dia
   // seguinte em vez de sumirem junto com o e-mail que não chegou.
-  if (envio.ok) await podar();
+  if (envio.ok) {
+    try {
+      await podar();
+    } catch (e) {
+      await registrarFalha({
+        kind: "cron",
+        detail: `poda: ${e instanceof Error ? e.message : String(e)}`,
+        origem: "/api/cron/digest",
+      });
+    }
+  }
 
   return {
     blocos,
