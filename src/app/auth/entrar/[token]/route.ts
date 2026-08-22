@@ -93,25 +93,53 @@ export async function GET(
   if (new Date(convite.expires_at).getTime() < Date.now()) {
     return recusa("expirado", `venceu em ${convite.expires_at}`, convite.email);
   }
-  // ESCALADA DE PRIVILÉGIO — a trava que faltava.
+  // ESCALADA DE PRIVILÉGIO — e a primeira versão desta trava conferia a LINHA
+  // ERRADA, o que é pior que não ter trava, porque parecia resolvido.
   //
-  // A regra "só primeiro acesso" (mais abaixo) impede reusar este link contra
-  // conta EXISTENTE. Ela não cobre o convite de ADMIN pra um e-mail que ainda
-  // NÃO tem conta: ali o GoTrue devolve 'signup', a trava deixa passar, e o
-  // `handle_new_user` provisiona o perfil com o `system_role` do convite.
+  // Ela olhava `convite.system_role` do convite casado pelo TOKEN. Só que quem
+  // escreve `profiles.system_role` é o trigger `handle_new_user`, e ele casa
+  // por E-MAIL, pegando o mais ANTIGO pendente:
   //
-  // Some a isso a policy `invites_read_leader`, que é SELECT pra qualquer líder,
-  // sem escopo de igreja e sem esconder a coluna `token`: qualquer um dos 13
-  // líderes lê o token de um convite de admin pendente com a chave anônima,
-  // abre esta rota com `?trocar=1` (que desloga a sessão dele) e sai admin.
-  // A janela abria por 7 dias a cada admin convidado.
+  //     where lower(email) = lower(new.email) and status = 'pendente'
+  //     order by created_at limit 1
   //
-  // Aqui é o lugar certo de fechar, porque é AQUI que o resgate acontece —
-  // fechar só na leitura dependeria de estreitar uma policy que outras telas
-  // usam. Admin entra pelo caminho que exige a caixa de entrada dele.
-  if (convite.system_role === "admin") {
-    return recusa("ja_tem_conta", "convite de admin não abre sessão por link", convite.email);
+  // São duas linhas diferentes, e nada impede duas pendentes pro mesmo e-mail —
+  // não há índice único em `invites.email`. Então: você convida alguém como
+  // admin; um líder insere o convite DELE pro mesmo e-mail como `member`
+  // (`invites_insert_leader` aceita), lê o próprio token (`invites_read_leader`
+  // é SELECT pra qualquer líder e não esconde a coluna) e abre esta rota. A
+  // trava olhava o convite `member` dele e deixava passar; o trigger casava por
+  // e-mail, pegava o de ADMIN, e provisionava o perfil como admin.
+  //
+  // A trava certa pergunta o que o TRIGGER vai encontrar, não o que o token
+  // aponta: existe QUALQUER convite de admin pendente pra este e-mail? Se
+  // existe, esta rota não abre sessão pra ele de jeito nenhum. Admin entra pelo
+  // caminho que exige a caixa de entrada dele.
+  // Busca TODOS os convites de admin pendentes (são pouquíssimos — no limite,
+  // um por admin que você esteja convidando) e compara em JS.
+  //
+  // Sem `.ilike` de propósito: ele trata `_` e `%` como CURINGA, e `_` é
+  // caractere legal em e-mail. `joao_silva@gmail.com` casaria com
+  // `joaoXsilva@...` e a rota recusaria alguém legítimo — bug que ninguém
+  // diagnostica ("meu link não abre e o do meu irmão abre"). O `actions.ts` tem
+  // um `comoTexto` que escapa isso; aqui a lista é pequena o bastante pra não
+  // precisar de curinga nenhum, que é melhor que escapar direito.
+  const { data: adminsPendentes } = await admin
+    .from("invites")
+    .select("email")
+    .eq("status", "pendente")
+    .eq("system_role", "admin");
+  const alvo = convite.email.trim().toLowerCase();
+  if ((adminsPendentes ?? []).some((a) => (a.email ?? "").trim().toLowerCase() === alvo)) {
+    return recusa("ja_tem_conta", "há convite de admin pendente para este e-mail", convite.email);
   }
+
+  // DÍVIDA CONSCIENTE, registrada porque some da vista: mesmo com a trava acima,
+  // o trigger continua consumindo o convite MAIS ANTIGO por e-mail, que pode não
+  // ser o do token usado. Entre dois convites `member` isso não muda privilégio
+  // — muda só quais equipes entram no `invite_teams` aplicado. Tornar a seleção
+  // do trigger determinística é conserto de outro dia; mexer num trigger de
+  // `auth.users` no fim de uma sessão longa é como se quebra login pra todo mundo.
 
   // Status 'aceito' continua valendo de propósito: o link pode ter sido aberto
   // por um antivírus (que já casou o convite) antes da pessoa tocar nele. Quem

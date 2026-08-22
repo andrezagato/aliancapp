@@ -2493,45 +2493,53 @@ export async function reconvidar(alvo: { tipo: "convite" | "pedido"; id: string 
   const isAdmin = session.role === "admin";
 
   if (alvo.tipo === "convite") {
-    // TUDO ISTO MORA NA RPC `renovar_convite` (migration 0056), e não aqui.
+    // A AUTORIZAÇÃO MORA NA RPC `renovar_convite` (migration 0057), não aqui.
     //
-    // A versão anterior fazia `.update(...)` direto e conferia nada. Só que
-    // `invites` não tem policy de UPDATE pra líder — então o update casava 0
-    // linhas, o erro sumia, e os 13 líderes ganhavam "Não consegui gerar o link"
-    // pra sempre. Botão morto, com mensagem que nem dizia que era permissão.
-    // É a MESMA classe das 0029/0049 (app libera, RLS bloqueia, ninguém avisa),
-    // escrita justamente por quem estava construindo o remédio pra ela.
+    // Duas razões, e as duas foram erro cometido antes de virar regra:
     //
-    // A RPC é `security definer`: ela CARREGA a autorização em vez de depender
-    // de uma policy larga. E é lá que moram as duas recusas que não podem
-    // depender de alguém lembrar — convite de admin (janela de escalada de 7
-    // dias) e convite não-pendente (ressuscitar cancelado desfaz revogação).
-    const { data: tokenRpc, error: erroRpc } = await supabase.rpc("renovar_convite", {
+    // 1. `invites` não tem policy de UPDATE pra líder. A primeira versão fazia
+    //    `.update(...)` direto e não conferia nada: casava 0 linhas, o erro
+    //    sumia, e os 14 líderes ganhavam "Não consegui gerar o link" pra sempre.
+    //    Botão morto, com mensagem que nem dizia que era permissão — a MESMA
+    //    classe das 0029/0049, escrita por quem construía o remédio pra ela.
+    //
+    // 2. A 0056 tentou consertar autorizando por VÍNCULO (a equipe no
+    //    `invite_teams`, ou o pedido de entrada do mesmo e-mail). Os dois são
+    //    forjáveis: `join_requests` aceita INSERT anônimo com `WITH CHECK
+    //    (true)`, e `invite_teams` deixa um líder pendurar a equipe dele em
+    //    qualquer convite `member`. O escopo estreito era encenação.
+    //
+    // A 0057 assume o escopo que o banco sustenta de verdade — a IGREJA de quem
+    // chama — e recusa o que importa: convite de admin, convite não-pendente, e
+    // e-mail que tenha convite de admin pendente. Ela não mexe em `status`, então
+    // ressuscitar cancelado é impossível por construção, não por lembrança.
+    const { data: linhas, error: erroRpc } = await supabase.rpc("renovar_convite", {
       p_invite: alvo.id,
     });
-    if (erroRpc || !tokenRpc) {
-      // A mensagem da RPC é escrita pra ser lida por gente ("você só pode
-      // reconvidar gente da sua equipe"), então ela sobe pra tela como está.
+    const renovado = linhas?.[0];
+    if (erroRpc || !renovado) {
       await registrarFalha({
         kind: "convite_link",
-        detail: `renovar_convite: ${erroRpc?.message ?? "sem token"}`,
+        detail: `renovar_convite: ${erroRpc?.message ?? "sem linha"}`,
         origem: "reconvidar",
       });
-      return fail(erroRpc?.message || "Não consegui renovar esse convite.");
+      // As mensagens dos `raise exception` da RPC são escritas pra gente ler
+      // ("você só pode reconvidar gente da sua igreja"), então sobem pra tela.
+      // Qualquer OUTRO erro do Postgres (grant perdido, timeout, conexão) vira
+      // texto genérico: mensagem crua de banco na tela de voluntário não ajuda
+      // ninguém e conta mais do que deveria.
+      const doNosso = /convite|igreja|liderança|pendente|administrador/i.test(erroRpc?.message ?? "");
+      return fail(doNosso ? erroRpc!.message : "Não consegui renovar esse convite.");
     }
 
-    // O e-mail vem do banco DEPOIS da RPC autorizar — nunca do cliente. É isto
-    // que impede um líder de fazer o link de entrada de outra pessoa chegar
-    // numa caixa que ele escolhe.
-    const { data: inv } = await supabase
-      .from("invites")
-      .select("email, full_name")
-      .eq("id", alvo.id)
-      .maybeSingle();
-    if (!inv) return fail("Convite não encontrado.");
-
-    const msg = conviteEmail({ nome: inv.full_name || inv.email, href: linkDeEntrada(tokenRpc) });
-    await sendEmail({ to: inv.email, subject: msg.subject, html: msg.html });
+    // E-mail e nome vêm DA RPC, na mesma linha do token. Antes havia um SELECT
+    // depois do update: se ele voltasse vazio, a action dizia "convite não
+    // encontrado" com o prazo JÁ estendido, e cada retentativa estendia de novo.
+    const msg = conviteEmail({
+      nome: renovado.full_name || renovado.email,
+      href: linkDeEntrada(renovado.token),
+    });
+    await sendEmail({ to: renovado.email, subject: msg.subject, html: msg.html });
     revalidatePath("/equipes");
     revalidatePath("/inicio");
     return ok;
