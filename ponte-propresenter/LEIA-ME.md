@@ -1,5 +1,9 @@
 # Ponte Sirvo → ProPresenter 7.6.1
 
+> **Só quer saber o que fazer?** → **[PROCEDIMENTO.md](PROCEDIMENTO.md)** — qual
+> máquina, qual login, o que rodar no domingo. Este arquivo aqui é a referência
+> de COMO funciona, e é mais longo de propósito.
+
 Quando um bloco novo do roteiro fica ao vivo no Sirvo, esta ponte escreve a
 duração planejada do bloco num timer do ProPresenter e dá start. É só isso.
 
