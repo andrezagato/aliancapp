@@ -49,7 +49,28 @@ const fail = (error: string): ActionResult => ({ ok: false, error });
 
 /** `ilike` trata % e _ como curinga: e-mail vindo de formulário público não pode
  *  virar padrão de busca. Escapa antes de comparar. */
-const comoTexto = (e: string) => e.replace(/([\\%_])/g, "\\$1");
+/**
+ * Escapa os curingas de LIKE antes de mandar um valor pro `.ilike()`.
+ *
+ * O `*` ESTA AQUI E NAO PODE SAIR. O PostgREST traduz `*` em `%` no valor de
+ * `like`/`ilike`, e o `postgrest-js` concatena cru na query string — pior, o
+ * `URLSearchParams` tem `*` no safe-set, entao ele atravessa sem percent-encode
+ * (enquanto `%` e a barra invertida sao codificados e chegam certos). Medido
+ * contra producao: `email=ilike.*@gmail.com` devolveu 5 linhas; escapado, zero.
+ *
+ * `*` e caractere legal em e-mail (RFC 5322). Sem ele nesta lista:
+ *  · `verificarEmailParaLink` — ANONIMA, service-role — vira oraculo: `a*@`,
+ *    `an*@`, e enumera a igreja inteira por busca binaria;
+ *  · `reenviarLinkDeAcesso` — tambem anonima — aceita `*@*`, casa o convite
+ *    pendente mais recente do BANCO INTEIRO e estende o prazo dele. Escrita
+ *    nao autenticada.
+ *
+ * Esta lista de quatro e completa: o LIKE do Postgres so conhece `%`, `_` e a
+ * barra de escape, e do safe-set do URLSearchParams so `*` significa algo pro
+ * PostgREST. Escapar `*` faz um e-mail que realmente CONTENHA `*` deixar de
+ * casar — falha FECHADO, que e o lado certo pra uma guarda.
+ */
+const comoTexto = (e: string) => e.replace(/([\\%_*])/g, "\\$1");
 
 /**
  * `via` chega do `?via=` da URL — entrada de usuário. Um valor fora do enum
@@ -2295,7 +2316,7 @@ export async function criarConvite(input: CriarConviteInput): Promise<ActionResu
   const supabase = await createClient();
   const { data: existing, error: erroExisting } = await supabase
     .from("invites")
-    .select("id, token")
+    .select("id, token, system_role")
     .eq("church_id", session.profile.church_id)
     // `comoTexto` aqui é cinto e suspensório: este e-mail vem de admin digitando
     // no próprio formulário, não de entrada anônima. Mas esta busca agora decide
@@ -2312,6 +2333,28 @@ export async function criarConvite(input: CriarConviteInput): Promise<ActionResu
     .limit(1)
     .maybeSingle();
   if (erroExisting) return fail("Não consegui conferir os convites existentes. Tente de novo.");
+
+  // PAPEL DIFERENTE NÃO SE REAPROVEITA, e as duas direções eram bug:
+  //
+  //  · pendente ADMIN + convidar como member → reaproveitava a linha de admin e
+  //    mandava `linkDeEntrada(token_do_admin)`, porque o `ehAdminR` abaixo olha o
+  //    que foi PEDIDO agora, não o que a linha É. Era o link direto de um convite
+  //    de administrador saindo por e-mail — o invariante que o `semLinkDireto`
+  //    existe pra proteger;
+  //  · pendente member + convidar como ADMIN → renovava a linha member, mandava
+  //    `/entrar`, e NENHUM convite de admin era criado. A tela dizia `ok`, o
+  //    admin achava que tinha promovido alguém, e o `handle_new_user`
+  //    provisionava como member. Intenção de autorização perdida em silêncio.
+  //
+  // Recusar em vez de criar um segundo pendente é de propósito: duas linhas
+  // pendentes pro mesmo e-mail é a pré-condição de toda a escalada que esta
+  // branch fecha. Melhor uma frase clara do que fabricar a condição.
+  if (existing && existing.system_role !== input.systemRole) {
+    return fail(
+      `Já existe um convite pendente para esse e-mail como ${existing.system_role === "admin" ? "administrador" : "membro"}. Cancele ele em Equipes antes de convidar com outro papel.`,
+    );
+  }
+
   // Convite pendente que já existe deixa de ser erro e passa a ser REENVIO: com
   // o link ganhando prazo (7 dias), recusar aqui deixaria o admin sem nenhuma
   // forma de renovar — só cancelar e recriar, que perde as equipes já marcadas.
@@ -2527,6 +2570,7 @@ export async function aprovarJoinRequest(joinId: string, teams: InviteTeamInput[
         subject: email,
         origem: "aprovarJoinRequest",
       });
+      revalidatePath("/equipes");
       return fail("Convite criado, mas não consegui marcar as equipes. Ajuste em Equipes.");
     }
   }
@@ -2545,6 +2589,7 @@ export async function aprovarJoinRequest(joinId: string, teams: InviteTeamInput[
       subject: email,
       origem: "aprovarJoinRequest",
     });
+    revalidatePath("/equipes");
     return fail("Não consegui marcar o pedido como aprovado. Tente de novo.");
   }
 
@@ -2688,6 +2733,38 @@ export async function reconvidar(alvo: { tipo: "convite" | "pedido"; id: string 
     return fail("Já existe um convite de administrador pendente para esse e-mail.");
   }
 
+  // ANTES DE CRIAR, PROCURAR. Este insert era incondicional — não havia busca de
+  // pendente nenhuma —, então lista velha ou segundo clique produzia DUAS linhas
+  // pendentes pro mesmo e-mail. Que é exatamente a pré-condição que esta branch
+  // inteira existe pra impedir; o caminho estava blindado só pela UI.
+  const { data: jaTem, error: erroJaTem } = await supabase
+    .from("invites")
+    .select("id, token, expires_at")
+    .eq("church_id", session.profile.church_id)
+    .eq("system_role", "member")
+    .eq("status", "pendente")
+    .ilike("email", comoTexto(email))
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (erroJaTem) return fail("Não consegui conferir os convites existentes. Tente de novo.");
+  if (jaTem) {
+    const vivo = !!jaTem.expires_at && new Date(jaTem.expires_at).getTime() > Date.now();
+    if (!vivo) {
+      // Vencido é o caso `link_vencido`, que tem botão próprio e passa pela RPC
+      // (líder não tem policy de UPDATE em `invites`, então renovar daqui casaria
+      // 0 linhas em silêncio). Mandar pra lá em vez de criar uma segunda linha.
+      return fail("Essa pessoa já tem um convite vencido. Use o Reconvidar da linha do convite.");
+    }
+    // Vivo: reenviar o que existe é idempotente, e é o que o segundo clique quer.
+    const msgJa = conviteEmail({ nome, href: linkDeEntrada(jaTem.token) });
+    const envioJa = await sendEmail({ to: email, subject: msgJa.subject, html: msgJa.html });
+    revalidatePath("/equipes");
+    revalidatePath("/inicio");
+    if (!envioJa.ok) return fail("Essa pessoa já tinha convite ativo, mas o e-mail não saiu. Tente de novo.");
+    return ok;
+  }
+
   // `system_role` fica no default ('member') de propósito e NUNCA vem de fora:
   // a policy `invites_insert_leader` já exige isso, mas depender só dela é
   // deixar a regra num lugar onde ninguém lê ao editar esta função.
@@ -2770,6 +2847,7 @@ export async function reconvidar(alvo: { tipo: "convite" | "pedido"; id: string 
       subject: email,
       origem: "reconvidar",
     });
+    revalidatePath("/equipes");
     return fail("O convite foi criado, mas não consegui fechar o pedido. Confira em Equipes.");
   }
 
@@ -2797,11 +2875,23 @@ export async function recusarJoinRequest(joinId: string): Promise<ActionResult> 
       return fail("Você só pode recusar pedidos da sua equipe.");
     }
   }
-  const { error } = await supabase
+  // `.select("id")` + conferência de 0 linhas: mesma policy, mesma tabela e mesma
+  // classe da função logo acima. `join_resolve` exige admin OU líder da equipe
+  // pedida — se o `canManageTeam` do app divergir dela, isto casava 0 linhas sem
+  // erro, o pedido continuava na fila, e a tela dizia "recusado".
+  const { data: recusado, error } = await supabase
     .from("join_requests")
     .update({ status: "recusado", resolved_by: session.userId })
-    .eq("id", joinId);
-  if (error) return fail(error.message);
+    .eq("id", joinId)
+    .select("id");
+  if (error || !recusado || recusado.length === 0) {
+    await registrarFalha({
+      kind: "convite_link",
+      detail: `recusar pedido: ${error?.message ?? "0 linhas"}`,
+      origem: "recusarJoinRequest",
+    });
+    return fail("Não consegui recusar esse pedido. Tente de novo.");
+  }
   revalidatePath("/equipes");
   return ok;
 }

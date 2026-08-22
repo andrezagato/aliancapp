@@ -100,7 +100,11 @@ export async function sendEmail(input: SendEmailInput): Promise<EnvioResult> {
     console.error("[email] falha ao enviar:", err);
     // Best-effort continua: não relança, não derruba a ação. Mas best-effort
     // deixa de ser best-FORGET — a partir daqui a falha vai pro digest.
-    await registrarFalha({ kind: "email", detail: msg, subject: recipients[0], origem: "sendEmail" });
+    // Mesma guarda dos outros três ramos: o dev local aponta pro banco de
+    // PRODUÇÃO, e sem isto testar aqui sujaria a failure_log real.
+    if (process.env.VERCEL_ENV === "production") {
+      await registrarFalha({ kind: "email", detail: msg, subject: recipients[0], origem: "sendEmail" });
+    }
     return { ok: false, motivo: msg };
   }
 }
