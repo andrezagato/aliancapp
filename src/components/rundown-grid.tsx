@@ -177,7 +177,12 @@ function Contador({
  * o realce do card arrastado). Redimensionar saiu por decisão do dono — a
  * duração agora se muda pelo popover, que não depende de precisão de pixel.
  */
-type Drag = { mode: "reorder"; id: string } | null;
+// `pointerId` entrou junto porque sem ele os listeners de window não sabem de
+// QUEM é o evento: com dois dedos na tela (mão apoiada, o que acontece segurando
+// o celular de lado), o segundo `beginReorder` sobrescrevia o `drag.id` e o dedo
+// #1 passava a arrastar o bloco do dedo #2 — e o primeiro que levantasse
+// persistia a ordem, matando o gesto do outro.
+type Drag = { mode: "reorder"; id: string; pointerId: number } | null;
 
 export function RundownGrid({
   eventId,
@@ -317,6 +322,14 @@ export function RundownGrid({
       await reordenarCronograma(eventId, next.map((x) => x.id));
       router.refresh();
     });
+  // Espelhado em ref pelo mesmo motivo do `listRef` logo acima: `finalizar`
+  // precisa chamar isto e precisa ser ESTÁVEL. Se `persistOrder` entrasse nas
+  // deps, `finalizar` mudaria de identidade a cada render, `soltarListeners`
+  // junto — e o efeito de desmonte, que depende dele, rodaria sua limpeza a cada
+  // render, arrancando os listeners NO MEIO do arraste. O `eslint-disable` que
+  // estava aqui antes escondia exatamente essa armadilha em vez de resolvê-la.
+  const persistOrderRef = useRef(persistOrder);
+  persistOrderRef.current = persistOrder;
   const salvarDuracao = (id: string, min: number) => {
     salvarDurRef.current = null;
     const proxima = filaRef.current.then(async () => {
@@ -400,29 +413,111 @@ export function RundownGrid({
     }
   }, []);
 
-  const onPointerUp = useCallback(() => {
-    const d = dragRef.current;
+  // ---- FIM DE GESTO GARANTIDO ---------------------------------------------
+  //
+  // Antes existia UM caminho de saída: `pointerup` com {once:true}. Quando o iOS
+  // cancelava o ponteiro — central de controle, notificação, segundo dedo,
+  // chamada chegando — esse pointerup NUNCA vinha, e nada era desfeito:
+  //
+  //   · `drag` ficava não-nulo pra sempre. E `drag` alimenta `ocupado`, que é a
+  //     válvula do tempo real: o roteiro daquele aparelho PARAVA de receber
+  //     atualização pelo resto do culto, em silêncio;
+  //   · `suppressClickRef` ficava true, e o guarda do clique no card engolia
+  //     tudo — o modal do bloco não abria mais;
+  //   · o `pointermove` seguia pendurado na window com o `dragRef` apontando pro
+  //     bloco: QUALQUER movimento de dedo na página passava a reordenar o roteiro.
+  //
+  // Só se curava quando alguém agarrava a alça de novo e completava um gesto
+  // limpo. É o candidato mais forte pro "não está muito estável" relatado ao vivo.
+  //
+  // Os handlers moram em refs porque `finalizar` precisa REMOVER os dois, e os
+  // dois precisam CHAMAR `finalizar` — a referência estável tem que existir antes
+  // de cada um ser definido, senão o removeEventListener recebe outra função e
+  // não remove nada.
+  const aoSoltarRef = useRef<((e: PointerEvent) => void) | null>(null);
+  const aoCancelarRef = useRef<((e: PointerEvent) => void) | null>(null);
+  const ordemAoIniciarRef = useRef<RundownItem[] | null>(null);
+
+  const soltarListeners = useCallback(() => {
     window.removeEventListener("pointermove", onPointerMove);
-    setDrag(null);
-    // Mantém a trava por um instante: o click sintético do fim do gesto chega
-    // logo depois deste pointerup; limpamos em seguida pra taps normais valerem.
-    window.setTimeout(() => {
-      suppressClickRef.current = false;
-    }, 60);
-    if (!d) return;
-    persistOrder(listRef.current);
-    setFlashId(d.id);
-    window.setTimeout(() => setFlashId(null), 900);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (aoSoltarRef.current) window.removeEventListener("pointerup", aoSoltarRef.current);
+    if (aoCancelarRef.current) window.removeEventListener("pointercancel", aoCancelarRef.current);
   }, [onPointerMove]);
 
+  const finalizar = useCallback(
+    (persistir: boolean) => {
+      const d = dragRef.current;
+      soltarListeners();
+      setDrag(null);
+      // Mantém a trava por um instante: o click sintético do fim do gesto chega
+      // logo depois; limpamos em seguida pra taps normais valerem.
+      window.setTimeout(() => {
+        suppressClickRef.current = false;
+      }, 60);
+      const antes = ordemAoIniciarRef.current;
+      ordemAoIniciarRef.current = null;
+      if (!d) return;
+      if (persistir) {
+        persistOrderRef.current(listRef.current);
+        setFlashId(d.id);
+        window.setTimeout(() => setFlashId(null), 900);
+        return;
+      }
+      // CANCELADO VOLTA ATRÁS, e isso é decisão, não descuido. `pointercancel` no
+      // iOS é quase sempre o sistema tomando o gesto pra si — ou seja, o caso
+      // ACIDENTAL, que é justamente o que a pessoa reclamou. Gravar a ordem de um
+      // gesto que ela não terminou seria transformar o acidente em fato no banco,
+      // com push de tempo real pra equipe inteira e sem nada na tela dizendo o quê.
+      if (antes) setList(antes);
+    },
+    [soltarListeners],
+  );
+
+  const aoSoltar = useCallback(
+    (e: PointerEvent) => {
+      const d = dragRef.current;
+      if (d && e.pointerId !== d.pointerId) return;
+      finalizar(true);
+    },
+    [finalizar],
+  );
+
+  const aoCancelar = useCallback(
+    (e: PointerEvent) => {
+      const d = dragRef.current;
+      if (d && e.pointerId !== d.pointerId) return;
+      finalizar(false);
+    },
+    [finalizar],
+  );
+
+  useEffect(() => {
+    aoSoltarRef.current = aoSoltar;
+    aoCancelarRef.current = aoCancelar;
+  }, [aoSoltar, aoCancelar]);
+
+  // DESMONTE NO MEIO DO GESTO. Trocar de rota (o `router.replace` do "fixar neste
+  // culto"), um Suspense re-suspendendo, o culto encerrando — qualquer um desmonta
+  // esta tela com o dedo na alça. Sem esta limpeza os listeners sobrevivem na
+  // window com closures de um componente morto, e o pointerup seguinte dispara
+  // `persistOrder` de uma tela que não existe mais.
+  useEffect(() => () => soltarListeners(), [soltarListeners]);
+
   const beginReorder = (e: React.PointerEvent, it: RundownItem) => {
+    // Só o botão primário arma. Antes, botão direito do mouse também armava — e no
+    // computador da régia o menu de contexto engole o pointerup, o que reproduzia
+    // exatamente o travamento do pointercancel.
+    if (e.button !== 0) return;
     e.preventDefault();
     e.stopPropagation();
+    // Um gesto por vez: se sobrou algo de um anterior, encerra sem gravar.
+    if (dragRef.current) finalizar(false);
     suppressClickRef.current = true;
-    setDrag({ mode: "reorder", id: it.id });
+    ordemAoIniciarRef.current = listRef.current;
+    setDrag({ mode: "reorder", id: it.id, pointerId: e.pointerId });
     window.addEventListener("pointermove", onPointerMove);
-    window.addEventListener("pointerup", onPointerUp, { once: true });
+    if (aoSoltarRef.current) window.addEventListener("pointerup", aoSoltarRef.current);
+    if (aoCancelarRef.current) window.addEventListener("pointercancel", aoCancelarRef.current);
   };
 
   const toggleDone = (it: RundownItem) => {
