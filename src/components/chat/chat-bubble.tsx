@@ -135,17 +135,22 @@ export function ChatBubble({
   // o modal JÁ ABERTO distinguir "é o mesmo alvo de antes" de "tocaram de novo na
   // notificação daquele canal".
   const abrirPeloDeepLink = useCallback(
-    (search: string) => {
+    (search: string): "achou" | "sumiu" | "nada" => {
       const r = alvoDoDeepLink(canaisRef.current, search);
       if (r.estado === "achou") {
         setAlvo({ ...r.canal });
         setOpen(true);
         reconhecer();
-      } else if (r.estado === "sumiu") {
-        showToast("Essa conversa não está mais na sua lista.");
+        return "achou";
       }
+      // QUEM DECIDE O QUE FAZER COM "sumiu" É QUEM CHAMOU, e essa distinção é o
+      // conserto: pelo caminho da URL o documento acabou de carregar, então
+      // `canais` veio do servidor agora e "sumiu" é verdade. Pelo caminho do
+      // service worker a lista pode ser de horas atrás — ali "não achei" quer
+      // dizer "minha lista está velha", e afirmar o contrário é mentir.
+      return r.estado === "sumiu" ? "sumiu" : "nada";
     },
-    [reconhecer, showToast],
+    [reconhecer],
   );
 
   // Lido do `window.location` num efeito, não por `useSearchParams`: o hook
@@ -157,7 +162,10 @@ export function ChatBubble({
     leuLink.current = true;
     const p = new URLSearchParams(window.location.search);
     if (!p.has("chat")) return;
-    abrirPeloDeepLink(window.location.search);
+    // Aqui o toast é honesto: a lista veio do servidor neste mesmo carregamento.
+    if (abrirPeloDeepLink(window.location.search) === "sumiu") {
+      showToast("Essa conversa não está mais na sua lista.");
+    }
     // A limpeza vale pros DOIS desfechos, inclusive quando nada abriu: o
     // parâmetro já foi consumido, e deixá-lo na barra faz o próximo F5 tentar
     // tudo de novo — e o toast repetir uma notícia velha.
@@ -193,7 +201,21 @@ export function ChatBubble({
     if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
     const onMsg = (e: MessageEvent) => {
       const d = e.data as { tipo?: unknown; url?: unknown } | null;
-      if (!d || d.tipo !== "abrir-chat" || typeof d.url !== "string") return;
+      // A porta de resposta: o worker precisa saber se ALGUÉM tratou, porque é
+      // isso que decide se ele abre uma janela nova. Sem responder, o worker
+      // ficaria esperando os 500ms dele e abriria janela à toa.
+      const porta = e.ports && e.ports[0] ? e.ports[0] : null;
+      const responder = (ok: boolean) => {
+        try {
+          if (porta) porta.postMessage({ ok });
+        } catch {
+          /* porta já fechada — o worker cai no prazo dele */
+        }
+      };
+      if (!d || d.tipo !== "abrir-chat" || typeof d.url !== "string") {
+        responder(false);
+        return;
+      }
       let search: string;
       try {
         // O sw.js manda caminho relativo ("/inicio?chat=…"); sem base o URL
@@ -202,9 +224,29 @@ export function ChatBubble({
         // cai em "sumiu" e não abre porta nenhuma.
         search = new URL(d.url, window.location.origin).search;
       } catch {
+        responder(false);
         return;
       }
-      abrirPeloDeepLink(search);
+      if (abrirPeloDeepLink(search) === "achou") {
+        responder(true);
+        return;
+      }
+      // NÃO ACHEI AQUI NÃO SIGNIFICA QUE NÃO EXISTE.
+      //
+      // `canais` nasce de `useState(inicial)` e nunca é reposta pelo servidor: o
+      // layout de (app) re-renderiza e manda prop nova, mas `useState` ignora
+      // prop, e nada em `aoChegar`/`openChannel`/`onMuteChange` ACRESCENTA canal.
+      // Num PWA que fica aberto no bolso, essa lista é de quando a aba abriu.
+      //
+      // Então o canal de um culto criado depois, ou de uma equipe em que a pessoa
+      // acabou de entrar, não está aqui — e o recado "não está mais na sua lista"
+      // seria falso justamente pra quem acabou de ser mencionada. O plano B
+      // devolve o serviço ao plano A: navegação de verdade, que recarrega o
+      // documento, traz a lista fresca do servidor e faz o efeito da URL abrir o
+      // canal. Respondemos `true` porque o pedido ESTÁ sendo atendido — o worker
+      // não deve abrir uma segunda janela por cima disto.
+      responder(true);
+      window.location.href = d.url;
     };
     navigator.serviceWorker.addEventListener("message", onMsg);
     return () => navigator.serviceWorker.removeEventListener("message", onMsg);

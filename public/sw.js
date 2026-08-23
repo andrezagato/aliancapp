@@ -47,11 +47,53 @@ self.addEventListener("push", (event) => {
   event.waitUntil(self.registration.showNotification(title, options));
 });
 
+// Pergunta ao cliente se ELE consegue abrir, e espera a resposta.
+//
+// A versão anterior marcava "entregue" assim que o postMessage não lançava — ou
+// seja, "eu postei", não "alguém tratou". E `client.postMessage` SEMPRE resolve:
+// não existe do outro lado a promessa de que haja ouvinte. Com isso o último
+// recurso (`openWindow`) era desarmado por uma entrega que podia nunca ter
+// acontecido. O caso real: a cabine com /control aberto e em foco — o matchAll
+// escolhe justamente essa aba, porque ela é a focada, e /control tem layout
+// próprio, sem ChatBubble. O toque na notificação não fazia nada.
+//
+// Com a porta de resposta, "entregue" volta a significar o que a palavra diz.
+// Os 500ms de prazo existem porque mensagem despachada durante o carregamento
+// fica na fila e só chega no DOMContentLoaded, enquanto o ouvinte do React só
+// existe depois da hidratação — sem prazo, uma aba nesse intervalo prenderia a
+// decisão pra sempre.
+function pedirAoCliente(client, url) {
+  return new Promise((resolve) => {
+    let respondeu = false;
+    let canal;
+    try {
+      canal = new MessageChannel();
+    } catch (_e) {
+      resolve(false);
+      return;
+    }
+    canal.port1.onmessage = (ev) => {
+      respondeu = true;
+      resolve(!!(ev.data && ev.data.ok));
+    };
+    try {
+      client.postMessage({ tipo: "abrir-chat", url: url }, [canal.port2]);
+    } catch (_e) {
+      resolve(false);
+      return;
+    }
+    setTimeout(() => {
+      if (!respondeu) resolve(false);
+    }, 500);
+  });
+}
+
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const url = (event.notification.data && event.notification.data.url) || "/inicio";
   event.waitUntil(
-    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientsArr) => {
+    (async () => {
+      const clientsArr = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
       // Preferir a aba que a pessoa estava usando. A ordem do `matchAll` é do
       // navegador, não promessa nenhuma: com duas abas do app abertas, pegar a
       // primeira que tivesse `focus` acertava a errada na cara dura.
@@ -62,38 +104,36 @@ self.addEventListener("notificationclick", (event) => {
       if (!client) return self.clients.openWindow(url);
 
       // `client.navigate()` devolve PROMISE, e com o app em segundo plano — o
-      // caso normal no celular — ela REJEITA. O try/catch síncrono de antes não
+      // caso normal no celular — ela REJEITA. O try/catch síncrono original não
       // pegava nada disso: a rejeição escapava, o `focus()` rodava igual e a aba
-      // voltava na URL ANTIGA. O toque na notificação virava nada, de forma
-      // intermitente, que é o pior jeito de um recurso falhar.
-      //
-      // Agora a rejeição tem plano B: o destino vai pela porta dos fundos e quem
-      // já está montado na página (o ChatBubble, que mora no layout de (app))
-      // abre a conversa sem trocar de URL. O `Promise.resolve().then(…)` também
-      // embrulha um throw SÍNCRONO do navigate, então ele substitui o try/catch
-      // antigo por inteiro.
-      let entregue = false;
-      return (
-        Promise.resolve()
-          .then(() => ("navigate" in client ? client.navigate(url) : null))
-          .catch(() => {
-            try {
-              client.postMessage({ tipo: "abrir-chat", url: url });
-              entregue = true;
-            } catch (_e) {
-              /* cliente morreu entre o matchAll e agora — nada a fazer */
-            }
-          })
-          // Focar SEMPRE, tenha o navigate dado certo ou não: trazer o app pra
-          // frente é metade do pedido, e é a metade que quase nunca falha. O
-          // `navigate` resolve com o cliente (às vezes outro); na volta do catch
-          // vem `undefined` e vale o de sempre.
-          .then((navegado) => (navegado || client).focus())
-          // Último recurso: nem navegou, nem focou. Só abre janela nova se a
-          // mensagem também não tiver sido entregue — senão a pessoa ganharia
-          // DUAS telas do app pelo mesmo toque.
-          .catch(() => (entregue ? undefined : self.clients.openWindow(url)))
-      );
-    }),
+      // voltava na URL ANTIGA. O toque virava nada, de forma intermitente, que é
+      // o pior jeito de um recurso falhar. O `await` dentro do try embrulha
+      // rejeição E throw síncrono, então substitui o try/catch antigo inteiro.
+      let navegado = null;
+      let navegou = false;
+      try {
+        navegado = "navigate" in client ? await client.navigate(url) : null;
+        navegou = true;
+      } catch (_e) {
+        navegou = false;
+      }
+
+      // Só vale o plano B se o navigate falhou. Quando ele deu certo, a página
+      // já vai ler o parâmetro sozinha na montagem — mandar mensagem também
+      // abriria a conversa duas vezes.
+      const tratado = navegou ? true : await pedirAoCliente(client, url);
+
+      // Focar SEMPRE: trazer o app pra frente é metade do pedido, e é a metade
+      // que quase nunca falha.
+      try {
+        await (navegado || client).focus();
+        if (tratado) return undefined;
+      } catch (_e) {
+        /* nem focou — cai no último recurso abaixo */
+      }
+      // Último recurso: ninguém tratou o destino. Abrir janela nova é melhor que
+      // um toque que não fez nada.
+      return tratado ? undefined : self.clients.openWindow(url);
+    })(),
   );
 });
