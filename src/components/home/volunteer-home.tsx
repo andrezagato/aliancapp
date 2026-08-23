@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { CalendarDays, Check, Users } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
@@ -194,8 +194,40 @@ export function VolunteerHome({
     }
   };
 
+  // O DIA DA IGREJA PRECISA SER RECONFERIDO QUANDO A PESSOA VOLTA PRO APP.
+  //
+  // `todaySP` é calculado no render, e nada obriga um render a acontecer. Num PWA
+  // instalado na tela de início — que é como a igreja usa — o app não fecha: fica
+  // suspenso no alternador de tarefas por dias. Quem abriu no domingo à noite e
+  // reabre na segunda de manhã pelo alternador não dispara render nenhum, e a
+  // tela segue dizendo "É HOJE", com botão de check-in vivo, pro culto de ONTEM.
+  //
+  // Só `visibilitychange` e `focus`, sem cronômetro: o caso real é justamente o
+  // do app voltando do bolso, e um intervalo re-renderizaria a Home inteira pra
+  // sempre pra cobrir a virada de meia-noite com o app aberto e olhando — que não
+  // é o problema que alguém relatou. E só re-renderiza se o dia REALMENTE virou.
+  const [, reconferirDia] = useState(0);
+  const diaRef = useRef<string | null>(null);
+  useEffect(() => {
+    const conferir = () => {
+      const agora = churchDateISO(new Date().toISOString());
+      if (diaRef.current !== null && agora !== diaRef.current) reconferirDia((n) => n + 1);
+      diaRef.current = agora;
+    };
+    const aoVoltar = () => {
+      if (document.visibilityState === "visible") conferir();
+    };
+    document.addEventListener("visibilitychange", aoVoltar);
+    window.addEventListener("focus", conferir);
+    return () => {
+      document.removeEventListener("visibilitychange", aoVoltar);
+      window.removeEventListener("focus", conferir);
+    };
+  }, []);
+
   // convites pendentes sobem pro topo; o resto (confirmado/presente) vira today/hero/lista
   const todaySP = churchDateISO(new Date().toISOString());
+  diaRef.current = todaySP;
   const sorted = [...items].sort((a, b) => (a.startsAt < b.startsAt ? -1 : 1));
 
   const pending = sorted.filter((a) => a.status === "convidado");
