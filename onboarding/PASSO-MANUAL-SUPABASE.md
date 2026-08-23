@@ -90,7 +90,7 @@ O template já vem com a mesma cara dos outros e-mails do Sirvo e com o link
 
 ## Atenção ao domínio
 
-Cada template tem **dois** links fixos em `https://app.ministerioalianca.com`: o botão de entrar
+Cada template tem **dois** links fixos em `https://sirvo.ministerioalianca.com`: o botão de entrar
 (`/auth/confirm?…`) e o "Primeira vez? Veja como funciona" (`/primeiros-passos.html`). É a URL de
 produção — o template do Supabase é global (não tem preview por branch), então o link fixo é o certo
 aqui. **Se o domínio mudar, são 4 lugares** (2 links × 2 templates).
