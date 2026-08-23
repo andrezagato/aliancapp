@@ -2525,13 +2525,85 @@ export async function criarConvite(input: CriarConviteInput): Promise<ActionResu
   return ok;
 }
 
+/**
+ * Cancela um convite E DEVOLVE A DECISÃO PRA FILA.
+ *
+ * Cancelar só a linha do convite deixava um meio-estado, e ele confundiu na
+ * prática: o `join_requests` continuava `aprovado`, e `verificarEmailParaLink`
+ * trata pedido aprovado como PERMISSÃO — então a pessoa pedia link em `/entrar`,
+ * recebia, clicava, e caía em "Olá, quase lá, aguarde a aprovação". O app dizia
+ * "seu acesso está liberado" e depois "espere ser liberado".
+ *
+ * A intenção antiga estava escrita e era boa ("não é porta fechada, é um toque
+ * do líder"), mas o preço era o chicote. E o botão se chama CANCELAR: ele parece
+ * revogar, e passava a só invalidar um link.
+ *
+ * Agora reabre o pedido. `/entrar` volta a dizer "seu pedido está com a
+ * liderança", que é verdade, e a decisão volta pra fila em vez de virar
+ * meia-permissão.
+ *
+ * NÃO REABRE PRA QUEM JÁ ENTROU: se a pessoa tem perfil ativo, o pedido dela é
+ * história antiga, e ressuscitá-lo colocaria um membro de volta na fila de
+ * aprovação. Convite criado pelo `criarConvite` (sem pedido nenhum) também não é
+ * afetado — não há o que reabrir.
+ */
 export async function cancelarConvite(inviteId: string): Promise<ActionResult> {
   const session = await getSession();
   if (!session || session.role !== "admin") return fail("Sem permissão.");
   const supabase = await createClient();
-  const { error } = await supabase.from("invites").update({ status: "cancelado" }).eq("id", inviteId);
-  if (error) return fail(error.message);
+
+  const { data: inv, error: erroLer } = await supabase
+    .from("invites")
+    .select("id, email, church_id")
+    .eq("id", inviteId)
+    .maybeSingle();
+  if (erroLer) return fail("Não consegui ler esse convite. Tente de novo.");
+  if (!inv) return fail("Convite não encontrado.");
+
+  const { data: cancelado, error } = await supabase
+    .from("invites")
+    .update({ status: "cancelado" })
+    .eq("id", inviteId)
+    .select("id");
+  if (error || !cancelado || cancelado.length === 0) {
+    await registrarFalha({
+      kind: "convite_link",
+      detail: `cancelar convite: ${error?.message ?? "0 linhas"}`,
+      subject: inv.email,
+      origem: "cancelarConvite",
+    });
+    return fail("Não consegui cancelar esse convite. Tente de novo.");
+  }
+
+  // Só reabre se a pessoa NÃO entrou. Perfil ativo = o pedido já cumpriu o papel.
+  const { data: ativo } = await supabase
+    .from("profiles")
+    .select("id")
+    .eq("status", "ativo")
+    .ilike("email", comoTexto(inv.email))
+    .limit(1);
+
+  if (!ativo || ativo.length === 0) {
+    const { error: erroReabrir } = await supabase
+      .from("join_requests")
+      .update({ status: "pendente", resolved_by: null })
+      .eq("status", "aprovado")
+      .eq("church_id", inv.church_id)
+      .ilike("email", comoTexto(inv.email));
+    // Best-effort: o convite JÁ foi cancelado, e derrubar a ação agora deixaria
+    // um estado pior que o que a gente veio consertar. Mas não some.
+    if (erroReabrir) {
+      await registrarFalha({
+        kind: "convite_link",
+        detail: `reabrir pedido ao cancelar convite: ${erroReabrir.message}`,
+        subject: inv.email,
+        origem: "cancelarConvite",
+      });
+    }
+  }
+
   revalidatePath("/equipes");
+  revalidatePath("/inicio");
   return ok;
 }
 

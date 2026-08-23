@@ -21,9 +21,21 @@ import { registrarFalha } from "@/lib/failure-log";
  *     Supabase (1 hora hoje) e morreria antes da pessoa abrir a caixa de entrada.
  *     Gerado aqui, quem manda no prazo é `invites.expires_at`, que é nosso;
  *   • antivírus e o pré-visualizador de link do Outlook abrem o link ANTES da
- *     pessoa. Um magic link comum seria queimado por eles e ela encontraria um
- *     link morto. O token do convite não se gasta: cada abertura gera um token de
- *     login novo;
+ *     pessoa. Um magic link comum seria QUEIMADO por eles e ela encontraria um
+ *     link morto. O token do convite não se gasta: cada abertura gera um token
+ *     de login novo.
+ *
+ *     RESSALVA MEDIDA EM 23/08, porque este parágrafo prometia demais: o token
+ *     de fato não se gasta, mas a PRIMEIRA abertura cria a conta em
+ *     `auth.users`, e a regra "só primeiro acesso" (mais abaixo) recusa todas as
+ *     seguintes com `ja_tem_conta`. Ou seja, se um scanner abrir antes, a pessoa
+ *     é mandada pro campo de e-mail em vez de entrar direto.
+ *
+ *     Não é beco — o campo de e-mail resolve, e o segundo clique NO MESMO
+ *     navegador cai na checagem de sessão logo abaixo e vai pro /inicio. E a
+ *     regra não pode ser afrouxada: qualquer líder lê `invites.token` no banco
+ *     (`invites_read_leader`), então token que abre conta EXISTENTE é escalada.
+ *     O conserto de verdade é estreitar aquela policy, não esta rota;
  *   • sem `redirectTo`, a allow-list de Redirect URLs do dashboard deixa de ser
  *     um jeito silencioso de quebrar isso.
  *
