@@ -182,7 +182,32 @@ function Contador({
 // o celular de lado), o segundo `beginReorder` sobrescrevia o `drag.id` e o dedo
 // #1 passava a arrastar o bloco do dedo #2 — e o primeiro que levantasse
 // persistia a ordem, matando o gesto do outro.
-type Drag = { mode: "reorder"; id: string; pointerId: number } | null;
+// `armado` separa "o dedo encostou na alça" de "o dedo está ARRASTANDO". Antes só
+// existia o segundo estado, e ele começava no toque — por isso os 2-5px que todo
+// dedo escorrega ao encostar já reordenavam. `origem` guarda onde o dedo pousou,
+// pra medir a distância percorrida.
+type Drag = {
+  mode: "reorder";
+  id: string;
+  pointerId: number;
+  armado: boolean;
+  origem: { x: number; y: number };
+} | null;
+
+/**
+ * Quanto o dedo precisa andar pra virar arraste.
+ *
+ * DISTÂNCIA, não tempo. Atraso pune quem acertou o gesto — segurar 300ms antes de
+ * qualquer coisa acontecer é o que faz uma tela parecer travada. Distância só
+ * filtra quem NÃO quis arrastar: quem quer arrastar já vai andar muito mais que
+ * isso, e nem percebe o limiar.
+ *
+ * 8px é abaixo do que uma rolagem intencional percorre e acima do escorregão de
+ * quem só quis encostar. Não usamos apertar-e-segurar: o iOS sequestra pressão
+ * longa como seleção de texto (está escrito em rundown-salvaguardas), e segurar
+ * poria latência justamente no gesto que precisa parecer imediato.
+ */
+const LIMIAR_ARME = 8;
 
 export function RundownGrid({
   eventId,
@@ -392,6 +417,17 @@ export function RundownGrid({
   const onPointerMove = useCallback((e: PointerEvent) => {
     const d = dragRef.current;
     if (!d) return;
+    // Ainda não armou? Só arma se o dedo andou o bastante — e enquanto não armar,
+    // NADA se move. É aqui que morre o "mudou a ordem sem eu querer".
+    if (!d.armado) {
+      const dx = e.clientX - d.origem.x;
+      const dy = e.clientY - d.origem.y;
+      if (dx * dx + dy * dy < LIMIAR_ARME * LIMIAR_ARME) return;
+      // Euclidiana, não só vertical: quem começa o gesto na diagonal (o polegar
+      // faz arco, não linha reta) armaria tarde demais medindo só o eixo Y.
+      dragRef.current = { ...d, armado: true };
+      setDrag(dragRef.current);
+    }
     const ids = listRef.current.map((x) => x.id);
     // `vaga` é ONDE ENTRA, não sobre quem passou: 0 = antes do primeiro, 1 = entre
     // o 1º e o 2º, e assim por diante até `ids.length` = depois do último. O laço
@@ -476,9 +512,20 @@ export function RundownGrid({
       ordemAoIniciarRef.current = null;
       if (!d) return;
       if (persistir) {
-        persistOrderRef.current(listRef.current);
-        setFlashId(d.id);
-        window.setTimeout(() => setFlashId(null), 900);
+        // GRAVAR SÓ SE HOUVE ARRASTE E SE A ORDEM MUDOU DE VERDADE.
+        //
+        // Sem armar, o gesto foi um toque na alça e não há nada a dizer ao
+        // servidor. E mesmo armado, a pessoa pode ter arrastado e voltado pro
+        // mesmo lugar. Gravar nesses casos custaria um `reordenarCronograma`, um
+        // `router.refresh()` e um push de tempo real pra todo aparelho da equipe
+        // — durante o culto — pra comunicar exatamente nada.
+        const mudou =
+          d.armado && (antes === null || antes.some((x, i) => x.id !== listRef.current[i]?.id));
+        if (mudou) {
+          persistOrderRef.current(listRef.current);
+          setFlashId(d.id);
+          window.setTimeout(() => setFlashId(null), 900);
+        }
         return;
       }
       // CANCELADO VOLTA ATRÁS, e isso é decisão, não descuido. `pointercancel` no
@@ -532,7 +579,13 @@ export function RundownGrid({
     if (dragRef.current) finalizar(false);
     suppressClickRef.current = true;
     ordemAoIniciarRef.current = listRef.current;
-    setDrag({ mode: "reorder", id: it.id, pointerId: e.pointerId });
+    setDrag({
+      mode: "reorder",
+      id: it.id,
+      pointerId: e.pointerId,
+      armado: false,
+      origem: { x: e.clientX, y: e.clientY },
+    });
     window.addEventListener("pointermove", onPointerMove);
     if (aoSoltarRef.current) window.addEventListener("pointerup", aoSoltarRef.current);
     if (aoCancelarRef.current) window.addEventListener("pointercancel", aoCancelarRef.current);
@@ -892,7 +945,11 @@ export function RundownGrid({
             const done = status === "done";
             const live = status === "live";
             const last = idx === rows.length - 1;
-            const reorderingThis = drag?.mode === "reorder" && drag.id === it.id;
+            // O realce (escala, giro, anel) aparece no instante em que o arraste
+            // ARMA, não quando o dedo encosta. É o retorno que faltava: antes ele
+            // acendia no toque, então acendia também em todo encostão que não
+            // virava arraste — e quem estava só rolando a lista via o card pular.
+            const reorderingThis = drag?.mode === "reorder" && drag.armado && drag.id === it.id;
             const durMs = it.durationMin * 60000;
             const elapsedMs = live ? (now != null ? now - startMs : 0) : done ? endMs - startMs : durMs;
             const overMs = Math.max(0, elapsedMs - durMs);
