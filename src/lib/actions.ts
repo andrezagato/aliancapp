@@ -4171,22 +4171,42 @@ export async function recusarSubstituicao(swapId: string): Promise<ActionResult>
 // CHAT INTERNO (avisos / equipe / evento) — texto puro
 // =============================================================================
 
-/** Título + url do push do canal (best-effort — busca o nome pelo channelRef). */
+/**
+ * Título + url do push do canal (best-effort — busca o nome pelo channelRef).
+ *
+ * A url carrega o canal (`?chat=<tipo>&ref=<uuid>`) pro balão do chat abrir JÁ na
+ * conversa certa — quem toca no aviso de uma mensagem quer a mensagem, e até
+ * aqui caía na Home com o chat fechado. Quem lê o parâmetro é o ChatBubble
+ * (src/components/chat/chat-bubble.tsx), que resolve o canal contra a lista da
+ * pessoa e limpa a query em seguida.
+ *
+ * Os TRÊS tipos vão pra /inicio, inclusive `evento`. O balão mora no layout de
+ * (app), então /inicio já basta; mandar pra /escalas/<id> custaria caro e sem
+ * ganho — a rota abriria o modal da ESCALA por baixo do modal do chat (modal
+ * sobre modal, o que o DESIGN.md proíbe e as fases 4.1/4.2 desfizeram) e o
+ * `router.replace("/escalas")` hardcoded do EscalasView apagaria a query no
+ * caminho, o mesmo pisoteio que comeu o `?via=` na 0052.
+ *
+ * O `avisos` não leva ref: o ref dele é o id da igreja e o canal se acha pelo
+ * tipo. O sw.js repassa `data.url` cru, então o aparelho que já tem o service
+ * worker instalado entende a url nova sem precisar atualizar nada.
+ */
 async function chatPushTitulo(
   supabase: Awaited<ReturnType<typeof createClient>>,
   channelType: string,
   channelRef: string,
 ): Promise<{ title: string; url: string }> {
+  const deepLink = `/inicio?chat=${channelType}&ref=${encodeURIComponent(channelRef)}`;
   if (channelType === "equipe") {
     const { data } = await supabase.from("teams").select("name").eq("id", channelRef).maybeSingle();
-    return { title: `💬 ${data?.name ?? "Equipe"}`, url: "/inicio" };
+    return { title: `💬 ${data?.name ?? "Equipe"}`, url: deepLink };
   }
   if (channelType === "evento") {
     const { data } = await supabase.from("events").select("title").eq("id", channelRef).maybeSingle();
-    return { title: `💬 ${data?.title ?? "Evento"}`, url: `/escalas/${channelRef}` };
+    return { title: `💬 ${data?.title ?? "Evento"}`, url: deepLink };
   }
   // avisos (ou qualquer outro) → mural geral
-  return { title: "📢 Avisos gerais", url: "/inicio" };
+  return { title: "📢 Avisos gerais", url: "/inicio?chat=avisos" };
 }
 
 /** Envia uma mensagem no canal. A RLS bloqueia quem não pode postar (→ erro). */
