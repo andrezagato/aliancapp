@@ -393,22 +393,40 @@ export function RundownGrid({
     const d = dragRef.current;
     if (!d) return;
     const ids = listRef.current.map((x) => x.id);
-    let over = ids.length - 1;
+    // `vaga` é ONDE ENTRA, não sobre quem passou: 0 = antes do primeiro, 1 = entre
+    // o 1º e o 2º, e assim por diante até `ids.length` = depois do último. O laço
+    // acha a primeira linha cujo meio está ABAIXO do dedo; se nenhuma está, o dedo
+    // passou de todas e a vaga é o fim.
+    //
+    // O padrão era `ids.length - 1`, que é a última LINHA, não a última VAGA —
+    // então arrastar pra depois do último bloco parava uma casa antes.
+    let vaga = ids.length;
     for (let i = 0; i < ids.length; i++) {
       const el = itemRefs.current.get(ids[i]);
       if (!el) continue;
       const r = el.getBoundingClientRect();
       if (e.clientY < r.top + r.height / 2) {
-        over = i;
+        vaga = i;
         break;
       }
     }
     const cur = listRef.current;
     const from = cur.findIndex((x) => x.id === d.id);
-    if (from !== -1 && over !== from) {
+    if (from === -1) return;
+    // ERRO DE ÍNDICE — este era o "pula duas casas".
+    //
+    // `vaga` descreve o array de ANTES. O splice de remoção acontece primeiro e
+    // desce em 1 todos os índices acima de `from`; inserir na `vaga` crua depois
+    // disso põe o bloco uma posição além. Traço com [A,B,C] e A na mão, dedo logo
+    // depois do meio de B: vaga=2, remove A -> [B,C], insere em 2 -> [B,C,A],
+    // quando o certo é [B,A,C]. Só acontecia PRA BAIXO — pra cima os índices não
+    // se deslocam —, e é essa assimetria que fazia o gesto parecer aleatório em
+    // vez de só sensível.
+    const alvo = vaga > from ? vaga - 1 : vaga;
+    if (alvo !== from) {
       const next = [...cur];
       const [moved] = next.splice(from, 1);
-      next.splice(over, 0, moved);
+      next.splice(alvo, 0, moved);
       setList(next);
     }
   }, []);
