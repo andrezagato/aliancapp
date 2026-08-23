@@ -193,7 +193,7 @@ export async function reenviarLinkDeAcesso(emailBruto: string): Promise<ActionRe
     return ok;
   }
 
-  const { data: convite } = await admin
+  const { data: convite, error: erroConvite } = await admin
     .from("invites")
     .select("id, email, full_name, system_role")
     .ilike("email", comoTexto(email))
@@ -201,6 +201,12 @@ export async function reenviarLinkDeAcesso(emailBruto: string): Promise<ActionRe
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
+  // Erro de query vira `fail`, não `ok`. `convite` nulo por 5xx/timeout fazia a
+  // tela pintar "Pronto, enviamos de novo" sem nada ter saído — o conserto
+  // desta função tinha blindado a instrução SEGUINTE e passado por cima desta.
+  // A frase é a genérica que a própria função já usa: não revela se existe
+  // alguém com esse e-mail, então o anti-oráculo continua de pé.
+  if (erroConvite) return fail("Não consegui reenviar agora. Tente de novo em alguns minutos.");
   if (!convite) return ok;
 
   const { data: renovado, error: erroRenovar } = await admin
@@ -905,16 +911,17 @@ export async function lembrarPendentes(eventId: string): Promise<ActionResult> {
       const em = lembreteEmail({ evento: titulo, quando, href: `${siteUrl()}/escalas/${eventId}` });
       // Envio em lote (um e-mail pra vários): aqui um `fail` não serve — a ação
       // é "lembrar todo mundo", e derrubá-la porque um endereço recusou seria
-      // pior. Mas o resultado deixa de sumir: o `sendEmail` já registra a falha
-      // no `failure_log`, e o `delivery_log` passa a dizer a verdade.
+      // pior. O resultado é lido (não some), mas NÃO se registra de novo: o
+      // `sendEmail` já grava a falha com `origem: "sendEmail"`. Registrar aqui
+      // também fazia UM lote falho virar DOIS grupos no digest, que agrupa por
+      // `kind·origem` — o vigia contando a mesma coisa duas vezes.
+      //
+      // (A frase antiga dizia que "o `delivery_log` passa a dizer a verdade".
+      // Não passa: `lembrarPendentes` nunca escreveu `delivery_log` — quem
+      // escreve é `src/lib/delivery.ts`. Veio errada da main; some agora
+      // porque eu empilhei um segundo bloco ao lado dela e virou duplicata.)
       const envioLote = await sendEmail({ to: emails, subject: em.subject, html: em.html, text: em.text });
-      if (!envioLote.ok) {
-        await registrarFalha({
-          kind: "email",
-          detail: `lembrete em lote não saiu: ${envioLote.motivo}`,
-          origem: "lembrarPendentes",
-        });
-      }
+      if (!envioLote.ok) console.error("[lembrete] lote não saiu:", envioLote.motivo);
     }
   } catch {
     /* best-effort — falha de e-mail não derruba o lembrete */
@@ -2415,12 +2422,19 @@ export async function criarConvite(input: CriarConviteInput): Promise<ActionResu
       );
       if (divergente) {
         const atual = papelAtual.get(divergente.teamId) === "leader" ? "líder" : "voluntário";
-        await registrarFalha({
-          kind: "convite_link",
-          detail: `papel divergente no reenvio (${atual} no convite)`,
-          subject: email,
-          origem: "criarConvite",
-        });
+        // SEM `registrarFalha` AQUI, e é deliberado. Recusar papel divergente
+        // NÃO é falha do sistema — é o app funcionando e dizendo não. O
+        // contrato do `failure-log` é "grave onde o sistema JÁ SABE que algo deu
+        // errado"; escolha do admin não é isso. Num app cujo relatório diário se
+        // chama "Falhas nas últimas 24h", encher aquele bloco de decisões
+        // corretas é como se ensina alguém a parar de lê-lo.
+        //
+        // Fora do `failure_log`, mas NÃO sem rastro: uma recusa que não deixa
+        // nem linha de log é indistinguível de nunca ter acontecido, e a
+        // pergunta "quantas vezes isso barrou alguém?" fica sem resposta. O
+        // console da Vercel é o lugar certo pra isso — é o que se lê quando se
+        // investiga, e não o que acorda alguém às 7h da manhã.
+        console.error(`[convite] papel divergente barrou reenvio de ${email} (${atual} no convite)`);
         // A SAÍDA NÃO DESTRUTIVA VEM PRIMEIRO. Deixar as equipes desmarcadas cai
         // no ramo de reenvio puro logo abaixo — e é o que o admin quase sempre
         // quer, já que o formulário nasce vazio e ele remarca por reflexo.
@@ -2959,11 +2973,14 @@ export async function reconvidar(alvo: { tipo: "convite" | "pedido"; id: string 
 
   // Daqui pra baixo é só o ramo `pedido`: alguém aprovado que ficou SEM convite
   // vivo (o caso do Tiago). Aqui não há o que renovar — há o que criar.
-  const { data: jr } = await supabase
+  const { data: jr, error: erroJr } = await supabase
     .from("join_requests")
     .select("id, full_name, email, desired_team_id")
     .eq("id", alvo.id)
     .maybeSingle();
+  // A terceira das três leituras iguais. O commit anterior disse "as duas" e
+  // eram três — o revisor contou.
+  if (erroJr) return fail("Não consegui ler essa solicitação. Tente de novo.");
   if (!jr) return fail("Solicitação não encontrada.");
   if (!jr.email) return fail("Essa solicitação não tem email — não dá pra casar no login.");
   if (!isAdmin && !(jr.desired_team_id && canManageTeam(session, jr.desired_team_id))) {
