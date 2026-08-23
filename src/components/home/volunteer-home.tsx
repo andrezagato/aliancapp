@@ -87,19 +87,45 @@ export function VolunteerHome({
     });
   };
 
+  // CHECK-IN EM VOO — a trava que faltava, e ela precisa ser PRÓPRIA.
+  //
+  // O botão não tinha estado de espera nenhum: `const [, startTransition]`
+  // descarta a flag `pending`, e entre o toque e qualquer mudança na tela roda o
+  // `getCoords` (timeout de 6s, alta precisão, mais o alerta nativo de permissão
+  // do iOS na primeira vez) e só então o `fazerCheckin`. Nesse intervalo a tela
+  // não mudava NADA e o botão continuava vivo — então a pessoa tocava de novo, no
+  // mesmo pixel. O segundo toque disparava um segundo pedido de GPS e um segundo
+  // `fazerCheckin`; o INSERT duplicado morre no `unique` de `checkins`, mas o
+  // `logActivity` grava duas vezes e o `notificarConquistas` roda duas vezes em
+  // paralelo (dois pushes, duas telas de conquista). E no ramo "fora do local",
+  // o segundo toque empilhava um `window.confirm` em cima do primeiro.
+  //
+  // Por que NÃO reusar a flag do `useTransition`: ela é uma só pra todas as
+  // transições deste componente — confirmar escala, recusar, carregar substitutos.
+  // Usá-la aqui desabilitaria o check-in enquanto qualquer outra coisa estivesse
+  // no ar, o que é uma trava mais larga que o problema.
+  const [checkinEmVoo, setCheckinEmVoo] = useState<string | null>(null);
+
   const doCheckin = (a: MyAssignment, force = false) => {
+    setCheckinEmVoo(a.assignmentId);
     startTransition(async () => {
       const coords = await getCoords();
       const r = await fazerCheckin(a.assignmentId, a.teamId, a.eventId, coords?.lat ?? null, coords?.lng ?? null, force);
       if (r.ok) {
         patch(a.assignmentId, { checkedIn: true });
+        setCheckinEmVoo(null);
         showToast(warm("checkin"));
         if (r.unlocked && r.unlocked.length > 0) celebrateNew(r.unlocked);
       } else if (r.code === "outside") {
         if (typeof window !== "undefined" && window.confirm("Você não está no local do evento. Fazer check-in mesmo assim?")) {
+          // Segue em voo de propósito: a chamada recursiva reassume a trava, e
+          // soltar aqui reabriria o botão exatamente no intervalo do segundo GPS.
           doCheckin(a, true);
+        } else {
+          setCheckinEmVoo(null);
         }
       } else {
+        setCheckinEmVoo(null);
         showToast(r.error);
       }
     });
@@ -188,7 +214,7 @@ export function VolunteerHome({
           {nothing ? <EmptyCard /> : null}
           {today ? (
             <div className="animate-fade-up" style={{ animationDelay: "50ms" }}>
-              <TodayCard a={today} onConfirm={() => confirm(today)} onCancel={() => openRespond(today)} onCheckin={() => checkin(today)} />
+              <TodayCard a={today} onConfirm={() => confirm(today)} onCancel={() => openRespond(today)} onCheckin={() => checkin(today)} checkinEmVoo={checkinEmVoo === today.assignmentId} />
             </div>
           ) : null}
           {hero ? (
