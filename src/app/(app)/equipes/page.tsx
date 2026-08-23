@@ -48,7 +48,12 @@ export default async function EquipesPage() {
   const canApprove = isAdmin || isLeader;
 
   const [teams, members, profiles, resolvedInterests] = await Promise.all([
-    getManageableTeams(session),
+    // Alargado pra INCLUIR as equipes em que a pessoa só serve. Quem lidera o Som
+    // e é voluntário no Louvor cai neste ramo (o de líder) e não no ramo do
+    // voluntário lá em cima — e sem isto o Louvor sumia da tela dele em silêncio.
+    // Só pra EXIBIR: quem decide permissão continua sendo `teamsQueLidera`, logo
+    // abaixo. Ver a nota em `getManageableTeams`.
+    getManageableTeams(session, { incluirOndeSoParticipa: true }),
     listMembers(),
     listChurchProfiles(),
     getResolvedInterests(session),
@@ -64,9 +69,19 @@ export default async function EquipesPage() {
     isAdmin ? listTeams() : Promise.resolve([]),
   ]);
   const teamOpts: TeamOpt[] = allTeams.map((t) => ({ id: t.id, name: t.name, color: t.color }));
+  // A LISTA QUE EXIBE E A LISTA QUE AUTORIZA SÃO DUAS, E ISSO É O PONTO.
+  // `teams` agora traz também equipe em que a pessoa só serve — ótimo pro
+  // TeamManager, veneno pra aprovação: derivar `approvalTeamOpts` dela daria ao
+  // líder do Som a opção de aprovar alguém no Louvor, e a action recusaria
+  // depois ("líder só o que pediu a equipe dele"). Botão que a RLS recusa é o
+  // defeito das migrations 0029/0049 — aqui ele é evitado na origem.
+  const lidera = new Set(
+    session.profile.teams.filter((t) => t.role === "leader").map((t) => t.id),
+  );
+  const teamsQueLidera = isAdmin ? teams : teams.filter((t) => lidera.has(t.id));
   const approvalTeamOpts: TeamOpt[] = isAdmin
     ? teamOpts
-    : teams.map((t) => ({ id: t.id, name: t.name, color: t.color }));
+    : teamsQueLidera.map((t) => ({ id: t.id, name: t.name, color: t.color }));
   const teamById = new Map(approvalTeamOpts.map((t) => [t.id, t]));
   // A LINHA MORTA VOLTA, ROTULADA. Eu tinha escondido convite pendente de quem
   // já é membro ("fila com linha morta dentro deixa de ser lida") — e esconder

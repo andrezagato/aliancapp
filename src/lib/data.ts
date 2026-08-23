@@ -137,17 +137,43 @@ export type TeamMember = {
 
 export type ManageableTeam = TeamWithPositions & { members: TeamMember[] };
 
-/** Equipes que o usuário pode gerenciar (admin: todas; líder: as que lidera) + membros. */
-export async function getManageableTeams(session: Session): Promise<ManageableTeam[]> {
+/** Equipes que o usuário pode gerenciar (admin: todas; líder: as que lidera) + membros.
+ *
+ * `incluirOndeSoParticipa` alarga a lista para as equipes de que a pessoa
+ * PARTICIPA sem liderar. Nasceu de um caso real: quem lidera o Som e serve como
+ * voluntário no Louvor via a página de Equipes pelo ramo de LÍDER, e esse ramo
+ * filtra `role === "leader"` — então o Louvor sumia da tela dele, calado, sem
+ * nem um estado vazio dizendo que ele está numa segunda equipe. A causa é que
+ * `session.role` é global e participação é POR EQUIPE: escolher um ramo pelo
+ * papel global faz quem é líder em algum lugar perder a visão de voluntário em
+ * todos os outros.
+ *
+ * O padrão é `false` de propósito, e isso não é timidez: `/balanco` também chama
+ * esta função, e lá a lista responde "que equipes eu gerencio". Alargar por
+ * padrão mudaria quem gerencia o quê num lugar que ninguém ia olhar.
+ *
+ * ATENÇÃO A QUEM FOR USAR: o resultado com esta opção ligada NÃO é uma lista de
+ * permissão — ele mistura equipes que a pessoa lidera com equipes em que ela só
+ * serve. Serve pra EXIBIR. Qualquer decisão de "pode aprovar / pode escalar /
+ * pode editar" tem que continuar saindo do filtro de `role === "leader"`, senão
+ * a tela oferece um botão que a RLS recusa — que é o defeito que este repo já
+ * pagou duas vezes (migrations 0029 e 0049).
+ */
+export async function getManageableTeams(
+  session: Session,
+  opts: { incluirOndeSoParticipa?: boolean } = {},
+): Promise<ManageableTeam[]> {
   const withPos = await listTeamsWithPositions();
   const manageable =
     session.role === "admin"
       ? withPos
       : (() => {
-          const lead = new Set(
-            session.profile.teams.filter((t) => t.role === "leader").map((t) => t.id),
+          const meus = new Set(
+            session.profile.teams
+              .filter((t) => opts.incluirOndeSoParticipa || t.role === "leader")
+              .map((t) => t.id),
           );
-          return withPos.filter((t) => lead.has(t.id));
+          return withPos.filter((t) => meus.has(t.id));
         })();
 
   const teamIds = manageable.map((t) => t.id);
