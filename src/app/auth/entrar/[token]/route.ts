@@ -89,7 +89,7 @@ export async function GET(
   }
 
   const { data: convite } = await admin
-    .from("invites").select("email, status, expires_at, system_role").eq("token", token).maybeSingle();
+    .from("invites").select("email, status, expires_at, system_role, church_id").eq("token", token).maybeSingle();
 
   if (!convite) return recusa("invalido", "nenhum convite com este token");
   if (convite.status === "cancelado" || convite.status === "expirado") {
@@ -139,6 +139,12 @@ export async function GET(
   const { data: adminsPendentes, error: erroAdmins } = await admin
     .from("invites")
     .select("email")
+    // Mesma igreja do convite que está sendo resgatado. O cliente aqui é
+    // SERVICE-ROLE, então sem isto ele enxerga convite de admin de qualquer
+    // igreja — e os dois guardas gêmeos escritos nesta branch (`actions.ts`) já
+    // são escopados. Falha fechado de qualquer jeito, mas com uma segunda
+    // igreja isto bloquearia gente legítima. Latente hoje, bomba amanhã.
+    .eq("church_id", convite.church_id)
     .eq("status", "pendente")
     .eq("system_role", "admin");
 

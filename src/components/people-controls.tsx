@@ -508,6 +508,12 @@ export function PendingProfileActions({
 export function CancelInviteButton({ inviteId }: { inviteId: string }) {
   const router = useRouter();
   const [pending, start] = useTransition();
+  // O `r.error` era descartado, então as três frases de falha do
+  // `cancelarConvite` não existiam pra ninguém: o admin clicava, nada
+  // acontecia, nada aparecia, a linha ficava lá. Os dois vizinhos deste mesmo
+  // arquivo ganharam toast nesta branch; este ficou pra trás justamente quando
+  // a action dele ganhou as guardas novas.
+  const { showToast } = useToast();
   return (
     <Button
       size="sm"
@@ -517,6 +523,7 @@ export function CancelInviteButton({ inviteId }: { inviteId: string }) {
         start(async () => {
           const r = await cancelarConvite(inviteId);
           if (r.ok) router.refresh();
+          else showToast(r.error);
         })
       }
     >

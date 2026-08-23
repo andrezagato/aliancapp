@@ -39,13 +39,23 @@ export const dynamic = "force-dynamic";
  * consulta — deixar passar string arbitrária é entregar esse controle a quem
  * monta o link.
  */
-// SÓ os dois que os nossos templates emitem. Aceitar `recovery`/`invite`/
-// `email_change` transformaria esta rota num resgatador genérico de OTP: qualquer
-// token de um fluxo do GoTrue que o app NUNCA inicia (um "Invite user" do painel,
-// uma confirmação de troca de e-mail) viraria sessão — e `email_change` ainda
-// MUTA a conta como efeito colateral de algo que a rota chama de "login".
-// Alargue quando um template novo precisar, não antes.
-const TIPOS: readonly EmailOtpType[] = ["magiclink", "signup"];
+// OS TRÊS QUE UM TEMPLATE DE LOGIN POR E-MAIL PODE EMITIR — e nenhum a mais.
+//
+// Ficam DE FORA de propósito: `recovery` (o `generateLink` da rota de convite
+// grava em `recovery_token`, então aceitá-lo aqui daria um segundo caminho pra
+// mesma credencial), `invite` (um "Invite user" do painel viraria sessão sem
+// passar por convite nenhum) e `email_change` — este último MUTA a conta,
+// confirmando a troca de endereço, como efeito colateral de algo que a rota
+// chama de "login".
+//
+// `email` está aqui porque é o `type` do template PADRÃO do Supabase, que a
+// documentação usa no exemplo. Os nossos dois emitem `magiclink` e `signup`
+// (medido: um e-mail real de 23/08 chegou com `type=signup`), mas os templates
+// que valem moram no painel, não no repo — e um `type` fora da lista não
+// degrada: ele MATA o login por e-mail de todo mundo. Cobrir a terceira forma
+// plausível custa nada e tira o risco de uma leitura que ninguém pode fazer
+// daqui.
+const TIPOS: readonly EmailOtpType[] = ["magiclink", "signup", "email"];
 
 /**
  * `next` volta a ser um caminho DESTE app, nunca um destino livre: sem isto,

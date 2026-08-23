@@ -2395,6 +2395,43 @@ export async function criarConvite(input: CriarConviteInput): Promise<ActionResu
   // o link ganhando prazo (7 dias), recusar aqui deixaria o admin sem nenhuma
   // forma de renovar — só cancelar e recriar, que perde as equipes já marcadas.
   if (existing) {
+    // A CHECAGEM DE PAPEL VEM ANTES DO UPDATE, e a ordem importa: a recusa
+    // abaixo é `fail`, e se o `expires_at` já tivesse sido renovado, um Convidar
+    // RECUSADO estenderia o convite por mais 7 dias em silêncio — e isso apaga
+    // a pessoa da lista de "Travados" (que é `expires_at > now`) e do contador
+    // da home, sem nenhum e-mail ter saído, numa ação que a tela reportou como
+    // falha. Aviso sumindo num caminho que disse "não consegui" é exatamente a
+    // classe que esta branch existe pra matar.
+    const equipesPedidas = (input.teams ?? []).filter((t) => t.teamId);
+    if (equipesPedidas.length > 0) {
+      const { data: equipesAtuais, error: erroLerTimes } = await supabase
+        .from("invite_teams")
+        .select("team_id, role")
+        .eq("invite_id", existing.id);
+      if (erroLerTimes) return fail("Não consegui conferir as equipes desse convite. Tente de novo.");
+      const papelAtual = new Map((equipesAtuais ?? []).map((t) => [t.team_id, t.role]));
+      const divergente = equipesPedidas.find(
+        (t) => papelAtual.has(t.teamId) && papelAtual.get(t.teamId) !== t.role,
+      );
+      if (divergente) {
+        const atual = papelAtual.get(divergente.teamId) === "leader" ? "líder" : "voluntário";
+        await registrarFalha({
+          kind: "convite_link",
+          detail: `papel divergente no reenvio (${atual} no convite)`,
+          subject: email,
+          origem: "criarConvite",
+        });
+        // A SAÍDA NÃO DESTRUTIVA VEM PRIMEIRO. Deixar as equipes desmarcadas cai
+        // no ramo de reenvio puro logo abaixo — e é o que o admin quase sempre
+        // quer, já que o formulário nasce vazio e ele remarca por reflexo.
+        // Mandar cancelar de saída é caro: cancelar reabre o pedido, e aí a
+        // pessoa aparece duas vezes em "Entrando na igreja".
+        return fail(
+          `Esse convite já marca essa equipe como ${atual}. Pra só reenviar o link, deixe as equipes desmarcadas. Pra mudar o papel, cancele o convite e crie de novo.`,
+        );
+      }
+    }
+
     // O erro ia pro lixo na desestruturação, e o `return ok` lá embaixo dizia
     // que deu certo mesmo sem ter renovado nem enviado. E este é justamente o
     // caminho pra onde TRÊS mensagens novas mandam a pessoa ("use Convidar com
@@ -2422,36 +2459,12 @@ export async function criarConvite(input: CriarConviteInput): Promise<ActionResu
       // equipe" — descartava as equipes escolhidas e devolvia tela verde. E a
       // mensagem de erro do irmão manda "ajuste em Equipes", que não existe:
       // não há tela que edite as equipes de um convite pendente.
-      const equipesNovas = (input.teams ?? []).filter((t) => t.teamId);
-      if (equipesNovas.length > 0) {
-        // PAPEL DIVERGENTE RECUSA, não engole — mesma regra que o `system_role`
-        // logo acima já aplica ao convite inteiro.
-        //
-        // O formulário de Convidar nasce VAZIO mas tem o botão Líder/Voluntário.
-        // Então "convidar de novo marcando Louvor · Líder" num convite que já
-        // tem Louvor · Voluntário é intenção clara de PROMOVER — e o
-        // `ignoreDuplicates` abaixo a descartaria com tela verde. Trocar um
-        // silêncio (rebaixar) por outro (não promover) não é conserto.
-        const { data: equipesAtuais, error: erroLerTimes } = await supabase
-          .from("invite_teams")
-          .select("team_id, role")
-          .eq("invite_id", existing.id);
-        if (erroLerTimes) return fail("Não consegui conferir as equipes desse convite. Tente de novo.");
-        const papelAtual = new Map((equipesAtuais ?? []).map((t) => [t.team_id, t.role]));
-        const divergente = equipesNovas.find(
-          (t) => papelAtual.has(t.teamId) && papelAtual.get(t.teamId) !== t.role,
-        );
-        if (divergente) {
-          const atual = papelAtual.get(divergente.teamId) === "leader" ? "líder" : "voluntário";
-          return fail(
-            `Esse convite já marca essa equipe como ${atual}. Cancele o convite e crie de novo pra mudar o papel.`,
-          );
-        }
-
-        // `ignoreDuplicates` pro resto: as equipes iguais são no-op, e as novas
-        // entram. Sem ele, o upsert reescreveria `role` das que já estavam.
+      if (equipesPedidas.length > 0) {
+        // Papel divergente já foi recusado lá em cima, antes do update. Aqui só
+        // entram equipes novas ou idênticas — `ignoreDuplicates` torna as
+        // idênticas no-op em vez de reescrever `role`.
         const { error: erroTimesR } = await supabase.from("invite_teams").upsert(
-          equipesNovas.map((t) => ({ invite_id: existing.id, team_id: t.teamId, role: t.role })),
+          equipesPedidas.map((t) => ({ invite_id: existing.id, team_id: t.teamId, role: t.role })),
           { onConflict: "invite_id,team_id", ignoreDuplicates: true },
         );
         if (erroTimesR) {
@@ -2474,6 +2487,8 @@ export async function criarConvite(input: CriarConviteInput): Promise<ActionResu
       });
       const envio = await sendEmail({ to: email, subject: reenvio.subject, html: reenvio.html, text: reenvio.text });
       revalidatePath("/equipes");
+      // `/inicio` também: renovar `expires_at` muda quem conta como "Travado".
+      revalidatePath("/inicio");
       // Ver a nota nos irmãos abaixo: o e-mail é o entregável.
       if (!envio.ok) return fail("O convite foi renovado, mas o e-mail não saiu. Tente de novo.");
       return ok;
@@ -2658,11 +2673,15 @@ export async function aprovarJoinRequest(joinId: string, teams: InviteTeamInput[
   const supabase = await createClient();
   const isAdmin = session.role === "admin";
 
-  const { data: jr } = await supabase
+  const { data: jr, error: erroJr } = await supabase
     .from("join_requests")
     .select("id, full_name, email, desired_team_id")
     .eq("id", joinId)
     .maybeSingle();
+  // Sem separar isto, erro de query virava "Solicitação não encontrada" — falha
+  // fechado, mas com o motivo errado, que é o que torna um problema impossível
+  // de diagnosticar pelo relato.
+  if (erroJr) return fail("Não consegui ler essa solicitação. Tente de novo.");
   if (!jr) return fail("Solicitação não encontrada.");
   if (session.role !== "admin" && !(jr.desired_team_id && canManageTeam(session, jr.desired_team_id))) {
     return fail("Você só pode aprovar pedidos da sua equipe.");
@@ -3155,11 +3174,12 @@ export async function recusarJoinRequest(joinId: string): Promise<ActionResult> 
   const supabase = await createClient();
   // Uma leitura só, servindo a checagem de permissão E o `subject` do registro
   // de falha lá embaixo — o propósito da 0055 é dizer de QUEM é a falha.
-  const { data: jr } = await supabase
+  const { data: jr, error: erroJr } = await supabase
     .from("join_requests")
     .select("desired_team_id, email")
     .eq("id", joinId)
     .maybeSingle();
+  if (erroJr) return fail("Não consegui ler essa solicitação. Tente de novo.");
   if (session.role !== "admin") {
     if (!jr?.desired_team_id || !canManageTeam(session, jr.desired_team_id)) {
       return fail("Você só pode recusar pedidos da sua equipe.");
