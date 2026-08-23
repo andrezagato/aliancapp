@@ -200,7 +200,24 @@ export function VolunteerHome({
 
   const pending = sorted.filter((a) => a.status === "convidado");
   const rest = sorted.filter((a) => a.status !== "convidado");
-  const today = rest.find((a) => churchDateISO(a.startsAt) === todaySP) || null;
+  // QUAL ESCALA DE HOJE O CARD MOSTRA — e por que não é simplesmente a primeira.
+  //
+  // Era `rest.find(...)`, ou seja a primeira do dia em ordem cronológica. Quem
+  // serve de manhã E de noite (acontece toda semana na Mídias) via o card preso
+  // na escala da MANHÃ o dia inteiro — e o único botão de check-in da tela
+  // pertencia a ela. À noite, a pessoa tocava nele achando que marcava presença
+  // no culto da noite e gravava presença no da manhã, que já tinha acabado.
+  //
+  // Agora o card mostra a primeira de hoje AINDA NÃO marcada: o botão sempre
+  // pertence a um compromisso que a pessoa ainda tem pela frente. Marcou a da
+  // manhã, o card passa pra da noite, que é de fato o próximo compromisso dela
+  // no dia.
+  //
+  // E se todas já estiverem marcadas, mostra a ÚLTIMA em vez de nenhuma: o card
+  // some seria "nada some da tela" ao contrário, e o "Presente" é justamente a
+  // confirmação que a pessoa quer continuar vendo.
+  const deHoje = rest.filter((a) => churchDateISO(a.startsAt) === todaySP);
+  const today = deHoje.find((a) => !a.checkedIn) || deHoje[deHoje.length - 1] || null;
   const upcoming = rest.filter((a) => a !== today);
   const hero = upcoming[0] || null;
   const list = upcoming.slice(1);
