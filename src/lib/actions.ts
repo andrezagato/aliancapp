@@ -911,12 +911,15 @@ export async function lembrarPendentes(eventId: string): Promise<ActionResult> {
       const em = lembreteEmail({ evento: titulo, quando, href: `${siteUrl()}/escalas/${eventId}` });
       // Envio em lote (um e-mail pra vários): aqui um `fail` não serve — a ação
       // é "lembrar todo mundo", e derrubá-la porque um endereço recusou seria
-      // pior. Mas o resultado deixa de sumir: o `sendEmail` já registra a falha
-      // no `failure_log`, e o `delivery_log` passa a dizer a verdade.
-      // O resultado é lido (não some), mas NÃO registra de novo: o `sendEmail`
-      // já grava a falha com `origem: "sendEmail"`. Registrar aqui também fazia
-      // UM lote falho virar DOIS grupos no digest, que agrupa por `kind·origem`
-      // — o vigia contando a mesma coisa duas vezes.
+      // pior. O resultado é lido (não some), mas NÃO se registra de novo: o
+      // `sendEmail` já grava a falha com `origem: "sendEmail"`. Registrar aqui
+      // também fazia UM lote falho virar DOIS grupos no digest, que agrupa por
+      // `kind·origem` — o vigia contando a mesma coisa duas vezes.
+      //
+      // (A frase antiga dizia que "o `delivery_log` passa a dizer a verdade".
+      // Não passa: `lembrarPendentes` nunca escreveu `delivery_log` — quem
+      // escreve é `src/lib/delivery.ts`. Veio errada da main; some agora
+      // porque eu empilhei um segundo bloco ao lado dela e virou duplicata.)
       const envioLote = await sendEmail({ to: emails, subject: em.subject, html: em.html, text: em.text });
       if (!envioLote.ok) console.error("[lembrete] lote não saiu:", envioLote.motivo);
     }
@@ -2426,6 +2429,12 @@ export async function criarConvite(input: CriarConviteInput): Promise<ActionResu
         // chama "Falhas nas últimas 24h", encher aquele bloco de decisões
         // corretas é como se ensina alguém a parar de lê-lo.
         //
+        // Fora do `failure_log`, mas NÃO sem rastro: uma recusa que não deixa
+        // nem linha de log é indistinguível de nunca ter acontecido, e a
+        // pergunta "quantas vezes isso barrou alguém?" fica sem resposta. O
+        // console da Vercel é o lugar certo pra isso — é o que se lê quando se
+        // investiga, e não o que acorda alguém às 7h da manhã.
+        console.error(`[convite] papel divergente barrou reenvio de ${email} (${atual} no convite)`);
         // A SAÍDA NÃO DESTRUTIVA VEM PRIMEIRO. Deixar as equipes desmarcadas cai
         // no ramo de reenvio puro logo abaixo — e é o que o admin quase sempre
         // quer, já que o formulário nasce vazio e ele remarca por reflexo.
