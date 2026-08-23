@@ -25,6 +25,7 @@ import { warm } from "@/lib/toasts";
 import { markSeen } from "@/lib/achievements-seen";
 import type { UnlockedBadge } from "@/lib/achievements";
 import { TodayCard } from "./today-card";
+import { CultoAoVivo } from "./culto-ao-vivo";
 import { NextScheduleHero } from "./next-schedule-hero";
 import { SwipeCard } from "./swipe-card";
 import { PendingInviteBanner } from "./pending-invite-banner";
@@ -38,6 +39,7 @@ export function VolunteerHome({
   userName,
   unread = 0,
   assignments,
+  aoVivo,
   children,
 }: {
   title: string;
@@ -45,6 +47,14 @@ export function VolunteerHome({
   userName: string;
   unread?: number;
   assignments: MyAssignment[];
+  /**
+   * O culto que está acontecendo agora. Chega como DADO, não como elemento
+   * pronto, e isso é o ponto: só aqui dentro dá pra saber se ele já está na tela.
+   * O corte today/herói/lista acontece no cliente (logo abaixo), então o servidor
+   * não tem como deduplicar — e um slot de elemento obrigaria a mover aquela
+   * derivação inteira pra lá.
+   */
+  aoVivo?: { eventId: string; title: string; startedAt: string } | null;
   children?: React.ReactNode;
 }) {
   const { showToast } = useToast();
@@ -196,6 +206,20 @@ export function VolunteerHome({
   const list = upcoming.slice(1);
   const nothing = pending.length === 0 && !today && !hero && list.length === 0;
 
+  // O CULTO AO VIVO SÓ SOBE SE ELE JÁ NÃO ESTIVER NA TELA.
+  //
+  // A comparação é contra os TRÊS lugares onde uma escala aparece, não só contra
+  // o `today`. Quem serve de manhã e de noite tem `today` = a escala da MANHÃ
+  // (`rest.find` pega a primeira do dia) enquanto o culto ao vivo é o da NOITE —
+  // que está no `hero`. Conferindo só o `today`, o mesmo culto apareceria duas
+  // vezes, um card abaixo do outro.
+  const jaNaTela =
+    !!aoVivo &&
+    (today?.eventId === aoVivo.eventId ||
+      hero?.eventId === aoVivo.eventId ||
+      list.some((a) => a.eventId === aoVivo.eventId));
+  const mostrarAoVivo = aoVivo && !jaNaTela;
+
   // abre o modal da escala em cima da Home — antes isso era router.push e
   // mudava de aba
   const open = (id: string) =>
@@ -210,6 +234,17 @@ export function VolunteerHome({
       <PullToRefresh>
         <div className="space-y-3">
           <PendingInviteBanner pending={pending} onRespond={openRespond} />
+
+          {/* AGORA -> PRÓXIMA -> A SEGUINTE. O card do culto ao vivo era o
+              primeiro dos `children`, e os children são renderizados DEPOIS do
+              herói e da lista — então o culto que estava acontecendo nascia em
+              sexto lugar na página, abaixo de escalas de semanas à frente.
+              Nas Home de líder e admin ele já era o primeiro filho da HomeShell;
+              a queixa era exclusiva do voluntário, porque só esta tela desenha
+              conteúdo próprio antes dos children. */}
+          {mostrarAoVivo ? (
+            <CultoAoVivo eventId={aoVivo.eventId} title={aoVivo.title} startedAt={aoVivo.startedAt} />
+          ) : null}
 
           {nothing ? <EmptyCard /> : null}
           {today ? (
