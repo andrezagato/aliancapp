@@ -2424,12 +2424,32 @@ export async function criarConvite(input: CriarConviteInput): Promise<ActionResu
       // não há tela que edite as equipes de um convite pendente.
       const equipesNovas = (input.teams ?? []).filter((t) => t.teamId);
       if (equipesNovas.length > 0) {
-        // `ignoreDuplicates` porque o formulário de Convidar NASCE VAZIO — ele
-        // não pré-carrega as equipes do convite existente, e marcar uma equipe
-        // defaulta pra `volunteer`. Sem isto, o admin que reconvida alguém pra
-        // ACRESCENTAR uma equipe rebaixaria de `leader` pra `volunteer` a que já
-        // estava marcada, com tela verde. Só ADICIONA o que falta; mudar papel
-        // de convite pendente continua sendo cancelar e refazer.
+        // PAPEL DIVERGENTE RECUSA, não engole — mesma regra que o `system_role`
+        // logo acima já aplica ao convite inteiro.
+        //
+        // O formulário de Convidar nasce VAZIO mas tem o botão Líder/Voluntário.
+        // Então "convidar de novo marcando Louvor · Líder" num convite que já
+        // tem Louvor · Voluntário é intenção clara de PROMOVER — e o
+        // `ignoreDuplicates` abaixo a descartaria com tela verde. Trocar um
+        // silêncio (rebaixar) por outro (não promover) não é conserto.
+        const { data: equipesAtuais, error: erroLerTimes } = await supabase
+          .from("invite_teams")
+          .select("team_id, role")
+          .eq("invite_id", existing.id);
+        if (erroLerTimes) return fail("Não consegui conferir as equipes desse convite. Tente de novo.");
+        const papelAtual = new Map((equipesAtuais ?? []).map((t) => [t.team_id, t.role]));
+        const divergente = equipesNovas.find(
+          (t) => papelAtual.has(t.teamId) && papelAtual.get(t.teamId) !== t.role,
+        );
+        if (divergente) {
+          const atual = papelAtual.get(divergente.teamId) === "leader" ? "líder" : "voluntário";
+          return fail(
+            `Esse convite já marca essa equipe como ${atual}. Cancele o convite e crie de novo pra mudar o papel.`,
+          );
+        }
+
+        // `ignoreDuplicates` pro resto: as equipes iguais são no-op, e as novas
+        // entram. Sem ele, o upsert reescreveria `role` das que já estavam.
         const { error: erroTimesR } = await supabase.from("invite_teams").upsert(
           equipesNovas.map((t) => ({ invite_id: existing.id, team_id: t.teamId, role: t.role })),
           { onConflict: "invite_id,team_id", ignoreDuplicates: true },
@@ -2458,8 +2478,6 @@ export async function criarConvite(input: CriarConviteInput): Promise<ActionResu
       if (!envio.ok) return fail("O convite foi renovado, mas o e-mail não saiu. Tente de novo.");
       return ok;
     }
-    revalidatePath("/equipes");
-    return ok;
   }
 
   const { data: inv, error } = await supabase
@@ -2521,6 +2539,9 @@ export async function criarConvite(input: CriarConviteInput): Promise<ActionResu
   // saber, então não dá mais pra fingir que não.
   // Não existe botão "Reenviar": a linha do convite só tem Cancelar. O que
   // reenvia é o próprio Convidar, no ramo de reaproveitamento.
+  // `/inicio` também: a home conta convites e pedidos pendentes (`getAdminHome`),
+  // então criar um convite sem revalidar deixa o contador velho.
+  revalidatePath("/inicio");
   if (!envioConvite.ok) return fail("O convite foi criado, mas o e-mail não saiu. Use Convidar com o mesmo e-mail pra reenviar.");
   return ok;
 }
@@ -2576,12 +2597,33 @@ export async function cancelarConvite(inviteId: string): Promise<ActionResult> {
   }
 
   // Só reabre se a pessoa NÃO entrou. Perfil ativo = o pedido já cumpriu o papel.
-  const { data: ativo } = await supabase
+  //
+  // FALHA FECHADO — e esta era a única leitura desta função sem conferência.
+  // Com o erro descartado, `data` vinha `null`, `!ativo` dava true, e o ramo
+  // reabriria o pedido de um MEMBRO ATIVO: ele voltaria pra "Entrando na
+  // igreja", e Aprovar ali mandaria e-mail de convite pra quem já está dentro.
+  // Pior, o dado de hoje diz que é exatamente esse o primeiro caso que este
+  // código vai encontrar: os 8 pedidos `aprovado` do banco são todos de perfis
+  // ATIVOS, e o único convite pendente é de alguém que já entrou.
+  const { data: ativo, error: erroAtivo } = await supabase
     .from("profiles")
     .select("id")
     .eq("status", "ativo")
     .ilike("email", comoTexto(inv.email))
     .limit(1);
+  if (erroAtivo) {
+    await registrarFalha({
+      kind: "convite_link",
+      detail: `conferir perfil ativo ao cancelar: ${erroAtivo.message}`,
+      subject: inv.email,
+      origem: "cancelarConvite",
+    });
+    // Não saber não é licença pra reabrir. O convite JÁ foi cancelado, que é o
+    // que o botão promete; o pedido fica como está e o admin resolve na fila.
+    revalidatePath("/equipes");
+    revalidatePath("/inicio");
+    return ok;
+  }
 
   if (!ativo || ativo.length === 0) {
     const { error: erroReabrir } = await supabase

@@ -170,6 +170,10 @@ export default function EntrarPage() {
    * que nunca tinha saído.
    */
   async function reenviar() {
+    // Sem isto, um reenvio que falhou e depois deu certo pinta a caixa verde E
+    // a vermelha juntas — contradição na tela que este conserto veio tornar
+    // honesta. `continuar()` e `voltarAoInicio()` já limpavam; só este não.
+    setError(null);
     setLoading("reenvio");
     const r = await reenviarLinkDeAcesso(email.trim());
     setLoading(null);
