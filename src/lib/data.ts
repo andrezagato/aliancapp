@@ -416,12 +416,32 @@ export async function getCultoAoVivo(
 ): Promise<{ eventId: string; title: string; startedAt: string } | null> {
   if (!session.profile.church_id) return null;
   const supabase = await createClient();
+  // JANELA DE 12h — sem ela este card não tinha como acabar.
+  //
+  // A consulta pergunta "tem roteiro iniciado e não encerrado?", e essa condição
+  // é PERMANENTE quando alguém esquece de encerrar. A vinte linhas daqui,
+  // `listLiveRundownEvents` existe declaradamente por causa desse esquecimento
+  // ("o culto começou, o líder esqueceu de encerrar") — as mesmas linhas que ela
+  // pesca satisfaziam esta aqui pra sempre.
+  //
+  // O sintoma era um card "Culto ao vivo" na Home da igreja inteira, com o
+  // contador marcando 30, 50, 100 horas, e um link que leva ao roteiro do
+  // domingo passado. É a mesma família do incidente de 09/ago, em que a equipe
+  // rodou o culto no roteiro do domingo seguinte.
+  //
+  // 12h e não 3h: um culto longo com ceia e ministração passa fácil de 4h, e
+  // errar pra menos apagaria o card COM O CULTO NO AR, que é pior que deixá-lo
+  // meia manhã a mais. O filtro é sobre `rundown_started_at` (quando o roteiro
+  // começou de fato), não sobre `starts_at` — o que importa é há quanto tempo
+  // ele está rolando, não a que horas estava marcado.
+  const limite = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString();
   const { data } = await supabase
     .from("events")
     .select("id, title, rundown_started_at")
     .eq("church_id", session.profile.church_id)
     .is("archived_at", null)
     .not("rundown_started_at", "is", null)
+    .gte("rundown_started_at", limite)
     .is("rundown_ended_at", null)
     .order("rundown_started_at", { ascending: false })
     .limit(1)
