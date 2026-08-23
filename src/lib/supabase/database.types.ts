@@ -2224,6 +2224,16 @@ export type Database = {
         }
         Returns: undefined
       }
+      // migration 0057 — renovar convite (escopo por igreja; devolve a linha
+      // inteira pra action não precisar de uma segunda leitura)
+      renovar_convite: {
+        Args: { p_invite: string }
+        Returns: {
+          token: string
+          email: string
+          full_name: string | null
+        }[]
+      }
       // migration 0054 — líder vê o culto inteiro (outras equipes, em modo leitura)
       escala_do_culto: {
         Args: { p_event: string }

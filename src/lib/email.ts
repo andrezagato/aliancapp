@@ -19,22 +19,51 @@ const fromDefault = process.env.RESEND_FROM_EMAIL ?? "onboarding@resend.dev";
 const resend = apiKey ? new Resend(apiKey) : null;
 
 /**
- * Envia um e-mail via Resend. Best-effort: uma falha NÃO derruba a ação principal
- * (mesma filosofia do `notify` do sino). Se não houver RESEND_API_KEY, é no-op.
+ * O que aconteceu com o envio. Existe porque `Promise<void>` obrigava todo
+ * chamador a fingir que deu certo — e o digest chegou a responder
+ * `enviado: true` para e-mail que nunca saiu.
+ *
+ * Continua best-effort: quem não quiser saber ignora o retorno, e nenhuma ação
+ * principal cai por causa de e-mail. O que muda é que agora dá PRA saber.
  */
-export async function sendEmail(input: SendEmailInput): Promise<void> {
+export type EnvioResult = { ok: true } | { ok: false; motivo: string };
+
+/**
+ * Envia um e-mail via Resend. Best-effort: uma falha NÃO derruba a ação
+ * principal (mesma filosofia do `notify` do sino).
+ */
+export async function sendEmail(input: SendEmailInput): Promise<EnvioResult> {
   const recipients = (Array.isArray(input.to) ? input.to : [input.to]).filter(
     (e): e is string => typeof e === "string" && e.includes("@"),
   );
-  if (recipients.length === 0) return;
+  if (recipients.length === 0) {
+    // O ramo IRMÃO do de baixo, e ele tinha ficado mudo. `DIGEST_EMAIL` com um
+    // typo sem "@" cai aqui: a rota do cron respondia 500 dizendo "o motivo já
+    // está no failure_log" e não havia motivo nenhum lá.
+    const motivo = "nenhum destinatário válido";
+    console.error(`[email] ${motivo} — não enviado: "${input.subject}"`);
+    // Mesma guarda do ramo da chave ausente, por coerência: o dev local aponta
+    // pro banco de PRODUÇÃO, então testar aqui sujaria a failure_log real.
+    if ((process.env.VERCEL_ENV ?? process.env.NODE_ENV) === "production") {
+      await registrarFalha({ kind: "email", detail: `${motivo}: "${input.subject}"`, origem: "sendEmail" });
+    }
+    return { ok: false, motivo };
+  }
 
   if (!resend) {
-    if (process.env.NODE_ENV !== "production") {
-      console.warn(
-        `[email] RESEND_API_KEY ausente — e-mail não enviado: "${input.subject}"`,
-      );
+    // ESTE ERA O NO-OP MAIS SILENCIOSO DO REPO. O `console.warn` estava atrás de
+    // `NODE_ENV !== "production"`, então em PRODUÇÃO a chave ausente não
+    // produzia log nenhum, nem registro, nem retorno — e é justamente em
+    // produção que ela some (alguém mexe nas envs da Vercel). Agora fala.
+    const motivo = "RESEND_API_KEY ausente";
+    console.error(`[email] ${motivo} — não enviado: "${input.subject}"`);
+    // Só registra em PRODUÇÃO: no dev local a chave costuma faltar de propósito,
+    // e o service-role daqui aponta pro banco de PRODUÇÃO — sem esta guarda,
+    // cada e-mail de teste sujaria a failure_log real e apareceria no digest.
+    if ((process.env.VERCEL_ENV ?? process.env.NODE_ENV) === "production") {
+      await registrarFalha({ kind: "email", detail: motivo, subject: recipients[0], origem: "sendEmail" });
     }
-    return;
+    return { ok: false, motivo };
   }
 
   try {
@@ -45,26 +74,40 @@ export async function sendEmail(input: SendEmailInput): Promise<void> {
       html: input.html,
       ...(input.text ? { text: input.text } : {}),
     });
-    // O SDK do Resend NÃO lança quando a API recusa — ele devolve `{ data, error }`.
-    // Este `if` não existia, e por isso domínio não verificado, rate limit e
-    // endereço malformado eram exatamente iguais a "enviado": o catch abaixo só
-    // pega erro de rede. Era o buraco mais fundo do best-effort — a falha nem
-    // chegava ao console.
+    // O SDK do Resend NÃO lança — nunca. Ele devolve `{ data, error }` até em
+    // falha de rede (o `fetchRequest` dele tem o fetch inteiro num try/catch e
+    // converte tudo em `error.name = "application_error"`). Este `if` não
+    // existia, então domínio não verificado, rate limit, endereço malformado E
+    // rede fora eram todos idênticos a "enviado", e a falha nem chegava ao
+    // console. O `catch` abaixo é cinto e suspensório pra um erro de programação
+    // aqui dentro — não é ele que pega falha de envio.
     if (error) {
       console.error("[email] o Resend recusou:", error.message);
-      void registrarFalha({
-        kind: "email",
-        detail: `${error.name ?? "erro"}: ${error.message}`,
-        subject: recipients[0],
-        origem: input.subject,
-      });
+      if ((process.env.VERCEL_ENV ?? process.env.NODE_ENV) === "production") {
+        await registrarFalha({
+          kind: "email",
+          detail: `${error.name ?? "erro"}: ${error.message}`,
+          subject: recipients[0],
+          // `origem` é LUGAR, não assunto. Mandar `input.subject` aqui
+          // fragmentava o agrupamento do digest por texto de e-mail em vez de
+          // por ponto do código, que é o oposto do que a coluna serve.
+          origem: "sendEmail",
+        });
+      }
+      return { ok: false, motivo: error.message };
     }
+    return { ok: true };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[email] falha ao enviar:", err);
     // Best-effort continua: não relança, não derruba a ação. Mas best-effort
     // deixa de ser best-FORGET — a partir daqui a falha vai pro digest.
-    void registrarFalha({ kind: "email", detail: msg, subject: recipients[0], origem: input.subject });
+    // Mesma guarda dos outros três ramos: o dev local aponta pro banco de
+    // PRODUÇÃO, e sem isto testar aqui sujaria a failure_log real.
+    if ((process.env.VERCEL_ENV ?? process.env.NODE_ENV) === "production") {
+      await registrarFalha({ kind: "email", detail: msg, subject: recipients[0], origem: "sendEmail" });
+    }
+    return { ok: false, motivo: msg };
   }
 }
 
@@ -217,8 +260,9 @@ export function conviteEmail(opts: {
   convidado?: boolean;
   /** true = o href leva à tela de login, não é link que entra (convite de admin). */
   semLinkDireto?: boolean;
-}): { subject: string; html: string } {
+}): { subject: string; html: string; text: string } {
   const nome = opts.nome?.trim() ? esc(opts.nome.trim()) : "Olá";
+  const nomeCru = opts.nome?.trim() || "Olá";
   const abertura = opts.convidado
     ? `A liderança te convidou pra servir com a gente no <strong>${BRAND}</strong>.`
     : `A liderança aprovou seu pedido e liberou seu acesso ao <strong>${BRAND}</strong>.`;
@@ -242,6 +286,29 @@ export function conviteEmail(opts: {
           `<a href="${siteUrl()}/entrar" style="color:${C.vinho};font-weight:600;">${entrar}/entrar</a> ` +
           `e informe este mesmo e-mail — seu acesso continua liberado.`,
     }),
+    // VERSÃO EM TEXTO PURO. E-mail só-HTML é sinal de spam por si só — filtro
+    // espera `multipart/alternative`. Não é o fator dominante (o dominante é o
+    // link apontar pra um domínio diferente do remetente), mas é de graça.
+    text: opts.semLinkDireto
+      ? `${nomeCru}, seu acesso ao ${BRAND} está liberado.
+
+` +
+        `Abra ${siteUrl()}/entrar e informe este mesmo e-mail pra receber seu link de acesso.
+
+` +
+        `Primeira vez? Veja como funciona: ${demoUrl()}`
+      : `${nomeCru}, seu acesso ao ${BRAND} está liberado.
+
+` +
+        `Entre por aqui — sem criar senha:
+${opts.href}
+
+` +
+        `O link é só seu e vale por ${DIAS_LINK_ENTRADA} dias. Se expirar, abra ` +
+        `${siteUrl()}/entrar e informe este mesmo e-mail.
+
+` +
+        `Primeira vez? Veja como funciona: ${demoUrl()}`,
   };
 }
 
@@ -250,9 +317,15 @@ export function escaladoEmail(opts: {
   evento: string;
   quando: string;
   href: string;
-}): { subject: string; html: string } {
+}): { subject: string; html: string; text: string } {
   const evento = esc(opts.evento);
   return {
+    text:
+      `Você foi escalado para ${opts.evento}` +
+      (opts.quando ? ` — ${opts.quando}` : "") +
+      `.
+
+Confirme sua presença: ${opts.href}`,
     subject: `${BRAND} — você foi escalado: ${opts.evento}`,
     html: layout({
       title: "Você foi escalado 📅",
@@ -303,10 +376,20 @@ export function digestEmail(opts: {
     )
     .join("");
 
+  // A DATA NO ASSUNTO NÃO É ENFEITE. O Gmail agrupa por remetente+assunto: dez
+  // domingos de "tudo certo por aqui" viram UMA conversa colapsada, e a ausência
+  // de um domingo — que é o sinal inteiro do heartbeat — fica ainda menos
+  // visível do que já é. Assunto único por dia mantém cada um como mensagem.
+  const dia = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "short",
+  }).format(new Date());
+
   return {
     subject: tudoCerto
-      ? `${BRAND} — tudo certo por aqui`
-      : `${BRAND} — ${blocos.length === 1 ? "1 coisa" : `${blocos.length} coisas`} pra olhar`,
+      ? `${BRAND} — tudo certo · ${dia}`
+      : `${BRAND} — ${blocos.length === 1 ? "1 coisa" : `${blocos.length} coisas`} pra olhar · ${dia}`,
     html: layout({
       title: tudoCerto ? "Tudo certo ✅" : "Resumo do dia 🔎",
       intro: tudoCerto
@@ -326,9 +409,15 @@ export function lembreteEmail(opts: {
   evento: string;
   quando: string;
   href: string;
-}): { subject: string; html: string } {
+}): { subject: string; html: string; text: string } {
   const evento = esc(opts.evento);
   return {
+    text:
+      `Você ainda não confirmou presença em ${opts.evento}` +
+      (opts.quando ? ` — ${opts.quando}` : "") +
+      `.
+
+Confirme ou avise que não vai poder: ${opts.href}`,
     subject: `${BRAND} — confirme sua presença: ${opts.evento}`,
     html: layout({
       title: "Falta você confirmar 🙏",

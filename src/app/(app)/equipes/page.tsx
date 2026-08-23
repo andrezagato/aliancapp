@@ -68,9 +68,17 @@ export default async function EquipesPage() {
     ? teamOpts
     : teams.map((t) => ({ id: t.id, name: t.name, color: t.color }));
   const teamById = new Map(approvalTeamOpts.map((t) => [t.id, t]));
-  // `!jaEntrou`: convite pendente de quem JÁ é membro não é gente chegando, é
-  // linha morta — e uma fila com linha morta dentro deixa de ser lida.
-  const pendingInvites = invites.filter((i) => i.status === "pendente" && !i.jaEntrou);
+  // A LINHA MORTA VOLTA, ROTULADA. Eu tinha escondido convite pendente de quem
+  // já é membro ("fila com linha morta dentro deixa de ser lida") — e esconder
+  // criou um beco sem saída: o `CancelInviteButton` só existe a partir desta
+  // lista, então a linha ficava invisível E incancelável. Ela nunca se resolve
+  // sozinha (o `handle_new_user` só roda no signup, e o `reconciliar_onboarding`
+  // sai cedo pra quem já está ativo), e o `criarConvite` manda "cancele em
+  // Equipes" apontando pra um botão que não estava lá.
+  //
+  // Rotular resolve os dois: some do caminho de leitura (o selo diz que não é
+  // gente chegando) e continua acionável.
+  const pendingInvites = invites.filter((i) => i.status === "pendente");
 
   // "Entrando na igreja" — pedido de entrada, perfil pendente e convite são a
   // mesma coisa vista de fora (gente chegando); a origem vira texto na 2ª
@@ -136,8 +144,11 @@ export default async function EquipesPage() {
     ...(isAdmin
       ? pendingInvites.map((i) => {
           const teamsText = i.teams.length > 0 ? i.teams.map((t) => t.name).join(", ") : null;
-          const origem =
-            i.diasEsperando === 0 ? "convidado hoje" : `convidado há ${i.diasEsperando} ${i.diasEsperando === 1 ? "dia" : "dias"}`;
+          const origem = i.jaEntrou
+            ? "já é membro · este convite não vale mais"
+            : i.diasEsperando === 0
+              ? "convidado hoje"
+              : `convidado há ${i.diasEsperando} ${i.diasEsperando === 1 ? "dia" : "dias"}`;
           return {
             id: `i-${i.id}`,
             fullName: i.fullName || i.email,
@@ -145,6 +156,7 @@ export default async function EquipesPage() {
             phone: null as string | null,
             message: null as string | null,
             teamDot: i.teams[0]?.color ?? null,
+            chip: i.jaEntrou ? <Badge variant="neutral">Linha morta</Badge> : undefined,
             line2: [teamsText, i.systemRole === "admin" ? "admin" : null, origem].filter(Boolean).join(" · "),
             actions: <CancelInviteButton inviteId={i.id} />,
           };

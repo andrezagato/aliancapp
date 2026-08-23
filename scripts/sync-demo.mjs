@@ -15,7 +15,16 @@ const DST = "public/primeiros-passos.html";
 // O parâmetro `appUrl` da demo (botão "Abrir o app", último slide) vem do Claude
 // Design com o repositório no GitHub como default. Apontar pra raiz do app: ela
 // já roteia sozinha — sem sessão vai pro login, logado vai pro início.
-const APP_URL = "https://aliancapp.vercel.app";
+// RELATIVO, e não um domínio fixo. A demo é servida PELO PRÓPRIO APP
+// (`/primeiros-passos.html`), então "/" já aponta pro app certo — em produção,
+// em preview, e em qualquer domínio futuro.
+//
+// Já foi `https://aliancapp.vercel.app` fixo aqui, e isso custou caro de dois
+// jeitos: o link do e-mail apontando pra um domínio diferente do remetente
+// derrubou os convites no SPAM (22/08/2026, diagnosticado pelo próprio painel
+// do Resend — "Ensure link URLs match sending domain"), e este script revertia
+// sozinho qualquer correção de domínio no próximo `demo:sync`.
+const APP_URL = "/";
 const DEFAULT_ERRADO = "https://github.com/andrezagato/aliancapp";
 
 const HEAD = `<meta charset="utf-8">

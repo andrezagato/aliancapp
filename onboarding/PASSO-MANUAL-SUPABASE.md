@@ -90,10 +90,36 @@ O template já vem com a mesma cara dos outros e-mails do Sirvo e com o link
 
 ## Atenção ao domínio
 
-Cada template tem **dois** links fixos em `https://aliancapp.vercel.app`: o botão de entrar
+Cada template tem **dois** links fixos em `https://sirvo.ministerioalianca.com`: o botão de entrar
 (`/auth/confirm?…`) e o "Primeira vez? Veja como funciona" (`/primeiros-passos.html`). É a URL de
 produção — o template do Supabase é global (não tem preview por branch), então o link fixo é o certo
 aqui. **Se o domínio mudar, são 4 lugares** (2 links × 2 templates).
+
+### ⚠️ `NEXT_PUBLIC_SITE_URL` SÓ VALE DEPOIS DE UM REDEPLOY
+
+Variável `NEXT_PUBLIC_*` é **embutida no build** pelo Next. Trocar o valor no
+painel da Vercel **não muda nada** no deploy que já está no ar — é preciso
+**Redeploy** depois de salvar. Sem isso, os links gerados pelo código continuam
+apontando pro domínio antigo enquanto os templates apontam pro novo, e aí você
+tem o pior dos dois: metade dos links fora do domínio do remetente.
+
+### ⚠️ O DOMÍNIO DO LINK TEM QUE BATER COM O DO REMETENTE
+
+Isto não é preferência, é entregabilidade. Em 22/08/2026 um convite de teste caiu no **spam** do
+Gmail, e o próprio painel do Resend apontou a causa:
+
+> **Ensure link URLs match sending domain** — *"Mismatched URLs can trigger spam filters."*
+
+O e-mail saía de `avisos@ministerioalianca.com` e **todos** os links apontavam pra
+`aliancapp.vercel.app`. SPF e DKIM provam quem mandou; eles não dizem nada sobre pra onde o link
+leva, e remetente de um domínio com link de outro é a forma clássica de phishing.
+
+Isso explicava meses de "o convite não chegou" que tinham sido atribuídos a Hotmail agressivo e a
+bug de código. Não era nem um nem outro.
+
+**Consequência prática:** se um dia o app voltar pra um domínio diferente do remetente, o convite
+volta pro spam. Ou se muda o domínio do app, ou se muda o remetente — os dois têm que ser a mesma
+casa.
 
 Não usar `{{ .SiteURL }}` pra economizar isso: ele vem do Site URL do painel, que é um campo que
 ninguém olha há meses e que aponta pra `localhost` em muito projeto. Um link de login apontando pra

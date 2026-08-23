@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
 import { TeamDot } from "@/components/coverage-badge";
 import { Modal } from "@/components/modal";
+import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 import {
   criarConvite,
@@ -368,12 +369,21 @@ export function JoinRequestActions({
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  // Mesmo motivo do `ReconvidarButton`: `aprovarJoinRequest` revalida ANTES de
+  // devolver `fail` nos caminhos pós-escrita (o pedido já virou `aprovado`), a
+  // linha some da fila, este componente desmonta, e o `setError` não tem onde
+  // escrever. O toast mora no layout e sobrevive.
+  const { showToast } = useToast();
+  const falhou = (msg: string) => {
+    setError(msg);
+    showToast(msg);
+  };
 
   function approve(picked: InviteTeamInput[]) {
     setError(null);
     start(async () => {
       const r = await aprovarJoinRequest(joinId, picked);
-      if (!r.ok) setError(r.error ?? "Erro");
+      if (!r.ok) falhou(r.error ?? "Erro");
       else {
         setOpen(false);
         router.refresh();
@@ -384,7 +394,7 @@ export function JoinRequestActions({
     setError(null);
     start(async () => {
       const r = await recusarJoinRequest(joinId);
-      if (!r.ok) setError(r.error ?? "Erro");
+      if (!r.ok) falhou(r.error ?? "Erro");
       else router.refresh();
     });
   }
@@ -498,6 +508,12 @@ export function PendingProfileActions({
 export function CancelInviteButton({ inviteId }: { inviteId: string }) {
   const router = useRouter();
   const [pending, start] = useTransition();
+  // O `r.error` era descartado, então as três frases de falha do
+  // `cancelarConvite` não existiam pra ninguém: o admin clicava, nada
+  // acontecia, nada aparecia, a linha ficava lá. Os dois vizinhos deste mesmo
+  // arquivo ganharam toast nesta branch; este ficou pra trás justamente quando
+  // a action dele ganhou as guardas novas.
+  const { showToast } = useToast();
   return (
     <Button
       size="sm"
@@ -507,6 +523,7 @@ export function CancelInviteButton({ inviteId }: { inviteId: string }) {
         start(async () => {
           const r = await cancelarConvite(inviteId);
           if (r.ok) router.refresh();
+          else showToast(r.error);
         })
       }
     >
@@ -530,6 +547,13 @@ export function ReconvidarButton({ alvo }: { alvo: { tipo: "convite" | "pedido";
   const router = useRouter();
   const [pending, start] = useTransition();
   const [erro, setErro] = useState<string | null>(null);
+  // TOAST ALÉM DO ERRO NA LINHA. Várias actions chamam `revalidatePath` no
+  // caminho de FALHA, de propósito — a instrução costuma pedir pra olhar outra
+  // linha. Só que revalidar REMONTA esta linha (a chave muda de `s-pedido-…`
+  // pra `s-convite-…` quando a pessoa passa a ter convite), e o `useState` do
+  // erro morre antes de alguém ler. O toast mora no layout do app e sobrevive à
+  // remontagem; o texto na linha fica como reforço pra quando ela não remonta.
+  const { showToast } = useToast();
   return (
     <div className="flex flex-col items-end gap-1">
       <Button
@@ -539,8 +563,12 @@ export function ReconvidarButton({ alvo }: { alvo: { tipo: "convite" | "pedido";
           start(async () => {
             setErro(null);
             const r = await reconvidar(alvo);
-            if (r.ok) router.refresh();
-            else setErro(r.error);
+            if (r.ok) {
+              router.refresh();
+            } else {
+              setErro(r.error);
+              showToast(r.error);
+            }
           })
         }
       >

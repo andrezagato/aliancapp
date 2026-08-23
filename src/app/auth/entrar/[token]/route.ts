@@ -21,9 +21,21 @@ import { registrarFalha } from "@/lib/failure-log";
  *     Supabase (1 hora hoje) e morreria antes da pessoa abrir a caixa de entrada.
  *     Gerado aqui, quem manda no prazo é `invites.expires_at`, que é nosso;
  *   • antivírus e o pré-visualizador de link do Outlook abrem o link ANTES da
- *     pessoa. Um magic link comum seria queimado por eles e ela encontraria um
- *     link morto. O token do convite não se gasta: cada abertura gera um token de
- *     login novo;
+ *     pessoa. Um magic link comum seria QUEIMADO por eles e ela encontraria um
+ *     link morto. O token do convite não se gasta: cada abertura gera um token
+ *     de login novo.
+ *
+ *     RESSALVA MEDIDA EM 23/08, porque este parágrafo prometia demais: o token
+ *     de fato não se gasta, mas a PRIMEIRA abertura cria a conta em
+ *     `auth.users`, e a regra "só primeiro acesso" (mais abaixo) recusa todas as
+ *     seguintes com `ja_tem_conta`. Ou seja, se um scanner abrir antes, a pessoa
+ *     é mandada pro campo de e-mail em vez de entrar direto.
+ *
+ *     Não é beco — o campo de e-mail resolve, e o segundo clique NO MESMO
+ *     navegador cai na checagem de sessão logo abaixo e vai pro /inicio. E a
+ *     regra não pode ser afrouxada: qualquer líder lê `invites.token` no banco
+ *     (`invites_read_leader`), então token que abre conta EXISTENTE é escalada.
+ *     O conserto de verdade é estreitar aquela policy, não esta rota;
  *   • sem `redirectTo`, a allow-list de Redirect URLs do dashboard deixa de ser
  *     um jeito silencioso de quebrar isso.
  *
@@ -51,8 +63,14 @@ export async function GET(
   // exatamente por quê ("cancelado", "sem prazo") — essa resposta morria aqui,
   // dentro do redirect. `porque` é o que sobrevive; `motivo` é só o que a
   // pessoa lê na tela.
-  const recusa = (motivo: string, porque: string, quem?: string | null) => {
-    void registrarFalha({
+  const recusa = async (motivo: string, porque: string, quem?: string | null) => {
+    // AGUARDADO, não `void`. Numa função da Vercel a instância pode ser congelada
+    // assim que a resposta sai — e sob tráfego baixo (uma igreja de 51 pessoas,
+    // 19h de um sábado) a promise pendurada simplesmente some. O gravador
+    // perderia preferencialmente o PRIMEIRO evento de cada incidente, que é
+    // justamente o que se quer registrar. O banco responde em 25-70ms, num
+    // caminho que acabou de fazer round-trip no GoTrue: o custo é ruído.
+    await registrarFalha({
       kind: "convite_link",
       detail: `${motivo}: ${porque}`,
       subject: quem ?? null,
@@ -71,7 +89,7 @@ export async function GET(
   }
 
   const { data: convite } = await admin
-    .from("invites").select("email, status, expires_at").eq("token", token).maybeSingle();
+    .from("invites").select("email, status, expires_at, system_role, church_id").eq("token", token).maybeSingle();
 
   if (!convite) return recusa("invalido", "nenhum convite com este token");
   if (convite.status === "cancelado" || convite.status === "expirado") {
@@ -87,6 +105,80 @@ export async function GET(
   if (new Date(convite.expires_at).getTime() < Date.now()) {
     return recusa("expirado", `venceu em ${convite.expires_at}`, convite.email);
   }
+  // ESCALADA DE PRIVILÉGIO — e a primeira versão desta trava conferia a LINHA
+  // ERRADA, o que é pior que não ter trava, porque parecia resolvido.
+  //
+  // Ela olhava `convite.system_role` do convite casado pelo TOKEN. Só que quem
+  // escreve `profiles.system_role` é o trigger `handle_new_user`, e ele casa
+  // por E-MAIL, pegando o mais ANTIGO pendente:
+  //
+  //     where lower(email) = lower(new.email) and status = 'pendente'
+  //     order by created_at limit 1
+  //
+  // São duas linhas diferentes, e nada impede duas pendentes pro mesmo e-mail —
+  // não há índice único em `invites.email`. Então: você convida alguém como
+  // admin; um líder insere o convite DELE pro mesmo e-mail como `member`
+  // (`invites_insert_leader` aceita), lê o próprio token (`invites_read_leader`
+  // é SELECT pra qualquer líder e não esconde a coluna) e abre esta rota. A
+  // trava olhava o convite `member` dele e deixava passar; o trigger casava por
+  // e-mail, pegava o de ADMIN, e provisionava o perfil como admin.
+  //
+  // A trava certa pergunta o que o TRIGGER vai encontrar, não o que o token
+  // aponta: existe QUALQUER convite de admin pendente pra este e-mail? Se
+  // existe, esta rota não abre sessão pra ele de jeito nenhum. Admin entra pelo
+  // caminho que exige a caixa de entrada dele.
+  // Busca TODOS os convites de admin pendentes (são pouquíssimos — no limite,
+  // um por admin que você esteja convidando) e compara em JS.
+  //
+  // Sem `.ilike` de propósito: ele trata `_` e `%` como CURINGA, e `_` é
+  // caractere legal em e-mail. `joao_silva@gmail.com` casaria com
+  // `joaoXsilva@...` e a rota recusaria alguém legítimo — bug que ninguém
+  // diagnostica ("meu link não abre e o do meu irmão abre"). O `actions.ts` tem
+  // um `comoTexto` que escapa isso; aqui a lista é pequena o bastante pra não
+  // precisar de curinga nenhum, que é melhor que escapar direito.
+  const { data: adminsPendentes, error: erroAdmins } = await admin
+    .from("invites")
+    .select("email")
+    // Mesma igreja do convite que está sendo resgatado. O cliente aqui é
+    // SERVICE-ROLE, então sem isto ele enxerga convite de admin de qualquer
+    // igreja — e os dois guardas gêmeos escritos nesta branch (`actions.ts`) já
+    // são escopados. Falha fechado de qualquer jeito, mas com uma segunda
+    // igreja isto bloquearia gente legítima. Latente hoje, bomba amanhã.
+    .eq("church_id", convite.church_id)
+    .eq("status", "pendente")
+    .eq("system_role", "admin");
+
+  // FALHA FECHADO. Sem este `if`, `data` nulo por erro de query virava `?? []`,
+  // o `.some()` dava falso, e a rota seguia pro `generateLink` — ou seja, um
+  // timeout de 8s do `authenticator`, um 5xx do PostgREST ou uma service-role
+  // key inválida DESLIGAVAM a única trava de escalada desta rota, em silêncio.
+  //
+  // E é a única mesmo: `generateLink` já cria a linha em `auth.users`, então o
+  // `handle_new_user` dispara ANTES do `verifyOtp`. Não há segunda chance depois.
+  //
+  // Mesma doutrina do `if (!admin)` lá em cima: esta é a rota que abre sessão
+  // sem senha, e aqui não saber é motivo pra não abrir.
+  if (erroAdmins) {
+    console.error("[entrada] não consegui conferir convites de admin:", erroAdmins.message);
+    return recusa("falhou", `checagem de convite admin falhou: ${erroAdmins.message}`, convite.email);
+  }
+
+  // `invites.email` é canônico por constraint desde a 0058 (minúsculo, sem
+  // espaço, ASCII), então esta comparação e a do `handle_new_user` são a mesma
+  // sobre os mesmos bytes. O `trim().toLowerCase()` fica como cinto: ele só
+  // aperta, nunca afrouxa.
+  const alvo = convite.email.trim().toLowerCase();
+  if ((adminsPendentes ?? []).some((a) => (a.email ?? "").trim().toLowerCase() === alvo)) {
+    return recusa("ja_tem_conta", "há convite de admin pendente para este e-mail", convite.email);
+  }
+
+  // DÍVIDA CONSCIENTE, registrada porque some da vista: mesmo com a trava acima,
+  // o trigger continua consumindo o convite MAIS ANTIGO por e-mail, que pode não
+  // ser o do token usado. Entre dois convites `member` isso não muda privilégio
+  // — muda só quais equipes entram no `invite_teams` aplicado. Tornar a seleção
+  // do trigger determinística é conserto de outro dia; mexer num trigger de
+  // `auth.users` no fim de uma sessão longa é como se quebra login pra todo mundo.
+
   // Status 'aceito' continua valendo de propósito: o link pode ter sido aberto
   // por um antivírus (que já casou o convite) antes da pessoa tocar nele. Quem
   // limita é o prazo, não o status — senão a pessoa acha um link morto.

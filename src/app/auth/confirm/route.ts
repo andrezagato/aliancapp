@@ -39,7 +39,23 @@ export const dynamic = "force-dynamic";
  * consulta — deixar passar string arbitrária é entregar esse controle a quem
  * monta o link.
  */
-const TIPOS: readonly EmailOtpType[] = ["magiclink", "signup", "email", "recovery", "invite", "email_change"];
+// OS TRÊS QUE UM TEMPLATE DE LOGIN POR E-MAIL PODE EMITIR — e nenhum a mais.
+//
+// Ficam DE FORA de propósito: `recovery` (o `generateLink` da rota de convite
+// grava em `recovery_token`, então aceitá-lo aqui daria um segundo caminho pra
+// mesma credencial), `invite` (um "Invite user" do painel viraria sessão sem
+// passar por convite nenhum) e `email_change` — este último MUTA a conta,
+// confirmando a troca de endereço, como efeito colateral de algo que a rota
+// chama de "login".
+//
+// `email` está aqui porque é o `type` do template PADRÃO do Supabase, que a
+// documentação usa no exemplo. Os nossos dois emitem `magiclink` e `signup`
+// (medido: um e-mail real de 23/08 chegou com `type=signup`), mas os templates
+// que valem moram no painel, não no repo — e um `type` fora da lista não
+// degrada: ele MATA o login por e-mail de todo mundo. Cobrir a terceira forma
+// plausível custa nada e tira o risco de uma leitura que ninguém pode fazer
+// daqui.
+const TIPOS: readonly EmailOtpType[] = ["magiclink", "signup", "email"];
 
 /**
  * `next` volta a ser um caminho DESTE app, nunca um destino livre: sem isto,
@@ -65,9 +81,14 @@ export async function GET(request: Request) {
   const tipo = TIPOS.find((t) => t === tipoBruto);
   if (!tokenHash || !tipo) {
     console.error("[confirm] link sem token_hash ou com type inesperado:", tipoBruto);
-    void registrarFalha({
+    // O `type` vem da URL e é escolhido por quem monta o link — ele NÃO entra
+    // cru no detail, senão texto de estranho aterrissa no e-mail que o admin
+    // lê como confiável ("Falha conhecida — ligue para o suporte…"). O valor só
+    // acompanha quando parece de verdade com um type.
+    const tipoSeguro = /^[a-z_]{1,32}$/.test(tipoBruto ?? "") ? tipoBruto : "(fora do formato)";
+    await registrarFalha({
       kind: "login_link",
-      detail: `link sem token_hash ou com type inesperado: ${tipoBruto ?? "(ausente)"}`,
+      detail: tokenHash ? `type inesperado: ${tipoSeguro}` : "link sem token_hash",
       origem: "/auth/confirm",
     });
     return recusa("invalido");
@@ -81,7 +102,10 @@ export async function GET(request: Request) {
     // "já venceu, peça outro" é uma instrução; "não consegui" é um beco.
     const venceu = /expired|invalid/i.test(error.message);
     console.error("[confirm] verifyOtp falhou:", error.message);
-    void registrarFalha({ kind: "login_link", detail: error.message, origem: "/auth/confirm" });
+    // AGUARDADO, não `void`: numa função da Vercel a instância pode ser congelada
+    // quando a resposta sai, e sob tráfego baixo a promise pendurada some. Ver
+    // src/lib/failure-log.ts.
+    await registrarFalha({ kind: "login_link", detail: error.message, origem: "/auth/confirm" });
     return recusa(venceu ? "expirado" : "falhou");
   }
 

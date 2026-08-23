@@ -26,9 +26,12 @@ export async function GET(request: Request) {
     if (!error) {
       return NextResponse.redirect(`${origin}${next}`);
     }
-    void registrarFalha({ kind: "login_link", detail: error.message, origem: "/auth/callback" });
+    // AGUARDADO, não `void`: numa função da Vercel a instância pode ser congelada
+    // quando a resposta sai, e sob tráfego baixo a promise pendurada some. Ver
+    // src/lib/failure-log.ts.
+    await registrarFalha({ kind: "login_link", detail: error.message, origem: "/auth/callback" });
   } else {
-    void registrarFalha({
+    await registrarFalha({
       kind: "login_link",
       detail: "chegou em /auth/callback sem `code` na URL",
       origem: "/auth/callback",

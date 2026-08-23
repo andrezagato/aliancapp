@@ -276,8 +276,17 @@ export async function rodarCobranca({ dry = false }: { dry?: boolean } = {}): Pr
               quando,
               href: `${siteUrl()}${comVia(link, "email")}`,
             });
-            await sendEmail({ to: pessoa.email, subject: em.subject, html: em.html });
-            await registrarEntregaAdmin(admin, { ...ctx, channel: "email", outcome: "enviado" });
+            // `outcome` sai do RESULTADO, não da chegada nesta linha. O SDK do
+            // Resend nunca lança, então o catch abaixo jamais viu falha de
+            // entrega — e a delivery_log gravava "enviado" pra e-mail que não
+            // saiu. É a tabela de onde saiu a análise de canal de 10/ago.
+            const envio = await sendEmail({ to: pessoa.email, subject: em.subject, html: em.html, text: em.text });
+            await registrarEntregaAdmin(admin, {
+              ...ctx,
+              channel: "email",
+              outcome: envio.ok ? "enviado" : "falhou",
+              ...(envio.ok ? {} : { detail: envio.motivo.slice(0, 200) }),
+            });
           } catch (e) {
             // Aqui o catch deixou de ser mudo: um e-mail que morre no Resend é
             // exatamente o tipo de falha que sumia sem deixar rastro.
