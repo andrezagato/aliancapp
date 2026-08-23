@@ -538,24 +538,69 @@ export function RundownGrid({
     if (aoCancelarRef.current) window.addEventListener("pointercancel", aoCancelarRef.current);
   };
 
-  const toggleDone = (it: RundownItem) => {
-    const done = !it.doneAt;
+  /**
+   * AFIRMAR, NUNCA INVERTER — e é essa palavra que conserta o telão piscando.
+   *
+   * Antes existia um `toggleDone` que decidia o destino assim:
+   *
+   *     const done = !it.doneAt;
+   *
+   * O servidor nunca foi toggle (recebe estado absoluto e, ao marcar, ainda faz
+   * `.is("done_at", null)`). O CLIENTE é que era — e ele decidia lendo um estado
+   * que o tempo real acabara de trocar por baixo dele.
+   *
+   * O acidente, em ordem: A tica o bloco 5. O realtime chega no aparelho de B. A
+   * linha NÃO SAI DO LUGAR — muda cor, risco e o anel do ao vivo, mas fica no
+   * mesmo pixel. O dedo de B já estava a caminho do mesmo tique. B toca achando
+   * que MARCA, o `!it.doneAt` agora vale false, e B DESMARCA. Duas pessoas
+   * querendo a mesma coisa produzem o oposto dela.
+   *
+   * Com marcar e desmarcar separados, o toque de domingo só sabe afirmar: dois
+   * dedos afirmando a mesma coisa dão um resultado só, e toque duplo acidental
+   * vira no-op no `.is("done_at", null)` que já existia no servidor.
+   */
+  const seguraAutoScroll = () => {
     // Marca que o PRÓXIMO troco de bloco ao vivo veio de um toque aqui, e
     // segura o auto-scroll por um instante — ver `SEGURA_SCROLL_MS` (F3).
     tiqueNossoRef.current = true;
     window.setTimeout(() => {
       tiqueNossoRef.current = false;
     }, SEGURA_SCROLL_MS);
+  };
+
+  const marcarFeito = (it: RundownItem) => {
+    if (it.doneAt) return; // já está feito: afirmar de novo não tem o que dizer
+    seguraAutoScroll();
     setList((prev) =>
-      prev.map((x) => (x.id === it.id ? { ...x, doneAt: done ? new Date().toISOString() : null } : x)),
+      prev.map((x) => (x.id === it.id ? { ...x, doneAt: new Date().toISOString() } : x)),
     );
     startTx(async () => {
-      const r = await marcarBlocoFeito(it.id, eventId, done);
+      const r = await marcarBlocoFeito(it.id, eventId, true);
       // Sem isto o bloco "destica sozinho" quando a action falha — o próximo
       // `items` do servidor (sem a marca) sobrescreve o palpite otimista de
       // cima, e ninguém entende por quê (F2).
       if (r.ok) router.refresh();
       else showToast(r.error);
+    });
+  };
+
+  const desmarcarFeito = (it: RundownItem) => {
+    const antes = it.doneAt;
+    if (!antes) return;
+    seguraAutoScroll();
+    setList((prev) => prev.map((x) => (x.id === it.id ? { ...x, doneAt: null } : x)));
+    startTx(async () => {
+      const r = await marcarBlocoFeito(it.id, eventId, false);
+      if (r.ok) {
+        router.refresh();
+        return;
+      }
+      // REPÕE O CARIMBO ORIGINAL, não "agora". `rundown-timing` empurra todo bloco
+      // seguinte pelo `done_at` do anterior, então inventar a hora aqui deslocaria
+      // a projeção do resto do culto e faria o "atrasado/adiantado" mentir até
+      // alguém recarregar a página.
+      setList((prev) => prev.map((x) => (x.id === it.id ? { ...x, doneAt: antes } : x)));
+      showToast(r.error);
     });
   };
 
@@ -1029,20 +1074,38 @@ export function RundownGrid({
                       de um em cada quina. Tique primeiro (é o gesto de todo
                       domingo), alça depois (é o de montar). */}
                   <div className="flex w-9 shrink-0 flex-col items-center gap-1 py-2">
-                    {canEdit ? (
+                    {canEdit && done ? (
+                      // DESMARCAR PEDE PRESSÃO, e não por capricho: desmarcar
+                      // reabre o bloco, o `liveIdx` volta, e a ponte manda o
+                      // ProPresenter reiniciar o cronômetro do palco — na frente
+                      // de quem está pregando. Isso não pode sair de um toque no
+                      // mesmo pixel do gesto que a equipe repete o culto inteiro.
+                      // `BotaoSegurar` é o que o próprio roteiro já usa pra
+                      // encerrar o culto; `aoDesistir` existe porque "dei um
+                      // tapinha e não aconteceu nada" é o modo de falha dele.
+                      <BotaoSegurar
+                        aoConfirmar={() => desmarcarFeito(it)}
+                        aoDesistir={() => showToast("Segure para desmarcar este bloco.")}
+                        textoTeclado={`Desmarcar "${it.title}" como concluído?`}
+                        aria-label="Segure para desmarcar feito"
+                        // Só o clique: barrar o pointerdown aqui (mesmo em
+                        // captura) mataria o gesto do próprio BotaoSegurar, que é
+                        // quem escuta esse evento pra começar a varredura.
+                        onClick={(e) => e.stopPropagation()}
+                        className="grid size-9 shrink-0 place-items-center rounded-full border-2 border-success bg-success text-white transition-colors"
+                      >
+                        <Check className="size-4" strokeWidth={3.5} />
+                      </BotaoSegurar>
+                    ) : canEdit ? (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          toggleDone(it);
+                          marcarFeito(it);
                         }}
-                        aria-label={done ? "Desmarcar feito" : "Marcar feito"}
+                        aria-label="Marcar feito"
                         className={cn(
                           "grid size-9 shrink-0 place-items-center rounded-full border-2 transition-colors",
-                          done
-                            ? "border-success bg-success text-white"
-                            : live
-                              ? "border-primary text-primary"
-                              : "border-border text-transparent",
+                          live ? "border-primary text-primary" : "border-border text-transparent",
                         )}
                       >
                         <Check className="size-4" strokeWidth={3.5} />

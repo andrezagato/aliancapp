@@ -1982,6 +1982,12 @@ export async function marcarBlocoFeito(id: string, eventId: string, done: boolea
   // precisava mudar. Essa mesma confusão ("0 linhas" = falha) já aconteceu
   // duas vezes neste repo (migrations 0029 e 0049) — aqui é intencional.
   if (done) query = query.is("done_at", null);
+  // GUARDA SIMÉTRICO, que faltava. Desmarcar passava SEMPRE, então uma chamada
+  // atrasada (a pessoa segurou, e no meio disso outra pessoa reabriu e concluiu o
+  // bloco de novo) apagava a marca nova sem nada dizer. Com o `.not(...)`, ela só
+  // desmarca o que estava marcado; 0 linhas aqui é o mesmo resultado ESPERADO do
+  // caso de cima — o bloco já estava como se queria.
+  else query = query.not("done_at", "is", null);
   const { error } = await query;
   if (error) return fail(error.message);
   // `/control` também — e a falta dela era o grosso dos ~2s que a Produção
