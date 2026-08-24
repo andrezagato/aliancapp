@@ -656,7 +656,10 @@ export function RundownGrid({
     seguraAutoScroll();
     setList((prev) => prev.map((x) => (x.id === it.id ? { ...x, doneAt: null } : x)));
     startTx(async () => {
-      const r = await marcarBlocoFeito(it.id, eventId, false);
+      // Manda o carimbo que ESTA tela viu: se outra pessoa reabriu e concluiu o
+      // bloco no meio do gesto de segurar, o servidor recusa em vez de apagar a
+      // marca nova dela.
+      const r = await marcarBlocoFeito(it.id, eventId, false, antes);
       if (r.ok) {
         router.refresh();
         return;

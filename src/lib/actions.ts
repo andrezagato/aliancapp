@@ -1965,7 +1965,22 @@ export async function removerAtalhoStage(id: string): Promise<ActionResult> {
 }
 
 /** Marca/desmarca um bloco como feito (carimba a hora real de término). */
-export async function marcarBlocoFeito(id: string, eventId: string, done: boolean): Promise<ActionResult> {
+export async function marcarBlocoFeito(
+  id: string,
+  eventId: string,
+  done: boolean,
+  /**
+   * O `done_at` que o CLIENTE viu quando decidiu desmarcar. Só usado no caminho
+   * `done === false`, e é o que transforma o desmarcar numa comparação-e-troca
+   * de verdade.
+   *
+   * Sem ele, `.not("done_at","is",null)` só pergunta "está marcado?" — e a
+   * resposta continua sim se OUTRA pessoa reabriu e concluiu o bloco de novo no
+   * meio do gesto. O desmarcar apagaria a marca NOVA achando que apagava a
+   * velha, e nada avisaria. Comparando o carimbo, some quem chegou atrasado.
+   */
+  esperadoDoneAt?: string | null,
+): Promise<ActionResult> {
   const session = await getSession();
   if (!session) return fail("Sessão expirada.");
   if (!(await podeEditarCronograma(session, eventId))) return fail("Sem permissão.");
@@ -1982,11 +1997,18 @@ export async function marcarBlocoFeito(id: string, eventId: string, done: boolea
   // precisava mudar. Essa mesma confusão ("0 linhas" = falha) já aconteceu
   // duas vezes neste repo (migrations 0029 e 0049) — aqui é intencional.
   if (done) query = query.is("done_at", null);
-  // GUARDA SIMÉTRICO, que faltava. Desmarcar passava SEMPRE, então uma chamada
-  // atrasada (a pessoa segurou, e no meio disso outra pessoa reabriu e concluiu o
-  // bloco de novo) apagava a marca nova sem nada dizer. Com o `.not(...)`, ela só
-  // desmarca o que estava marcado; 0 linhas aqui é o mesmo resultado ESPERADO do
-  // caso de cima — o bloco já estava como se queria.
+  // GUARDA SIMÉTRICO, que faltava. Desmarcar passava SEMPRE.
+  //
+  // O `.not(...)` sozinho só pergunta "está marcado?", e isso NÃO basta pro caso
+  // que interessa: se outra pessoa reabriu e concluiu o bloco de novo enquanto
+  // esta segurava o botão, a resposta continua sim, e o desmarcar apagaria a
+  // marca NOVA. Por isso, quando o cliente diz qual carimbo ele viu, a condição
+  // vira igualdade — comparação-e-troca de verdade, e quem chegou atrasado não
+  // faz nada.
+  //
+  // O `.not(...)` fica como piso pra quem chama sem informar o carimbo (a régia,
+  // hoje): pior que comparar, melhor que passar sempre.
+  else if (esperadoDoneAt) query = query.eq("done_at", esperadoDoneAt);
   else query = query.not("done_at", "is", null);
   const { error } = await query;
   if (error) return fail(error.message);
