@@ -1159,10 +1159,17 @@ export function RundownGrid({
                         {it.title}
                       </span>
                       <div className="shrink-0 text-right leading-none">
-                        <div className="text-[10px] font-extrabold uppercase tracking-[.1em] text-white/70">
+                        {/* NA REGUA DO DESIGN.md, e nao ao lado dela. Eu tinha
+                            escrito 34px e 10px porque "o contador precisa ser lido
+                            de longe" — o que e verdade, mas 29px (o degrau de
+                            Display, documentado como "titulo dentro do heroi
+                            vinho") tambem e lido de longe, e continua sendo a
+                            maior coisa da tela. Esticar a regua em 5px pra provar
+                            um ponto que ela ja provava seria drift meu. */}
+                        <div className="text-[11px] font-extrabold uppercase tracking-[.1em] text-white/70">
                           {restanteMs >= 0 ? "restam" : "estourou"}
                         </div>
-                        <div className="mt-0.5 text-[34px] font-extrabold tabular-nums">
+                        <div className="mt-0.5 font-display text-[29px] font-extrabold tabular-nums">
                           {restanteMs >= 0 ? clock(restanteMs) : "\u2212" + clock(-restanteMs)}
                         </div>
                       </div>
