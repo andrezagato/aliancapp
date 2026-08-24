@@ -1069,6 +1069,120 @@ export function RundownGrid({
             const h: Heat = live ? heatOf(restanteMs) : done && overMs > 0 ? "red" : "normal";
             const liveRed = live && h === "red";
 
+            /* ===================== OS MODOS SAO OUTRA TELA =====================
+               Nem reordenar nem ler tem heroi. Isso saiu de teste no aparelho, e
+               a razao e simples quando se ve: nos dois modos a pessoa foi ali pra
+               VER TUDO — a ordem inteira, ou as observacoes todas. Um card de
+               230px no meio da lista come metade da tela pra mostrar o que ela ja
+               sabe (qual bloco esta ao vivo) e empurra pra fora justamente o que
+               ela foi olhar.
+
+               O heroi e o objeto de CONDUZIR. Fora dali ele nao tem trabalho, e
+               ocupar espaco sem trabalho e o defeito, nao o recurso. */
+            if (modo === "reordenar") {
+              const movivel = podeMover(it.id);
+              return (
+                <li key={it.id} className="flex items-center gap-2">
+                  <div
+                    className={cn(
+                      "flex h-11 flex-1 items-center gap-2 overflow-hidden rounded-xl border bg-card pr-2",
+                      live
+                        ? "border-2 border-primary"
+                        : done
+                          ? "border-border/60 opacity-55"
+                          : "border-border",
+                    )}
+                  >
+                    <i className="h-full w-1.5 shrink-0" style={{ backgroundColor: color }} />
+                    <span className="grid size-5 shrink-0 place-items-center text-muted-foreground">
+                      {done ? (
+                        <Check className="size-3.5" strokeWidth={3} />
+                      ) : live ? (
+                        <span className="text-[10px] text-primary">&#9654;</span>
+                      ) : movivel ? (
+                        <GripVertical className="size-4" />
+                      ) : null}
+                    </span>
+                    <span
+                      className={cn(
+                        "min-w-0 flex-1 truncate text-[15px]",
+                        live ? "font-extrabold" : done ? "text-muted-foreground" : "font-bold",
+                      )}
+                    >
+                      {it.title}
+                    </span>
+                    {live ? (
+                      <span className="shrink-0 text-[11.5px] text-muted-foreground">ao vivo, travado</span>
+                    ) : null}
+                  </div>
+                  {movivel ? (
+                    <div className="flex shrink-0 flex-col">
+                      <button
+                        onPointerDown={(e) => beginReorder(e, it)}
+                        onClick={(e) => e.stopPropagation()}
+                        aria-label={`Arrastar ${it.title}`}
+                        style={{ touchAction: "none" }}
+                        className="grid h-11 w-9 cursor-grab place-items-center rounded-lg text-muted-foreground/60 active:cursor-grabbing"
+                      >
+                        <GripVertical className="size-5" />
+                      </button>
+                    </div>
+                  ) : null}
+                  {movivel ? (
+                    <div className="flex shrink-0 flex-col gap-0.5">
+                      <button
+                        onClick={() => moverUma(it.id, -1)}
+                        aria-label={`Mover ${it.title} para cima`}
+                        className="grid h-5 w-8 place-items-center rounded text-muted-foreground hover:bg-muted"
+                      >
+                        <ChevronUp className="size-4" />
+                      </button>
+                      <button
+                        onClick={() => moverUma(it.id, 1)}
+                        aria-label={`Mover ${it.title} para baixo`}
+                        className="grid h-5 w-8 place-items-center rounded text-muted-foreground hover:bg-muted"
+                      >
+                        <ChevronDown className="size-4" />
+                      </button>
+                    </div>
+                  ) : null}
+                </li>
+              );
+            }
+
+            if (modo === "observacoes") {
+              /* SO NOME E OBSERVACAO. Todo o resto — horario, duracao, contador,
+                 responsavel — ja esta no cronograma, a um toque de distancia.
+                 Repetir aqui seria transformar a tela de LER numa segunda copia
+                 da tela de conduzir, e aí nao serviria pra nenhuma das duas. */
+              return (
+                <li key={it.id} className="flex gap-2">
+                  <i
+                    className="mt-1 h-full w-1 shrink-0 rounded-full"
+                    style={{ backgroundColor: color, opacity: done ? 0.4 : 1 }}
+                  />
+                  <div className="min-w-0 flex-1 pb-3">
+                    <p
+                      className={cn(
+                        "font-display text-[17px] font-extrabold leading-tight",
+                        done && "text-muted-foreground line-through",
+                        live && "text-primary",
+                      )}
+                    >
+                      {it.title}
+                    </p>
+                    {it.note ? (
+                      <p className="mt-1 whitespace-pre-wrap break-words text-[14px] leading-snug text-foreground/80">
+                        {it.note}
+                      </p>
+                    ) : (
+                      <p className="mt-1 text-[13px] italic text-muted-foreground">Sem observação</p>
+                    )}
+                  </div>
+                </li>
+              );
+            }
+
             /* =========================== O HEROI ===========================
                O bloco AO VIVO deixa de ser uma linha como as outras e vira o
                unico objeto quente da tela — com a unica barra dourada do app
@@ -1107,7 +1221,7 @@ export function RundownGrid({
                longa fica com clamp aqui, e inteira no modo leitura (que o heroi
                tambem obedece, logo abaixo — a primeira versao deste passo
                esqueceu disso e o comentario mentia). */
-            if (live && canEdit) {
+            if (live && canEdit && modo === "conduzir") {
               return (
                 <li
                   key={it.id}
@@ -1165,31 +1279,24 @@ export function RundownGrid({
                         <div className="mt-0.5 font-display text-[29px] font-extrabold tabular-nums">
                           {restanteMs >= 0 ? clock(restanteMs) : "\u2212" + clock(-restanteMs)}
                         </div>
+                        {/* QUANDO ESTE BLOCO COMECOU — pedido do dono vendo a
+                            tela. Sem isso o heroi so dizia quanto FALTA, e
+                            "faltam 5 min" nao responde "ha quanto tempo estamos
+                            nisso?", que e a pergunta de quem conduz. */}
+                        <div className="mt-1 text-[11px] tabular-nums text-white/60">
+                          comecou {fmt(startMs)}
+                        </div>
                       </div>
                     </div>
 
-                    {/* O HEROI TAMBEM OBEDECE O MODO LEITURA — e isto era um
-                        buraco: o desgrudar do clamp existia so no ramo das linhas
-                        comuns, entao o bloco AO VIVO, cujo setlist e o que mais
-                        importa, era o unico que continuava cortado. E quem entra
-                        no modo e exatamente quem ve o heroi.
+                    {/* Uma linha de observacao ja no heroi — pedido do dono
+                        vendo a tela: "no hero tinha que pelo menos aparecer 1
+                        linha de observacao". O resto se le no modo observacoes,
+                        que agora e uma tela enxuta de nome + nota e nada mais. */}
+                    <p className="mt-1 line-clamp-2 h-9 whitespace-pre-wrap break-words text-[13px] leading-tight text-white/85">
+                      {[it.responsible, it.note].filter(Boolean).join(" · ")}
+                    </p>
 
-                        No modo, o responsavel ganha linha propria em vez de
-                        dividir as duas linhas com a nota: eles sao coisas
-                        diferentes, e juntar os dois com " · " transformava um
-                        setlist de quatro musicas em uma frase. */}
-                    {modo === "observacoes" ? (
-                      <div className="mt-1 min-h-0 flex-1 overflow-y-auto text-[13px] leading-tight text-white/85">
-                        {it.responsible ? <p className="font-bold">{it.responsible}</p> : null}
-                        {it.note ? <p className="whitespace-pre-wrap break-words">{it.note}</p> : null}
-                      </div>
-                    ) : (
-                      <p className="mt-1 line-clamp-2 h-9 whitespace-pre-wrap break-words text-[13px] leading-tight text-white/85">
-                        {[it.responsible, it.note].filter(Boolean).join(" · ")}
-                      </p>
-                    )}
-
-                    {/* Quanto falta SEM ler numero — leitura periferica. */}
                     {/* QUANTO FALTA SEM LER NUMERO. Ela estava fina demais e
                         colada no botao — lida como risco de separacao, nao como
                         medida. Agora tem corpo (h-2), respira dos dois lados e
@@ -1212,12 +1319,10 @@ export function RundownGrid({
                           onClick={() => marcarFeito(it)}
                           className="press flex h-[52px] w-full flex-col items-center justify-center rounded-2xl bg-[hsl(42_78%_60%)] text-[hsl(32_70%_16%)] shadow-[0_6px_18px_hsl(42_78%_60%/.32)]"
                         >
-                          <span className="text-[15px] font-bold">Concluir {it.title}</span>
-                          {rows[idx + 1] ? (
-                            <span className="mt-0.5 text-[11px] font-bold opacity-70">
-                              vai pra {rows[idx + 1].it.title}
-                            </span>
-                          ) : null}
+                          {/* Uma linha so. O "vai pra Palavra" saiu a pedido do
+                              dono: ele engordava o botao pra dizer o que a linha
+                              logo abaixo do heroi ja mostra. */}
+                          <span className="text-[15px] font-extrabold">Concluir {it.title}</span>
                         </button>
                       ) : (
                         /* O FIO. Nos 1,2s depois de QUALQUER troca de bloco ao
@@ -1404,13 +1509,9 @@ export function RundownGrid({
                         observação de seis linhas não pode empurrar o roteiro inteiro. */}
                     {it.note ? (
                       <p
-                        className={cn(
-                          "mt-0.5 whitespace-pre-wrap break-words text-[13px] text-muted-foreground",
-                          // No modo leitura a nota abre inteira. E o unico lugar
-                          // do app onde a linha do bloco pode crescer sem limite,
-                          // e ali isso e o recurso, nao o defeito.
-                          modo === "observacoes" ? null : "line-clamp-3",
-                        )}
+                        // Cortada em tres linhas: a nota inteira e trabalho do
+                        // modo observacoes, que tem tela propria pra isso.
+                        className="mt-0.5 line-clamp-3 whitespace-pre-wrap break-words text-[13px] text-muted-foreground"
                       >
                         {it.note}
                       </p>
@@ -1446,7 +1547,14 @@ export function RundownGrid({
                       do bloco agora ficam no MESMO trilho, um sob o outro, em vez
                       de um em cada quina. Tique primeiro (é o gesto de todo
                       domingo), alça depois (é o de montar). */}
-                  {/* REABRIR EXISTE EM UM PIXEL SO DA TELA INTEIRA: a linha do
+                  {/* O TIQUE SUMIU DE VEZ. Ele ja tinha deixado de ser botao;
+                      agora sai da tela. Com a altura dizendo o estado (52 feito,
+                      92 futuro), o risco no titulo e o "levou 24 min", o circulo
+                      so repetia o que tres outros sinais ja diziam — e o circulo
+                      VAZIO dos futuros nao dizia nada. Em troca a linha ganhou 36
+                      px de largura, que e exatamente o que faltava pro conteudo.
+
+                      REABRIR EXISTE EM UM PIXEL SO DA TELA INTEIRA: a linha do
                       ULTIMO bloco concluido. Nao no heroi (onde brigaria com a
                       barra dourada), nao em todo concluido (onde seriam N alvos
                       de rebobinar o culto espalhados pela lista).
@@ -1461,70 +1569,12 @@ export function RundownGrid({
                         e.stopPropagation();
                         desmarcarFeito(it);
                       }}
-                      className="press mr-1 flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-border bg-card px-3 text-[13px] font-bold text-foreground"
+                      className="press mx-2 flex h-9 shrink-0 items-center gap-1.5 self-center rounded-full border border-border bg-card px-3 text-[13px] font-bold text-foreground"
                     >
                       <RotateCcw className="size-3.5" /> Reabrir
                     </button>
                   ) : null}
 
-                  <div className="flex w-9 shrink-0 flex-col items-center gap-1 py-2">
-                    {/* O TIQUE DEIXOU DE SER BOTAO — virou so o estado do bloco.
-                        Ele era um alvo de 36px colado na borda de um card cuja
-                        superficie inteira abre o modal, e era assim que a equipe
-                        concluia bloco sem querer no meio do culto: mirando o card
-                        e acertando o circulo. Quem conclui agora e a barra
-                        dourada dentro do heroi, que e 15x maior e mora num lugar
-                        so da tela.
-
-                        Some junto a discussao de 44px (nao ha mais alvo pequeno
-                        pra acertar) e some o `BotaoSegurar` que ficava aqui com
-                        `touch-action: none` fixo em TODO bloco concluido, criando
-                        uma faixa onde a pagina nao rolava. */}
-                    <span
-                      aria-label={done ? "Bloco concluido" : "Bloco pendente"}
-                      className={cn(
-                        "grid size-9 shrink-0 place-items-center rounded-full",
-                        done ? "bg-success text-white" : "border-2 border-border",
-                      )}
-                    >
-                      {done ? <Check className="size-4" strokeWidth={3.5} /> : null}
-                    </span>
-
-                    {canEdit && modo === "reordenar" && podeMover(it.id) ? (
-                      /* AS SETAS. Elas não são enfeite de acessibilidade: são o
-                         único caminho de teclado e de leitor de tela pra mover um
-                         bloco, porque arraste não tem equivalente. E servem ao
-                         dedo que prefere precisão a gesto. */
-                      <div className="flex flex-col">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); moverUma(it.id, -1); }}
-                          aria-label={`Mover ${it.title} para cima`}
-                          className="grid h-5 w-9 place-items-center rounded text-muted-foreground hover:bg-muted"
-                        >
-                          <ChevronUp className="size-4" />
-                        </button>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); moverUma(it.id, 1); }}
-                          aria-label={`Mover ${it.title} para baixo`}
-                          className="grid h-5 w-9 place-items-center rounded text-muted-foreground hover:bg-muted"
-                        >
-                          <ChevronDown className="size-4" />
-                        </button>
-                      </div>
-                    ) : null}
-
-                    {canEdit && modo === "reordenar" && podeMover(it.id) ? (
-                      <button
-                        onPointerDown={(e) => beginReorder(e, it)}
-                        onClick={(e) => e.stopPropagation()}
-                        aria-label="Arrastar pra reordenar"
-                        style={{ touchAction: "none" }}
-                        className="grid size-9 shrink-0 cursor-grab place-items-center rounded-lg text-muted-foreground/60 hover:bg-muted active:cursor-grabbing"
-                      >
-                        <GripVertical className="size-5" />
-                      </button>
-                    ) : null}
-                  </div>
                 </div>
               </li>
             );
@@ -1557,50 +1607,57 @@ export function RundownGrid({
       ) : null}
 
       {canEdit && modo === "conduzir" ? (
-        <div className="mt-2 flex gap-2">
+        /* OS TRES COM NOME ESCRITO. Icone sozinho nao ensina — o proprio arquivo
+           ja tinha aprendido isso com a pastilha de duracao ("ninguem adivinharia
+           que se toca nela sem uma pista visual"), e o dono repetiu vendo a tela:
+           "so o simbolo nao ajuda a entender".
+
+           Empilhados em coluna dentro de cada botao, os tres cabem lado a lado
+           num iPhone SE com folga — em linha, "Observacoes" sozinha ja estouraria.
+
+           MODELOS E TIPOS continuam so como icone, e so fora do culto: sao
+           ferramenta de montagem, e nas palavras do dono "nao e essa hora de usar
+           isso". Nao foram removidos, foram postos na hora certa. */
+        <div className="mt-2 flex items-stretch gap-2">
           <button
             onClick={() => setEditing("new")}
-            className="press flex flex-1 items-center justify-center gap-2 rounded-2xl border border-dashed border-primary/40 py-3 text-sm font-bold text-primary"
+            className="press flex flex-1 flex-col items-center justify-center gap-1 rounded-2xl border border-dashed border-primary/40 py-2.5 text-[12.5px] font-bold text-primary"
           >
-            <Plus className="size-4" /> Adicionar bloco
+            <Plus className="size-5" />
+            Bloco
           </button>
-          {/* MODELOS E TIPOS SAO FERRAMENTA DE MONTAGEM, e somem com o culto no
-              ar. Nas palavras do dono vendo a tela: "nao e essa hora de usar
-              isso". Nao foram removidos — voltam sozinhos quando o culto nao
-              esta rolando, que e quando alguem de fato monta roteiro. */}
+          <button
+            onClick={() => setModo("reordenar")}
+            className="press flex flex-1 flex-col items-center justify-center gap-1 rounded-2xl border border-dashed border-border py-2.5 text-[12.5px] font-bold text-muted-foreground"
+          >
+            <GripVertical className="size-5" />
+            Reordenar
+          </button>
+          {/* LER OS PROXIMOS. A observacao guarda setlist e passagens (dado de
+              producao: 10 das 13 notas ja sao lista), e na lista ela vive cortada
+              pra nao empurrar o roteiro. No modo ela abre inteira, em todos os
+              blocos — que e como alguem se prepara pro que vem. */}
+          <button
+            onClick={() => setModo("observacoes")}
+            className="press flex flex-1 flex-col items-center justify-center gap-1 rounded-2xl border border-dashed border-border py-2.5 text-[12.5px] font-bold text-muted-foreground"
+          >
+            <FileText className="size-5" />
+            Observações
+          </button>
           {!started || ended ? (
             <button
               onClick={() => setManageTpl(true)}
               aria-label="Modelos de cronograma"
-              className="press grid w-12 place-items-center rounded-2xl border border-dashed border-border text-muted-foreground"
+              className="press grid w-11 shrink-0 place-items-center rounded-2xl border border-dashed border-border text-muted-foreground"
             >
               <LayoutTemplate className="size-5" />
             </button>
           ) : null}
-          <button
-            onClick={() => setModo("reordenar")}
-            aria-label="Reordenar blocos"
-            className="press grid w-12 place-items-center rounded-2xl border border-dashed border-border text-muted-foreground"
-          >
-            <GripVertical className="size-5" />
-          </button>
-          {/* LER OS PROXIMOS. A observacao guarda setlist e passagens (dado de
-              producao: 10 das 13 notas ja sao lista), e na lista ela vive cortada
-              em tres linhas pra nao empurrar o roteiro. Aqui ela abre inteira, em
-              todos os blocos de uma vez — que e como alguem se prepara pro que
-              vem. Ler e um trabalho diferente de conduzir, e por isso e um modo. */}
-          <button
-            onClick={() => setModo("observacoes")}
-            aria-label="Ver observacoes de todos os blocos"
-            className="press grid w-12 place-items-center rounded-2xl border border-dashed border-border text-muted-foreground"
-          >
-            <FileText className="size-5" />
-          </button>
           {!started || ended ? (
             <button
               onClick={() => setManageKinds(true)}
               aria-label="Gerenciar tipos"
-              className="press grid w-12 place-items-center rounded-2xl border border-dashed border-border text-muted-foreground"
+              className="press grid w-11 shrink-0 place-items-center rounded-2xl border border-dashed border-border text-muted-foreground"
             >
               <Settings2 className="size-5" />
             </button>
