@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import {
   Plus,
   Trash2,
+  ChevronDown,
+  ChevronUp,
   GripVertical,
   Check,
   Play,
@@ -254,6 +256,15 @@ export function RundownGrid({
   const [started, setStarted] = useState<string | null>(startedAt);
   const [ended, setEnded] = useState<string | null>(endedAt);
   const [drag, setDrag] = useState<Drag>(null);
+  /**
+   * MODO DA TELA. Conduzir é o domingo; reordenar é montar.
+   *
+   * Virou modo porque arrastar solto no meio da lista é ambíguo por natureza —
+   * o mesmo dedo, no mesmo pixel, pode querer rolar ou mover, e nenhum limiar
+   * resolve isso de verdade (só desloca a fronteira do erro). Num modo, a
+   * pergunta não existe: ali dentro, dedo que anda MOVE.
+   */
+  const [modo, setModo] = useState<"conduzir" | "reordenar">("conduzir");
   const [editing, setEditing] = useState<RundownItem | "new" | null>(null);
   const [contributing, setContributing] = useState<RundownItem | null>(null);
   const [manageKinds, setManageKinds] = useState(false);
@@ -291,7 +302,13 @@ export function RundownGrid({
   // O popover entra na conta: um refresh chegando entre dois toques no "+" traria
   // o `items` antigo do servidor e o número pularia pra trás debaixo do dedo.
   const ocupado =
-    drag !== null || editing !== null || contributing !== null || manageKinds || manageTpl || duracaoAberta !== null;
+    drag !== null ||
+    // O MODO INTEIRO É "mão na massa", não só o instante do arraste. Sem isto o
+    // tempo real reescreve `items` no meio da reorganização e a ordem que a
+    // pessoa está montando se desfaz debaixo dela — e ela não teria como saber
+    // que foi o servidor, ia achar que o próprio dedo errou.
+    modo !== "conduzir" ||
+    editing !== null || contributing !== null || manageKinds || manageTpl || duracaoAberta !== null;
   // O ritmo NUNCA fica mais lento que a verdade do servidor. `started`/`ended`
   // são otimistas: servem pra ACELERAR no instante em que a pessoa toca
   // Iniciar, nunca pra desacelerar por causa de uma action que falhou — um
@@ -471,7 +488,14 @@ export function RundownGrid({
     // quando o certo é [B,A,C]. Só acontecia PRA BAIXO — pra cima os índices não
     // se deslocam —, e é essa assimetria que fazia o gesto parecer aleatório em
     // vez de só sensível.
-    const alvo = vaga > from ? vaga - 1 : vaga;
+    let alvo = vaga > from ? vaga - 1 : vaga;
+    // TRAVA NO PISO. Sem isto o dedo arrasta o bloco pra cima do ao vivo e o
+    // culto teleporta pra ele — o `liveIdx` é derivado da ordem, então "subiu
+    // acima do ao vivo" e "virou o ao vivo" são a mesma coisa. O bloco encosta
+    // no piso e para, em vez de recusar o gesto inteiro: parar é legível, e
+    // recusar no meio do arraste pareceria travamento.
+    const piso = pisoRef.current;
+    if (alvo <= piso) alvo = piso + 1;
     if (alvo !== from) {
       const next = [...cur];
       const [moved] = next.splice(from, 1);
@@ -581,11 +605,35 @@ export function RundownGrid({
   // `persistOrder` de uma tela que não existe mais.
   useEffect(() => () => soltarListeners(), [soltarListeners]);
 
+  /**
+   * MOVER UMA CASA, pelo botão. É o caminho de teclado e de leitor de tela — o
+   * arraste não tem equivalente acessível, e sem isto o modo seria inalcançável
+   * pra quem navega por Tab. Também serve pro dedo que prefere precisão a gesto.
+   */
+  const moverUma = (id: string, delta: -1 | 1) => {
+    const cur = listRef.current;
+    const from = cur.findIndex((x) => x.id === id);
+    if (from === -1) return;
+    const alvo = from + delta;
+    // Mesmo piso do arraste: nada passa pra cima do bloco ao vivo.
+    if (alvo <= pisoRef.current || alvo >= cur.length) return;
+    const next = [...cur];
+    const [moved] = next.splice(from, 1);
+    next.splice(alvo, 0, moved);
+    setList(next);
+    persistOrderRef.current(next);
+    setFlashId(id);
+    window.setTimeout(() => setFlashId(null), 900);
+  };
+
   const beginReorder = (e: React.PointerEvent, it: RundownItem) => {
     // Só o botão primário arma. Antes, botão direito do mouse também armava — e no
     // computador da régia o menu de contexto engole o pointerup, o que reproduzia
     // exatamente o travamento do pointercancel.
     if (e.button !== 0) return;
+    // Só dentro do modo, e só abaixo do piso. Fora do modo o dedo na lista é
+    // rolagem, sempre — que é o que acaba com a ambiguidade de vez.
+    if (modo !== "reordenar" || !podeMover(it.id)) return;
     e.preventDefault();
     e.stopPropagation();
     // Um gesto por vez: se sobrou algo de um anterior, encerra sem gravar.
@@ -763,6 +811,29 @@ export function RundownGrid({
   // nunca com a mão na massa (arraste/modal aberto). Reusa o mapa de refs que o
   // arraste já mantém.
   const blocoAtivoId = rows.find((r) => r.status === "live")?.it.id ?? null;
+
+  /**
+   * O PISO: o último índice que já é passado ou presente. Nada se move até aqui.
+   *
+   * É a resposta pra "quem fica ao vivo quando alguém reordena?" — e a resposta
+   * só é simples porque o ao vivo é DERIVADO, não guardado: `liveIdx` é o
+   * primeiro bloco sem `done_at` (rundown-timing). Se um bloco futuro pudesse
+   * subir acima do ao vivo, ele passaria a ser o primeiro-sem-done e o culto
+   * TELEPORTARIA pra ele — o monitor de palco trocaria e a ponte reiniciaria o
+   * cronômetro, tudo isso como efeito colateral de arrastar um card.
+   *
+   * Com o piso, reordenar mexe só no FUTURO: `liveIdx` não pode mudar, e a
+   * projeção de horários não anda pra trás (ela é ancorada nos `done_at`, que
+   * ficam todos acima do piso). O caso real que motivou o modo continua
+   * atendido: louvor ao vivo, palavra e oferta trocando de lugar abaixo dele.
+   */
+  const pisoIdx = rows.reduce((acc, r, i) => (r.status === "done" || r.status === "live" ? i : acc), -1);
+  const podeMover = (id: string) => rows.findIndex((r) => r.it.id === id) > pisoIdx;
+  // Espelhado em ref porque `onPointerMove` é um useCallback estável (deps []) e
+  // não pode fechar sobre um valor que muda a cada render — mesma razão do
+  // `listRef` logo acima.
+  const pisoRef = useRef(pisoIdx);
+  pisoRef.current = pisoIdx;
   useEffect(() => {
     if (!blocoAtivoId || !started || ended || ocupadoRef.current || tiqueNossoRef.current) return;
     itemRefs.current.get(blocoAtivoId)?.scrollIntoView({ block: "center", behavior: "smooth" });
@@ -1208,7 +1279,30 @@ export function RundownGrid({
                       </span>
                     )}
 
-                    {canEdit ? (
+                    {canEdit && modo === "reordenar" && podeMover(it.id) ? (
+                      /* AS SETAS. Elas não são enfeite de acessibilidade: são o
+                         único caminho de teclado e de leitor de tela pra mover um
+                         bloco, porque arraste não tem equivalente. E servem ao
+                         dedo que prefere precisão a gesto. */
+                      <div className="flex flex-col">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); moverUma(it.id, -1); }}
+                          aria-label={`Mover ${it.title} para cima`}
+                          className="grid h-5 w-9 place-items-center rounded text-muted-foreground hover:bg-muted"
+                        >
+                          <ChevronUp className="size-4" />
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); moverUma(it.id, 1); }}
+                          aria-label={`Mover ${it.title} para baixo`}
+                          className="grid h-5 w-9 place-items-center rounded text-muted-foreground hover:bg-muted"
+                        >
+                          <ChevronDown className="size-4" />
+                        </button>
+                      </div>
+                    ) : null}
+
+                    {canEdit && modo === "reordenar" && podeMover(it.id) ? (
                       <button
                         onPointerDown={(e) => beginReorder(e, it)}
                         onClick={(e) => e.stopPropagation()}
@@ -1237,7 +1331,21 @@ export function RundownGrid({
         </BotaoSegurar>
       ) : null}
 
-      {canEdit ? (
+      {canEdit && modo === "reordenar" ? (
+        /* O RODAPÉ DO MODO. "Pronto" é confirmação de saída, não de gravação —
+           cada movimento já foi gravado quando aconteceu. Chamar de "Salvar"
+           faria a pessoa achar que sair sem tocar desfaz, e não desfaz. */
+        <div className="mt-2 flex items-center gap-3">
+          <button
+            onClick={() => setModo("conduzir")}
+            className="press flex-1 rounded-2xl bg-primary py-3 text-sm font-extrabold text-primary-foreground"
+          >
+            Pronto
+          </button>
+        </div>
+      ) : null}
+
+      {canEdit && modo === "conduzir" ? (
         <div className="mt-2 flex gap-2">
           <button
             onClick={() => setEditing("new")}
@@ -1251,6 +1359,13 @@ export function RundownGrid({
             className="press grid w-12 place-items-center rounded-2xl border border-dashed border-border text-muted-foreground"
           >
             <LayoutTemplate className="size-5" />
+          </button>
+          <button
+            onClick={() => setModo("reordenar")}
+            aria-label="Reordenar blocos"
+            className="press grid w-12 place-items-center rounded-2xl border border-dashed border-border text-muted-foreground"
+          >
+            <GripVertical className="size-5" />
           </button>
           <button
             onClick={() => setManageKinds(true)}
