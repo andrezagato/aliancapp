@@ -1281,29 +1281,30 @@ export function RundownGrid({
                       </div>
                     </div>
 
-                    <p className="mt-2.5 truncate font-display text-[23px] font-extrabold leading-none">
-                      {it.title}
-                    </p>
+                    {/* GRADE, E NAO DUAS PILHAS. O titulo ficava FORA da divisao,
+                        entao a coluna da direita so comecava embaixo dele — e o
+                        "RESTAM" nascia alinhado com a primeira linha da observacao
+                        em vez de com o nome do bloco. O dono viu na tela e a
+                        leitura dele esta certa: contador e nome sao PARES, os dois
+                        respondem "o que esta acontecendo", e par que nao alinha
+                        parece desalinho.
 
-                    {/* DUAS COLUNAS: observacao a esquerda, numeros e acao a
-                        direita — a planta do dono.
+                        A coluna da direita atravessa as duas linhas (`row-span-2`),
+                        entao ela comeca no topo do titulo. O titulo continua com a
+                        largura da coluna esquerda inteira, sem apertar.
 
-                        O botao a meia largura foi decisao dele, contra a minha:
-                        eu tinha defendido largura cheia pelo tamanho do alvo. A
-                        conta fecha mesmo assim — ~148 x 64 da ~9.500px2, contra
-                        os 1.296 do tique que ele substitui. Continua 7x maior, e
-                        em troca a observacao ganha uma coluna inteira, que era o
-                        que faltava pro setlist caber. */}
-                    {/* A COLUNA DA DIREITA DEFINE A ALTURA DO HEROI, e a
-                        observacao e cortada por ela — decisao do dono: "se for
-                        maior, vai cortar sem problemas". O texto inteiro se le no
-                        modo observacoes, que existe pra isso.
-                        `h-[130px]` = RESTAM (14) + contador (29) + comecou (16) +
-                        respiro (7) + botao (64). Fixa de proposito: se a altura
-                        viesse do texto, um setlist de dez linhas esticaria o heroi
-                        e empurraria o botao pra fora da tela. */}
-                    <div className="mt-2 flex h-[130px] gap-3">
-                      <div className="min-w-0 flex-1 overflow-hidden">
+                        A ALTURA da grade e fixa e vem da direita: rotulo + contador
+                        + "comecou" + botao. Se viesse do texto, um setlist de dez
+                        linhas esticaria o heroi e empurraria o botao pra fora da
+                        tela — no meio do culto, que e quando ele mais precisa estar
+                        a mao. Observacao maior que isso e cortada, e se le inteira
+                        no modo observacoes. */}
+                    <div className="mt-2.5 grid h-[152px] grid-cols-[1fr_150px] grid-rows-[auto_1fr] gap-x-3">
+                      <p className="col-start-1 row-start-1 truncate font-display text-[23px] font-extrabold leading-none">
+                        {it.title}
+                      </p>
+
+                      <div className="col-start-1 row-start-2 mt-1.5 min-h-0 overflow-hidden">
                         {it.responsible ? (
                           <p className="truncate text-[12.5px] font-bold text-white/70">{it.responsible}</p>
                         ) : null}
@@ -1314,21 +1315,21 @@ export function RundownGrid({
                         ) : null}
                       </div>
 
-                      <div className="flex w-[150px] shrink-0 flex-col text-right leading-none">
+                      <div className="col-start-2 row-span-2 row-start-1 flex flex-col text-right leading-none">
                         <div className="text-[11px] font-extrabold uppercase tracking-[.1em] text-white/70">
                           {restanteMs >= 0 ? "restam" : "estourou"}
                         </div>
-                        {/* `leading-none` + `break-all` porque o contador estourado
-                            de um culto longo vira "-2:22:14" e antes ele TRANSBORDAVA
-                            pra cima, aterrissando em cima do botao Editar. */}
-                        <div className="mt-0.5 break-all font-display text-[29px] font-extrabold leading-none tabular-nums">
+                        {/* `break-all` porque o contador estourado de um culto longo
+                            vira "-2:22:14" e precisa quebrar em vez de escapar da
+                            caixa — antes ele aterrissava em cima do botao Editar. */}
+                        <div className="mt-1 break-all font-display text-[29px] font-extrabold leading-none tabular-nums">
                           {restanteMs >= 0 ? clock(restanteMs) : "\u2212" + clock(-restanteMs)}
                         </div>
-                        <div className="mt-1 text-[11px] tabular-nums text-white/60">
+                        <div className="mt-1.5 text-[11px] tabular-nums text-white/60">
                           comecou {fmt(startMs)}
                         </div>
 
-                        <div className="mt-auto pt-2">
+                        <div className="mt-auto">
                           {barraPronta ? (
                             <button
                               onClick={() => marcarFeito(it)}
