@@ -1232,17 +1232,39 @@ export function RundownGrid({
                 >
                   <div
                     className={cn(
-                      "relative flex min-h-[212px] flex-col overflow-hidden rounded-[22px] p-4 text-white shadow-lift",
+                      "relative flex flex-col overflow-hidden rounded-[22px] p-4 text-white shadow-lift",
                       liveRed
                         ? "bg-gradient-to-br from-[hsl(349_72%_32%)] to-[hsl(349_69%_14%)]"
                         : "bg-gradient-to-br from-[hsl(349_72%_28%)] to-[hsl(349_69%_15%)]",
                     )}
                   >
-                    {/* LINHA 1 — o rotulo e as duas unicas pastilhas. */}
-                    <div className="flex h-9 items-center justify-between gap-2">
-                      <span className="truncate text-[11px] font-extrabold uppercase tracking-[.14em] text-[hsl(42_78%_66%)]">
-                        {liveRed ? "Ao vivo · estourou" : "Ao vivo"}
-                      </span>
+                    {/* LINHA 1 — o rotulo e o progresso EMPILHAM na altura dos
+                        botoes, e isso e pura recuperacao de espaco: as pastilhas
+                        tem 36px e o rotulo "Ao vivo" e uma linha de 11px centrada
+                        nelas, entao sobravam ~20px de nada. O progresso passa a
+                        ocupar essa sobra, comecando alinhado com o rotulo e indo
+                        ate onde o "+5 min" comeca.
+
+                        Ideia do dono olhando a tela — e alem de devolver altura,
+                        junta as duas coisas que respondem "como esta o bloco AGORA"
+                        no mesmo canto. */}
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex min-w-0 flex-1 flex-col justify-between self-stretch py-0.5">
+                        <span className="truncate text-[11px] font-extrabold uppercase tracking-[.14em] text-[hsl(42_78%_66%)]">
+                          {liveRed ? "Ao vivo · estourou" : "Ao vivo"}
+                        </span>
+                        <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-black/25">
+                          <i
+                            className={cn(
+                              "block h-full rounded-full transition-[width] duration-500",
+                              liveRed ? "bg-[hsl(6_62%_62%)]" : "bg-[hsl(42_78%_60%)]",
+                            )}
+                            style={{
+                              width: Math.min(100, Math.max(0, (elapsedMs / Math.max(1, durMs)) * 100)) + "%",
+                            }}
+                          />
+                        </div>
+                      </div>
                       <div className="flex shrink-0 gap-2">
                         <button
                           onClick={() => salvarDuracao(it.id, it.durationMin + 5)}
@@ -1259,24 +1281,7 @@ export function RundownGrid({
                       </div>
                     </div>
 
-                    {/* LINHA 2 — o progresso subiu pro topo. Ali ele e status, e
-                        status pertence perto do cabecalho; embaixo ele encostava
-                        no botao e lia como risco de separacao. */}
-                    <div className="mt-2.5 h-2 shrink-0 overflow-hidden rounded-full bg-black/25">
-                      <i
-                        className={cn(
-                          "block h-full rounded-full transition-[width] duration-500",
-                          liveRed ? "bg-[hsl(6_62%_62%)]" : "bg-[hsl(42_78%_60%)]",
-                        )}
-                        style={{
-                          width: Math.min(100, Math.max(0, (elapsedMs / Math.max(1, durMs)) * 100)) + "%",
-                        }}
-                      />
-                    </div>
-
-                    {/* LINHA 3 — o nome, colado no progresso. O respiro de antes
-                        era grande demais e o dono viu na tela. */}
-                    <p className="mt-2 truncate font-display text-[23px] font-extrabold leading-none">
+                    <p className="mt-2.5 truncate font-display text-[23px] font-extrabold leading-none">
                       {it.title}
                     </p>
 
@@ -1289,7 +1294,15 @@ export function RundownGrid({
                         os 1.296 do tique que ele substitui. Continua 7x maior, e
                         em troca a observacao ganha uma coluna inteira, que era o
                         que faltava pro setlist caber. */}
-                    <div className="mt-2 flex min-h-0 flex-1 gap-3">
+                    {/* A COLUNA DA DIREITA DEFINE A ALTURA DO HEROI, e a
+                        observacao e cortada por ela — decisao do dono: "se for
+                        maior, vai cortar sem problemas". O texto inteiro se le no
+                        modo observacoes, que existe pra isso.
+                        `h-[130px]` = RESTAM (14) + contador (29) + comecou (16) +
+                        respiro (7) + botao (64). Fixa de proposito: se a altura
+                        viesse do texto, um setlist de dez linhas esticaria o heroi
+                        e empurraria o botao pra fora da tela. */}
+                    <div className="mt-2 flex h-[130px] gap-3">
                       <div className="min-w-0 flex-1 overflow-hidden">
                         {it.responsible ? (
                           <p className="truncate text-[12.5px] font-bold text-white/70">{it.responsible}</p>
@@ -1301,7 +1314,7 @@ export function RundownGrid({
                         ) : null}
                       </div>
 
-                      <div className="flex w-[150px] shrink-0 flex-col text-right">
+                      <div className="flex w-[150px] shrink-0 flex-col text-right leading-none">
                         <div className="text-[11px] font-extrabold uppercase tracking-[.1em] text-white/70">
                           {restanteMs >= 0 ? "restam" : "estourou"}
                         </div>
