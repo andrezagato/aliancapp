@@ -1232,20 +1232,18 @@ export function RundownGrid({
                 >
                   <div
                     className={cn(
-                      "relative flex h-[200px] flex-col overflow-hidden rounded-[22px] p-4 text-white shadow-lift",
+                      "relative flex min-h-[212px] flex-col overflow-hidden rounded-[22px] p-4 text-white shadow-lift",
                       liveRed
                         ? "bg-gradient-to-br from-[hsl(349_72%_32%)] to-[hsl(349_69%_14%)]"
                         : "bg-gradient-to-br from-[hsl(349_72%_28%)] to-[hsl(349_69%_15%)]",
                     )}
                   >
-                    <div className="flex h-9 items-center justify-between">
-                      <span className="text-[11px] font-extrabold uppercase tracking-[.14em] text-[hsl(42_78%_66%)]">
+                    {/* LINHA 1 — o rotulo e as duas unicas pastilhas. */}
+                    <div className="flex h-9 items-center justify-between gap-2">
+                      <span className="truncate text-[11px] font-extrabold uppercase tracking-[.14em] text-[hsl(42_78%_66%)]">
                         {liveRed ? "Ao vivo · estourou" : "Ao vivo"}
                       </span>
-                      <div className="flex gap-2">
-                        {/* SO O +5. Encurtar o bloco que esta no palco joga o
-                            contador pro estouro na frente do pregador; o -5 mora
-                            no sheet, onde ninguem chega por acidente. */}
+                      <div className="flex shrink-0 gap-2">
                         <button
                           onClick={() => salvarDuracao(it.id, it.durationMin + 5)}
                           className="h-9 rounded-xl bg-white/[.13] px-3.5 text-[13px] font-bold text-[hsl(44_70%_96%)]"
@@ -1261,47 +1259,10 @@ export function RundownGrid({
                       </div>
                     </div>
 
-                    <div className="mt-1.5 flex h-10 items-end justify-between gap-3">
-                      <span className="truncate font-display text-[23px] font-extrabold leading-none">
-                        {it.title}
-                      </span>
-                      <div className="shrink-0 text-right leading-none">
-                        {/* NA REGUA DO DESIGN.md, e nao ao lado dela. Eu tinha
-                            escrito 34px e 10px porque "o contador precisa ser lido
-                            de longe" — o que e verdade, mas 29px (o degrau de
-                            Display, documentado como "titulo dentro do heroi
-                            vinho") tambem e lido de longe, e continua sendo a
-                            maior coisa da tela. Esticar a regua em 5px pra provar
-                            um ponto que ela ja provava seria drift meu. */}
-                        <div className="text-[11px] font-extrabold uppercase tracking-[.1em] text-white/70">
-                          {restanteMs >= 0 ? "restam" : "estourou"}
-                        </div>
-                        <div className="mt-0.5 font-display text-[29px] font-extrabold tabular-nums">
-                          {restanteMs >= 0 ? clock(restanteMs) : "\u2212" + clock(-restanteMs)}
-                        </div>
-                        {/* QUANDO ESTE BLOCO COMECOU — pedido do dono vendo a
-                            tela. Sem isso o heroi so dizia quanto FALTA, e
-                            "faltam 5 min" nao responde "ha quanto tempo estamos
-                            nisso?", que e a pergunta de quem conduz. */}
-                        <div className="mt-1 text-[11px] tabular-nums text-white/60">
-                          comecou {fmt(startMs)}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Uma linha de observacao ja no heroi — pedido do dono
-                        vendo a tela: "no hero tinha que pelo menos aparecer 1
-                        linha de observacao". O resto se le no modo observacoes,
-                        que agora e uma tela enxuta de nome + nota e nada mais. */}
-                    <p className="mt-1 line-clamp-2 h-9 whitespace-pre-wrap break-words text-[13px] leading-tight text-white/85">
-                      {[it.responsible, it.note].filter(Boolean).join(" · ")}
-                    </p>
-
-                    {/* QUANTO FALTA SEM LER NUMERO. Ela estava fina demais e
-                        colada no botao — lida como risco de separacao, nao como
-                        medida. Agora tem corpo (h-2), respira dos dois lados e
-                        fica claramente ACIMA do botao, nao grudada nele. */}
-                    <div className="mt-2.5 h-2 overflow-hidden rounded-full bg-black/25">
+                    {/* LINHA 2 — o progresso subiu pro topo. Ali ele e status, e
+                        status pertence perto do cabecalho; embaixo ele encostava
+                        no botao e lia como risco de separacao. */}
+                    <div className="mt-2.5 h-2 shrink-0 overflow-hidden rounded-full bg-black/25">
                       <i
                         className={cn(
                           "block h-full rounded-full transition-[width] duration-500",
@@ -1313,28 +1274,68 @@ export function RundownGrid({
                       />
                     </div>
 
-                    <div className="mt-3">
-                      {barraPronta ? (
-                        <button
-                          onClick={() => marcarFeito(it)}
-                          className="press flex h-[52px] w-full flex-col items-center justify-center rounded-2xl bg-[hsl(42_78%_60%)] text-[hsl(32_70%_16%)] shadow-[0_6px_18px_hsl(42_78%_60%/.32)]"
-                        >
-                          {/* Uma linha so. O "vai pra Palavra" saiu a pedido do
-                              dono: ele engordava o botao pra dizer o que a linha
-                              logo abaixo do heroi ja mostra. */}
-                          <span className="text-[15px] font-extrabold">Concluir {it.title}</span>
-                        </button>
-                      ) : (
-                        /* O FIO. Nos 1,2s depois de QUALQUER troca de bloco ao
-                           vivo a barra nao existe — nasce como um fio e cresce.
-                           O segundo toque por reflexo acerta AUSENCIA VISIVEL, e
-                           nao um botao morto: botao morto le como "travou" e
-                           produz o terceiro toque. */
-                        <div
-                          aria-hidden
-                          className="h-1 w-full rounded-full bg-[hsl(42_78%_60%)]/45 transition-all duration-1000"
-                        />
-                      )}
+                    {/* LINHA 3 — o nome, colado no progresso. O respiro de antes
+                        era grande demais e o dono viu na tela. */}
+                    <p className="mt-2 truncate font-display text-[23px] font-extrabold leading-none">
+                      {it.title}
+                    </p>
+
+                    {/* DUAS COLUNAS: observacao a esquerda, numeros e acao a
+                        direita — a planta do dono.
+
+                        O botao a meia largura foi decisao dele, contra a minha:
+                        eu tinha defendido largura cheia pelo tamanho do alvo. A
+                        conta fecha mesmo assim — ~148 x 64 da ~9.500px2, contra
+                        os 1.296 do tique que ele substitui. Continua 7x maior, e
+                        em troca a observacao ganha uma coluna inteira, que era o
+                        que faltava pro setlist caber. */}
+                    <div className="mt-2 flex min-h-0 flex-1 gap-3">
+                      <div className="min-w-0 flex-1 overflow-hidden">
+                        {it.responsible ? (
+                          <p className="truncate text-[12.5px] font-bold text-white/70">{it.responsible}</p>
+                        ) : null}
+                        {it.note ? (
+                          <p className="whitespace-pre-wrap break-words text-[13px] leading-snug text-white/85">
+                            {it.note}
+                          </p>
+                        ) : null}
+                      </div>
+
+                      <div className="flex w-[150px] shrink-0 flex-col text-right">
+                        <div className="text-[11px] font-extrabold uppercase tracking-[.1em] text-white/70">
+                          {restanteMs >= 0 ? "restam" : "estourou"}
+                        </div>
+                        {/* `leading-none` + `break-all` porque o contador estourado
+                            de um culto longo vira "-2:22:14" e antes ele TRANSBORDAVA
+                            pra cima, aterrissando em cima do botao Editar. */}
+                        <div className="mt-0.5 break-all font-display text-[29px] font-extrabold leading-none tabular-nums">
+                          {restanteMs >= 0 ? clock(restanteMs) : "\u2212" + clock(-restanteMs)}
+                        </div>
+                        <div className="mt-1 text-[11px] tabular-nums text-white/60">
+                          comecou {fmt(startMs)}
+                        </div>
+
+                        <div className="mt-auto pt-2">
+                          {barraPronta ? (
+                            <button
+                              onClick={() => marcarFeito(it)}
+                              className="press flex h-16 w-full items-center justify-center rounded-2xl bg-[hsl(42_78%_60%)] px-2 text-center text-[15px] font-extrabold leading-tight text-[hsl(32_70%_16%)] shadow-[0_6px_18px_hsl(42_78%_60%/.32)]"
+                            >
+                              Concluir {it.title}
+                            </button>
+                          ) : (
+                            /* O FIO. Nos 1,2s depois de QUALQUER troca de bloco ao
+                               vivo a barra nao existe — nasce como um fio e cresce.
+                               O segundo toque por reflexo acerta AUSENCIA VISIVEL,
+                               e nao um botao morto: botao morto le como "travou" e
+                               produz o terceiro toque. */
+                            <div
+                              aria-hidden
+                              className="h-1 w-full rounded-full bg-[hsl(42_78%_60%)]/45 transition-all duration-1000"
+                            />
+                          )}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </li>
@@ -1461,7 +1462,7 @@ export function RundownGrid({
                     <div className="flex items-baseline justify-between gap-2">
                       <p
                         className={cn(
-                          "min-w-0 flex-1 truncate leading-tight",
+                          "min-w-0 flex-[2] truncate leading-tight",
                           done ? "text-[15px] font-medium text-muted-foreground line-through" : "font-semibold",
                         )}
                       >
@@ -1474,8 +1475,14 @@ export function RundownGrid({
                           "levou 24 min · +4" ao lado do titulo: mesma informacao,
                           uma linha, e o estouro continua em vermelho porque e a
                           unica parte dali que muda decisao. */}
+                      {/* A META ENCOLHE ANTES DO TITULO. Ela era `shrink-0`, e
+                          com a pastilha Reabrir na mesma linha isso espremia o
+                          NOME DO BLOCO ate sumir — na tela do dono lia-se so
+                          "levou 158 min +133", sem dizer de qual bloco. Nome
+                          vale mais que duracao: se algo tem que ser cortado, e o
+                          numero. */}
                       {done ? (
-                        <span className="shrink-0 text-[12.5px] tabular-nums text-muted-foreground">
+                        <span className="min-w-0 truncate text-[12.5px] tabular-nums text-muted-foreground">
                           levou {Math.max(1, Math.round(elapsedMs / 60000))} min
                           {overMs > 0 ? (
                             <span className="font-bold text-destructive-ink">
@@ -1569,7 +1576,7 @@ export function RundownGrid({
                         e.stopPropagation();
                         desmarcarFeito(it);
                       }}
-                      className="press mx-2 flex h-9 shrink-0 items-center gap-1.5 self-center rounded-full border border-border bg-card px-3 text-[13px] font-bold text-foreground"
+                      className="press mx-1.5 flex h-9 shrink-0 items-center gap-1 self-center rounded-full border border-border bg-card px-2.5 text-[12.5px] font-bold text-foreground"
                     >
                       <RotateCcw className="size-3.5" /> Reabrir
                     </button>
