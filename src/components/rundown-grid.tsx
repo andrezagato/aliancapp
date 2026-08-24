@@ -81,6 +81,17 @@ import { DuracaoPopover } from "@/components/rundown-duracao-popover";
  * fixa resolve.
  */
 const ALTURA_BLOCO = 92;
+/**
+ * A ALTURA E O ESTADO. Bloco concluido encolhe pra 52px — e nao e economia de
+ * pixel, e leitura: a silhueta da lista passa a dizer onde o culto esta ANTES de
+ * qualquer palavra ser lida, e sem depender de cor (que nao serve pra quem tem
+ * daltonismo nem pra quem olha de longe).
+ *
+ * Veio de teste no aparelho: com 6 blocos, dois concluidos ocupavam meia tela
+ * cada um, empurrando o bloco AO VIVO pra fora da area visivel. O que ja passou
+ * e a informacao menos urgente da tela e estava ocupando o lugar mais nobre.
+ */
+const ALTURA_FEITO = 52;
 // Cor de bloco vem da Paleta de Categoria (DESIGN.md) — a rampa antiga era a
 // paleta default do Tailwind (ciano/violeta/azul), fria e de outra casa.
 const SWATCHES = [...CATEGORY_HEXES, CATEGORY_NEUTRAL];
@@ -1081,6 +1092,13 @@ export function RundownGrid({
                transforme "abrir pra editar" em "avancar o culto" — que era o
                defeito numero 1 relatado pelo dono.
 
+               NAO E STICKY, e isso saiu de teste no aparelho: grudar o heroi
+               fazia a rolagem perder o sentido — a pessoa desliza pra ver outra
+               parte do roteiro e o heroi vem junto, tapando o que ela foi olhar.
+               Quem gruda e o cabecalho "Ordem do culto", que e referencia; o
+               heroi e conteudo, e conteudo tem que sair da tela quando a pessoa
+               rola pra longe dele.
+
                A altura e FIXA, e isso conserta uma ideia minha que nao parava em
                pe: eu tinha proposto o heroi crescer pra cima com a observacao,
                mantendo a barra parada. A revisao mostrou que isso nao sai de um
@@ -1097,7 +1115,6 @@ export function RundownGrid({
                     if (el) itemRefs.current.set(it.id, el);
                     else itemRefs.current.delete(it.id);
                   }}
-                  className="sticky bottom-2 top-2 z-20"
                 >
                   <div
                     className={cn(
@@ -1173,11 +1190,15 @@ export function RundownGrid({
                     )}
 
                     {/* Quanto falta SEM ler numero — leitura periferica. */}
-                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/20">
+                    {/* QUANTO FALTA SEM LER NUMERO. Ela estava fina demais e
+                        colada no botao — lida como risco de separacao, nao como
+                        medida. Agora tem corpo (h-2), respira dos dois lados e
+                        fica claramente ACIMA do botao, nao grudada nele. */}
+                    <div className="mt-2.5 h-2 overflow-hidden rounded-full bg-black/25">
                       <i
                         className={cn(
-                          "block h-full",
-                          liveRed ? "bg-[hsl(6_62%_58%)]" : "bg-[hsl(44_70%_96%)]/90",
+                          "block h-full rounded-full transition-[width] duration-500",
+                          liveRed ? "bg-[hsl(6_62%_62%)]" : "bg-[hsl(42_78%_60%)]",
                         )}
                         style={{
                           width: Math.min(100, Math.max(0, (elapsedMs / Math.max(1, durMs)) * 100)) + "%",
@@ -1185,7 +1206,7 @@ export function RundownGrid({
                       />
                     </div>
 
-                    <div className="mt-auto">
+                    <div className="mt-3">
                       {barraPronta ? (
                         <button
                           onClick={() => marcarFeito(it)}
@@ -1306,18 +1327,6 @@ export function RundownGrid({
                         className={HEAT_TEXT[h]}
                       />
                     </div>
-                  ) : done ? (
-                    /* CONCLUÍDO segue PROGRESSIVO, e isso é decisão antiga e
-                       deliberada: contagem regressiva de um bloco que já acabou
-                       não quer dizer nada — o que interessa ali é quanto ele
-                       realmente levou. Na coluna fina os dois números empilham
-                       em vez de ficar lado a lado. */
-                    <div className="relative z-10 flex flex-col items-center gap-1.5 rounded bg-card px-0.5">
-                      <Contador label="corrido" value={clock(elapsedMs)} className="text-muted-foreground" />
-                      {overMs > 0 ? (
-                        <Contador label="passou" value={`+${clock(overMs)}`} className="text-destructive-ink" />
-                      ) : null}
-                    </div>
                   ) : null /* FUTURO: nada. A duração planejada agora mora na
                               coluna 1, e um "0:00" ou um travessão aqui seria
                               inventar informação. A coluna nunca fica visualmente
@@ -1326,7 +1335,7 @@ export function RundownGrid({
 
                 {/* ---- COLUNA 3: o que é o bloco ---------------------------- */}
                 <div
-                  style={{ minHeight: ALTURA_BLOCO }}
+                  style={{ minHeight: done ? ALTURA_FEITO : ALTURA_BLOCO }}
                   onClick={() => {
                     if (drag || suppressClickRef.current) return;
                     if (canEdit) setEditing(it);
@@ -1343,8 +1352,35 @@ export function RundownGrid({
                     flashId === it.id && "animate-pop ring-2 ring-primary",
                   )}
                 >
-                  <div className="my-2.5 ml-3 min-w-0 flex-1 pr-1">
-                    <p className={cn("font-semibold leading-tight", done && "line-through")}>{it.title}</p>
+                  <div className={cn("ml-3 min-w-0 flex-1 pr-1", done ? "my-1.5" : "my-2.5")}>
+                    <div className="flex items-baseline justify-between gap-2">
+                      <p
+                        className={cn(
+                          "min-w-0 flex-1 truncate leading-tight",
+                          done ? "text-[15px] font-medium text-muted-foreground line-through" : "font-semibold",
+                        )}
+                      >
+                        {it.title}
+                      </p>
+                      {/* O QUE O BLOCO CONCLUIDO PRECISA DIZER, EM UMA LINHA.
+                          Os dois contadores empilhados que moravam na trilha
+                          ("corrido" e "passou") tomavam a altura de meio card
+                          cada um pra contar uma historia que ja acabou. Viraram
+                          "levou 24 min · +4" ao lado do titulo: mesma informacao,
+                          uma linha, e o estouro continua em vermelho porque e a
+                          unica parte dali que muda decisao. */}
+                      {done ? (
+                        <span className="shrink-0 text-[12.5px] tabular-nums text-muted-foreground">
+                          levou {Math.max(1, Math.round(elapsedMs / 60000))} min
+                          {overMs > 0 ? (
+                            <span className="font-bold text-destructive-ink">
+                              {" "}
+                              +{Math.round(overMs / 60000)}
+                            </span>
+                          ) : null}
+                        </span>
+                      ) : null}
+                    </div>
                     {/* O TIPO saiu da linha exibida (ago/2026): na Aliança ele é
                         quase sempre a MESMA palavra do título ("Louvor"/"Louvor"),
                         e repetir dobrado gastava a única linha de contexto. O campo
@@ -1528,13 +1564,19 @@ export function RundownGrid({
           >
             <Plus className="size-4" /> Adicionar bloco
           </button>
-          <button
-            onClick={() => setManageTpl(true)}
-            aria-label="Modelos de cronograma"
-            className="press grid w-12 place-items-center rounded-2xl border border-dashed border-border text-muted-foreground"
-          >
-            <LayoutTemplate className="size-5" />
-          </button>
+          {/* MODELOS E TIPOS SAO FERRAMENTA DE MONTAGEM, e somem com o culto no
+              ar. Nas palavras do dono vendo a tela: "nao e essa hora de usar
+              isso". Nao foram removidos — voltam sozinhos quando o culto nao
+              esta rolando, que e quando alguem de fato monta roteiro. */}
+          {!started || ended ? (
+            <button
+              onClick={() => setManageTpl(true)}
+              aria-label="Modelos de cronograma"
+              className="press grid w-12 place-items-center rounded-2xl border border-dashed border-border text-muted-foreground"
+            >
+              <LayoutTemplate className="size-5" />
+            </button>
+          ) : null}
           <button
             onClick={() => setModo("reordenar")}
             aria-label="Reordenar blocos"
@@ -1554,13 +1596,15 @@ export function RundownGrid({
           >
             <FileText className="size-5" />
           </button>
-          <button
-            onClick={() => setManageKinds(true)}
-            aria-label="Gerenciar tipos"
-            className="press grid w-12 place-items-center rounded-2xl border border-dashed border-border text-muted-foreground"
-          >
-            <Settings2 className="size-5" />
-          </button>
+          {!started || ended ? (
+            <button
+              onClick={() => setManageKinds(true)}
+              aria-label="Gerenciar tipos"
+              className="press grid w-12 place-items-center rounded-2xl border border-dashed border-border text-muted-foreground"
+            >
+              <Settings2 className="size-5" />
+            </button>
+          ) : null}
         </div>
       ) : null}
 
