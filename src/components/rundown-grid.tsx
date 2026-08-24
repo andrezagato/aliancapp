@@ -417,6 +417,19 @@ export function RundownGrid({
   const onPointerMove = useCallback((e: PointerEvent) => {
     const d = dragRef.current;
     if (!d) return;
+    // FILTRA PELO PONTEIRO QUE COMEÇOU O GESTO. Este era o furo: o filtro existia
+    // só no soltar e no cancelar, e o handler que ARMA e CALCULA aceitava evento
+    // de qualquer dedo na página.
+    //
+    // O acidente: dedo #1 encosta na alça do bloco 3 e fica parado. A outra mão
+    // segura o aparelho e o polegar #2 desliza na borda. O `pointermove` do dedo
+    // #2 chega aqui, e a distância é medida entre a coordenada DELE e a origem do
+    // dedo #1 — o limiar de 8px é atropelado na hora, o gesto arma sem ninguém ter
+    // arrastado nada, e a `vaga` sai do Y do polegar #2: o bloco 3 salta pra onde
+    // ele está. Como o pointerup do #2 é descartado pelo filtro (que lá existe), o
+    // gesto nem termina; quando o #1 levanta, a ordem acidental é GRAVADA — com
+    // push de tempo real pro aparelho de toda a equipe, no meio do culto.
+    if (e.pointerId !== d.pointerId) return;
     // Ainda não armou? Só arma se o dedo andou o bastante — e enquanto não armar,
     // NADA se move. É aqui que morre o "mudou a ordem sem eu querer".
     if (!d.armado) {
