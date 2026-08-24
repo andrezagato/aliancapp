@@ -753,6 +753,13 @@ class Banco {
  * é o primeiro sem `done_at`, enquanto o roteiro está iniciado e não encerrado.
  * Nenhuma coluna nova, nenhuma mudança no Sirvo — a ponte só lê.
  */
+/**
+ * Quanto um RECUO (bloco reaberto) espera antes de rebobinar o cronometro do
+ * palco. Avancar e imediato; voltar espera, porque voltar reinicia o relogio na
+ * frente de quem esta pregando e reabrir custa um toque so no app.
+ */
+const ESPERA_RECUO_MS = 3000;
+
 function blocoAoVivo(blocos) {
   return blocos.find((b) => !b.done_at) ?? null;
 }
@@ -766,6 +773,10 @@ async function rodar(cfg, driver) {
   // ajustar a duração do bloco que já está no ar, não queremos reiniciar o
   // cronômetro do telão no meio da pregação.
   let chaveAplicada = null;
+  /** Onde o telao esta, em INDICE — e o que distingue avancar de VOLTAR. */
+  let indiceAplicado = null;
+  /** Um recuo esperando a carencia: { chave, desde }. */
+  let recuoPendente = null;
   let nossoTimerRodando = false;
   let erroSeguido = 0;
 
@@ -838,6 +849,11 @@ async function rodar(cfg, driver) {
           nossoTimerRodando = false;
         }
         chaveAplicada = null;
+        // Zera JUNTO. Sem isto o primeiro bloco do PROXIMO culto (indice 0) seria
+        // comparado com o indice do culto anterior, viraria "recuo" e esperaria
+        // 3s a toa — com o culto novo ja no ar.
+        indiceAplicado = null;
+        recuoPendente = null;
       } else {
         const blocos = await banco.blocos(culto.id);
         const bloco = blocoAoVivo(blocos);
@@ -853,12 +869,56 @@ async function rodar(cfg, driver) {
         } else {
           const chave = `${culto.id}:${bloco.id}`;
           if (chave !== chaveAplicada) {
+            // ---- A ESPERA DO RECUO -------------------------------------
+            //
+            // Avançar é imediato: o culto andou, o telão anda junto.
+            //
+            // VOLTAR não. Reabrir um bloco devolve o `liveIdx` pra trás e faz
+            // esta ponte mandar clockStop → clockUpdate → clockReset →
+            // clockStart: o cronômetro do palco REINICIA na frente de quem
+            // está pregando. Como reabrir é um toque só (decisão do dono), um
+            // toque errado chegaria no telão em menos de um segundo.
+            //
+            // Então recuo espera 3s. Se dentro desses 3s alguém desfizer — e
+            // desfazer é o gesto natural de quem acabou de errar —, a chave
+            // volta a ser a de antes e o telão nunca soube de nada.
+            //
+            // POR QUE AQUI E NÃO NO APP: esta é a única das três camadas que
+            // sobrevive a pessoa fechar o celular no meio, e é o único ponto
+            // do sistema que fala com o relógio do palco. Uma espera no
+            // cliente protegeria só quem estivesse com o app aberto; uma
+            // espera na action não protegeria as outras superfícies.
+            const idx = blocos.findIndex((b) => b.id === bloco.id);
+            const recuou = indiceAplicado != null && idx >= 0 && idx < indiceAplicado;
+
+            if (recuou) {
+              if (!recuoPendente || recuoPendente.chave !== chave) {
+                recuoPendente = { chave, desde: Date.now() };
+                log(`◀ voltou pra "${bloco.title}" — segurando ${ESPERA_RECUO_MS / 1000}s antes de mexer no telão`);
+              }
+              if (Date.now() - recuoPendente.desde < ESPERA_RECUO_MS) {
+                // Ainda na carência: o telão continua mostrando o que mostrava.
+                return;
+              }
+              log(`◀ a volta se manteve por ${ESPERA_RECUO_MS / 1000}s — aplicando no telão`);
+            }
+            recuoPendente = null;
+
             const segundos = Math.max(0, Math.round((bloco.duration_min || 0) * 60));
             const ok = await driver.aplicar({ nome: bloco.title || "Bloco", segundos });
             if (ok) {
               chaveAplicada = chave;
+              indiceAplicado = idx;
               nossoTimerRodando = true;
               log(`▶ "${bloco.title}" — ${hms(segundos)} no telão`);
+            }
+          } else {
+            // A chave voltou a ser a que já está no telão: se havia um recuo
+            // esperando, ele foi desfeito. Esquece sem fazer nada — que é
+            // exatamente o desfecho que a espera existe pra permitir.
+            if (recuoPendente) {
+              log("◀ a volta foi desfeita dentro da carência — o telão não chegou a saber");
+              recuoPendente = null;
             }
           }
         }
