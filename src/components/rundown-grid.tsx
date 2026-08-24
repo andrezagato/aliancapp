@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
+  Play,
   Plus,
   Trash2,
   ChevronDown,
@@ -1098,7 +1099,7 @@ export function RundownGrid({
                       {done ? (
                         <Check className="size-3.5" strokeWidth={3} />
                       ) : live ? (
-                        <span className="text-[10px] text-primary">&#9654;</span>
+                        <Play className="size-3.5 fill-primary text-primary" strokeWidth={0} />
                       ) : movivel ? (
                         <GripVertical className="size-4" />
                       ) : null}
