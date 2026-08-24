@@ -866,6 +866,19 @@ async function rodar(cfg, driver) {
             nossoTimerRodando = false;
           }
           chaveAplicada = `${culto.id}:fim`;
+          // MARCA O FIM COMO "DEPOIS DO ULTIMO", e nao como o ultimo.
+          //
+          // Sem isto a carencia de 3s era PULADA justo no pior cenario. Ticar o
+          // ultimo bloco NAO encerra o culto — o app faz isso de proposito, pra
+          // ninguem encerrar por acidente —, entao a Producao tica o ultimo, o
+          // pregador ainda esta la, e alguem toca Reabrir. Como `indiceAplicado`
+          // tinha ficado em N-1 e o bloco reaberto tem indice N-1, a conta
+          // `N-1 < N-1` dava FALSO: nao era lido como recuo e o cronometro do
+          // palco reiniciava em menos de um segundo, sem janela pra desfazer.
+          //
+          // Com `blocos.length`, qualquer bloco que volte a ficar ao vivo tem
+          // indice menor e e recuo de verdade.
+          indiceAplicado = blocos.length;
         } else {
           const chave = `${culto.id}:${bloco.id}`;
           if (chave !== chaveAplicada) {

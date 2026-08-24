@@ -95,16 +95,6 @@ const SWATCHES = [...CATEGORY_HEXES, CATEGORY_NEUTRAL];
  */
 const TRAVA_TTL_MS = 2 * 60_000;
 
-/**
- * Quanto tempo o auto-scroll pro bloco ao vivo fica em silêncio depois de UM
- * TIQUE NOSSO (F3 do DECISOES-TIQUE.md).
- *
- * Sem isto, marcar um bloco como feito troca `blocoAtivoId` na hora, o efeito de
- * centralização dispara no mesmo quadro e a lista desliza debaixo do dedo que
- * acabou de tocar — o segundo toque, se vier, acerta outro bloco. ~700ms cobre
- * o tempo de o dedo sair da tela depois do toque.
- */
-const SEGURA_SCROLL_MS = 700;
 
 /**
  * Quanto antes da hora marcada o roteiro já conta como "ao vivo" pra sincronia.
@@ -330,11 +320,6 @@ export function RundownGrid({
   // reexecutar o efeito (ele depende da TROCA de bloco, não de `ocupado`).
   const ocupadoRef = useRef(ocupado);
   ocupadoRef.current = ocupado;
-  // TIQUE NOSSO (F3): fica `true` por `SEGURA_SCROLL_MS` depois que ESTE
-  // aparelho marca um bloco como feito, pra segurar o auto-scroll abaixo — não
-  // é sobre outro alguém ticando em outro aparelho, é sobre não competir com o
-  // dedo que acabou de tocar aqui.
-  const tiqueNossoRef = useRef(false);
 
   const listRef = useRef(list);
   listRef.current = list;
@@ -678,18 +663,8 @@ export function RundownGrid({
    * dedos afirmando a mesma coisa dão um resultado só, e toque duplo acidental
    * vira no-op no `.is("done_at", null)` que já existia no servidor.
    */
-  const seguraAutoScroll = () => {
-    // Marca que o PRÓXIMO troco de bloco ao vivo veio de um toque aqui, e
-    // segura o auto-scroll por um instante — ver `SEGURA_SCROLL_MS` (F3).
-    tiqueNossoRef.current = true;
-    window.setTimeout(() => {
-      tiqueNossoRef.current = false;
-    }, SEGURA_SCROLL_MS);
-  };
-
   const marcarFeito = (it: RundownItem) => {
     if (it.doneAt) return; // já está feito: afirmar de novo não tem o que dizer
-    seguraAutoScroll();
     setList((prev) =>
       prev.map((x) => (x.id === it.id ? { ...x, doneAt: new Date().toISOString() } : x)),
     );
@@ -706,7 +681,6 @@ export function RundownGrid({
   const desmarcarFeito = (it: RundownItem) => {
     const antes = it.doneAt;
     if (!antes) return;
-    seguraAutoScroll();
     setList((prev) => prev.map((x) => (x.id === it.id ? { ...x, doneAt: null } : x)));
     startTx(async () => {
       // Manda o carimbo que ESTA tela viu: se outra pessoa reabriu e concluiu o
@@ -865,7 +839,7 @@ export function RundownGrid({
     return () => window.clearTimeout(t);
   }, [blocoAtivoId]);
   useEffect(() => {
-    if (!blocoAtivoId || !started || ended || ocupadoRef.current || tiqueNossoRef.current) return;
+    if (!blocoAtivoId || !started || ended || ocupadoRef.current) return;
     // O HEROI DISPENSA ISTO, e mais: briga com ele. O bloco ao vivo agora e
     // `sticky` — ele NUNCA sai da tela por conta propria, que era o unico
     // trabalho deste efeito. E `scrollIntoView` calcula o delta uma vez, a partir
@@ -1112,7 +1086,9 @@ export function RundownGrid({
                mantendo a barra parada. A revisao mostrou que isso nao sai de um
                `sticky` de altura variavel. O requisito real era "a barra nao
                danca" — altura fixa entrega isso e e mais simples. Observacao
-               longa fica com clamp aqui, e inteira no modo leitura. */
+               longa fica com clamp aqui, e inteira no modo leitura (que o heroi
+               tambem obedece, logo abaixo — a primeira versao deste passo
+               esqueceu disso e o comentario mentia). */
             if (live && canEdit) {
               return (
                 <li
@@ -1175,9 +1151,26 @@ export function RundownGrid({
                       </div>
                     </div>
 
-                    <p className="mt-1 line-clamp-2 h-9 whitespace-pre-wrap break-words text-[13px] leading-tight text-white/85">
-                      {[it.responsible, it.note].filter(Boolean).join(" · ")}
-                    </p>
+                    {/* O HEROI TAMBEM OBEDECE O MODO LEITURA — e isto era um
+                        buraco: o desgrudar do clamp existia so no ramo das linhas
+                        comuns, entao o bloco AO VIVO, cujo setlist e o que mais
+                        importa, era o unico que continuava cortado. E quem entra
+                        no modo e exatamente quem ve o heroi.
+
+                        No modo, o responsavel ganha linha propria em vez de
+                        dividir as duas linhas com a nota: eles sao coisas
+                        diferentes, e juntar os dois com " · " transformava um
+                        setlist de quatro musicas em uma frase. */}
+                    {modo === "observacoes" ? (
+                      <div className="mt-1 min-h-0 flex-1 overflow-y-auto text-[13px] leading-tight text-white/85">
+                        {it.responsible ? <p className="font-bold">{it.responsible}</p> : null}
+                        {it.note ? <p className="whitespace-pre-wrap break-words">{it.note}</p> : null}
+                      </div>
+                    ) : (
+                      <p className="mt-1 line-clamp-2 h-9 whitespace-pre-wrap break-words text-[13px] leading-tight text-white/85">
+                        {[it.responsible, it.note].filter(Boolean).join(" · ")}
+                      </p>
+                    )}
 
                     {/* Quanto falta SEM ler numero — leitura periferica. */}
                     <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/20">
