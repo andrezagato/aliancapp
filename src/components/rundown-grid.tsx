@@ -80,7 +80,7 @@ import { DuracaoPopover } from "@/components/rundown-duracao-popover";
  * o único campo com texto de verdade seria pior que a irregularidade que a altura
  * fixa resolve.
  */
-const ALTURA_BLOCO = 92;
+const ALTURA_BLOCO = 72;
 /**
  * A ALTURA E O ESTADO. Bloco concluido encolhe pra 52px — e nao e economia de
  * pixel, e leitura: a silhueta da lista passa a dizer onde o culto esta ANTES de
@@ -90,8 +90,13 @@ const ALTURA_BLOCO = 92;
  * Veio de teste no aparelho: com 6 blocos, dois concluidos ocupavam meia tela
  * cada um, empurrando o bloco AO VIVO pra fora da area visivel. O que ja passou
  * e a informacao menos urgente da tela e estava ocupando o lugar mais nobre.
+ *
+ * As duas alturas encolheram de novo quando a linha passou a ter DUAS linhas de
+ * texto fixas (titulo + meta) em vez de titulo + responsavel + nota de tres
+ * linhas: sem conteudo variavel, a caixa nao precisa mais reservar espaco pro
+ * pior caso.
  */
-const ALTURA_FEITO = 52;
+const ALTURA_FEITO = 56;
 // Cor de bloco vem da Paleta de Categoria (DESIGN.md) — a rampa antiga era a
 // paleta default do Tailwind (ciano/violeta/azul), fria e de outra casa.
 const SWATCHES = [...CATEGORY_HEXES, CATEGORY_NEUTRAL];
@@ -1473,70 +1478,56 @@ export function RundownGrid({
                   )}
                 >
                   <div className={cn("ml-3 min-w-0 flex-1 pr-1", done ? "my-1.5" : "my-2.5")}>
-                    <div className="flex items-baseline justify-between gap-2">
-                      <p
-                        className={cn(
-                          "min-w-0 flex-[2] truncate leading-tight",
-                          done ? "text-[15px] font-medium text-muted-foreground line-through" : "font-semibold",
-                        )}
-                      >
-                        {it.title}
+                    {/* DUAS LINHAS, SEMPRE — a altura do bloco deixa de depender
+                        do conteudo.
+
+                        Antes a observacao esticava a linha (line-clamp-3), entao
+                        blocos com nota eram mais altos que blocos sem, e a lista
+                        "respirava" de forma imprevisivel enquanto o culto andava.
+                        Agora a linha 2 e uma so, e o que aparece nela muda com o
+                        estado — mas a caixa nao muda de tamanho nunca.
+
+                        BLOCO CONCLUIDO NAO MOSTRA OBSERVACAO. O setlist e as
+                        passagens de um bloco que ja acabou sao historia; o que
+                        interessa ali e quanto ele levou. E isso conserta de
+                        quebra o defeito que o dono viu: a pastilha Reabrir
+                        empurrava o "levou X min" pro lado ate espremer o titulo.
+                        Agora o texto mora ABAIXO do titulo e a pastilha fica na
+                        direita — quando ela some (nos concluidos que nao sao o
+                        ultimo), so ela some: o texto nao se move um pixel. */}
+                    <p
+                      className={cn(
+                        "truncate leading-tight",
+                        done ? "text-[15px] font-medium text-muted-foreground line-through" : "font-semibold",
+                      )}
+                    >
+                      {it.title}
+                    </p>
+
+                    {done ? (
+                      <p className="mt-0.5 truncate text-[12.5px] tabular-nums text-muted-foreground">
+                        levou {Math.max(1, Math.round(elapsedMs / 60000))} min
+                        {overMs > 0 ? (
+                          <span className="font-bold text-destructive-ink">
+                            {" "}
+                            +{Math.round(overMs / 60000)}
+                          </span>
+                        ) : null}
                       </p>
-                      {/* O QUE O BLOCO CONCLUIDO PRECISA DIZER, EM UMA LINHA.
-                          Os dois contadores empilhados que moravam na trilha
-                          ("corrido" e "passou") tomavam a altura de meio card
-                          cada um pra contar uma historia que ja acabou. Viraram
-                          "levou 24 min · +4" ao lado do titulo: mesma informacao,
-                          uma linha, e o estouro continua em vermelho porque e a
-                          unica parte dali que muda decisao. */}
-                      {/* A META ENCOLHE ANTES DO TITULO. Ela era `shrink-0`, e
-                          com a pastilha Reabrir na mesma linha isso espremia o
-                          NOME DO BLOCO ate sumir — na tela do dono lia-se so
-                          "levou 158 min +133", sem dizer de qual bloco. Nome
-                          vale mais que duracao: se algo tem que ser cortado, e o
-                          numero. */}
-                      {done ? (
-                        <span className="min-w-0 truncate text-[12.5px] tabular-nums text-muted-foreground">
-                          levou {Math.max(1, Math.round(elapsedMs / 60000))} min
-                          {overMs > 0 ? (
-                            <span className="font-bold text-destructive-ink">
-                              {" "}
-                              +{Math.round(overMs / 60000)}
-                            </span>
-                          ) : null}
-                        </span>
-                      ) : null}
-                    </div>
-                    {/* O TIPO saiu da linha exibida (ago/2026): na Aliança ele é
-                        quase sempre a MESMA palavra do título ("Louvor"/"Louvor"),
-                        e repetir dobrado gastava a única linha de contexto. O campo
-                        continua no banco e no modal do bloco, onde ele faz o
-                        trabalho dele: dar nome padrão e a COR — que é como o tipo
-                        aparece aqui, no nó da trilha. Sem responsável a linha não
-                        existe: um travessão no celular é ruído (na régia ele fica,
-                        porque célula de grade vazia parece defeito). */}
-                    {it.responsible ? (
-                      <p className="text-[12.5px] text-muted-foreground">{it.responsible}</p>
-                    ) : null}
-                    {/* A OBSERVAÇÃO JÁ ERA UMA LISTA — o celular é que a lia como frase.
-                        Dado de produção: 10 das 13 observações têm quebra de linha, e o
-                        conteúdo é exatamente lista — setlist ("Praise / Profetizo vida /
-                        Nunca pare de lutar"), passagens ("Dt 1:21-33 / Nm 13:26-33"),
-                        avisos. Sem `whitespace-pre-wrap` o HTML colapsa 
- em espaço, então
-                        aqui saía "Praise Profetizo vida Nunca pare de lutar" numa linha só.
-                        A régia já renderiza O MESMO CAMPO certo (rundown-columns.tsx:439);
-                        era só o celular que não. O clamp segura a linha do bloco: uma
-                        observação de seis linhas não pode empurrar o roteiro inteiro. */}
-                    {it.note ? (
-                      <p
-                        // Cortada em tres linhas: a nota inteira e trabalho do
-                        // modo observacoes, que tem tela propria pra isso.
-                        className="mt-0.5 line-clamp-3 whitespace-pre-wrap break-words text-[13px] text-muted-foreground"
-                      >
-                        {it.note}
+                    ) : (
+                      /* UMA LINHA SO, com reticencias fazendo o convite. O `…` no
+                         fim de uma nota cortada e a pista de que ha mais — e o
+                         "mais" mora no modo observacoes, que existe pra isso.
+                         O TIPO nao entra aqui: na Alianca ele e quase sempre a
+                         MESMA palavra do titulo ("Louvor"/"Louvor"), e repetir
+                         gastaria a unica linha de contexto que o bloco tem. */
+                      <p className="mt-0.5 truncate text-[12.5px] text-muted-foreground">
+                        {[it.responsible, it.note ? it.note.split("\n")[0] : null]
+                          .filter(Boolean)
+                          .join(" · ")}
+                        {it.note && (it.note.includes("\n") || it.note.length > 40) ? " …" : ""}
                       </p>
-                    ) : null}
+                    )}
                     {it.link ? (
                       <a
                         href={it.link}
