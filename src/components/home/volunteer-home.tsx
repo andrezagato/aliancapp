@@ -115,6 +115,8 @@ export function VolunteerHome({
   // Usá-la aqui desabilitaria o check-in enquanto qualquer outra coisa estivesse
   // no ar, o que é uma trava mais larga que o problema.
   const [checkinEmVoo, setCheckinEmVoo] = useState<string | null>(null);
+  // Qual escala acabou de ser marcada NESTA sessão — ver `today`, mais abaixo.
+  const [marcadoAgora, setMarcadoAgora] = useState<string | null>(null);
 
   const doCheckin = (a: MyAssignment, force = false) => {
     setCheckinEmVoo(a.assignmentId);
@@ -124,6 +126,7 @@ export function VolunteerHome({
       if (r.ok) {
         patch(a.assignmentId, { checkedIn: true });
         setCheckinEmVoo(null);
+        setMarcadoAgora(a.assignmentId);
         showToast(warm("checkin"));
         if (r.unlocked && r.unlocked.length > 0) celebrateNew(r.unlocked);
       } else if (r.code === "outside") {
@@ -249,7 +252,22 @@ export function VolunteerHome({
   // some seria "nada some da tela" ao contrário, e o "Presente" é justamente a
   // confirmação que a pessoa quer continuar vendo.
   const deHoje = rest.filter((a) => churchDateISO(a.startsAt) === todaySP);
-  const today = deHoje.find((a) => !a.checkedIn) || deHoje[deHoje.length - 1] || null;
+  //
+  // E O CARD NÃO PULA NO INSTANTE DO CHECK-IN. Sem `marcadoAgora`, quem serve de
+  // manhã e de noite marcava a da manhã e o card trocava de dono NO MESMO PIXEL:
+  // mesmo formato, mesmo rótulo "É hoje", e o botão de check-in vivo de novo —
+  // agora pertencendo ao culto da NOITE. Um segundo toque por reflexo (que é
+  // exatamente o que o commit do `checkinEmVoo` documenta como comportamento real
+  // das pessoas) marcaria presença num culto que ainda nem começou.
+  //
+  // Preso em quem acabou de marcar, o card fica no "Presente" — a confirmação que
+  // a pessoa quer ver — e só avança no próximo carregamento da tela, quando não
+  // há dedo nenhum a caminho daquele pixel.
+  const today =
+    (marcadoAgora ? deHoje.find((a) => a.assignmentId === marcadoAgora) : null) ||
+    deHoje.find((a) => !a.checkedIn) ||
+    deHoje[deHoje.length - 1] ||
+    null;
   const upcoming = rest.filter((a) => a !== today);
   const hero = upcoming[0] || null;
   const list = upcoming.slice(1);
