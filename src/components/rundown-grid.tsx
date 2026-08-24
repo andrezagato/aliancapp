@@ -829,15 +829,49 @@ export function RundownGrid({
    */
   const pisoIdx = rows.reduce((acc, r, i) => (r.status === "done" || r.status === "live" ? i : acc), -1);
   const podeMover = (id: string) => rows.findIndex((r) => r.it.id === id) > pisoIdx;
+  /** O ULTIMO bloco concluido — o unico que carrega a pastilha Reabrir. */
+  const ultimoFeitoIdx = rows.reduce((acc, r, i) => (r.status === "done" ? i : acc), -1);
   // Espelhado em ref porque `onPointerMove` é um useCallback estável (deps []) e
   // não pode fechar sobre um valor que muda a cada render — mesma razão do
   // `listRef` logo acima.
   const pisoRef = useRef(pisoIdx);
   pisoRef.current = pisoIdx;
+
+  /**
+   * A CARÊNCIA DA BARRA DOURADA — 1,2s em que ela não existe.
+   *
+   * Armada pela TROCA do bloco ao vivo, seja qual for a causa: meu toque, o
+   * tique de outra pessoa chegando pelo tempo real, sair do modo reordenar,
+   * "iniciar" virando "concluir". Uma regra cobre a família inteira de acidentes
+   * de segundo toque — inclusive os que ninguém imaginou ainda. Prender a
+   * carência a "quem tocou" deixaria o caso das duas pessoas de fora, que é
+   * justamente o que mais acontece no domingo.
+   *
+   * A INÉRCIA VEM DAQUI, do estado — nunca do CSS. `prefers-reduced-motion` zera
+   * duração de animação e de transição com `!important` (globals.css), então uma
+   * barra que só "cresce" visualmente estaria CLICÁVEL desde o primeiro quadro
+   * pra quem pediu menos movimento. Invisível e clicável é pior que tudo que a
+   * gente discutiu: o CSS faz o desenho, o estado faz a trava.
+   */
+  const [barraPronta, setBarraPronta] = useState(true);
+  useEffect(() => {
+    setBarraPronta(false);
+    const t = window.setTimeout(() => setBarraPronta(true), 1200);
+    return () => window.clearTimeout(t);
+  }, [blocoAtivoId]);
   useEffect(() => {
     if (!blocoAtivoId || !started || ended || ocupadoRef.current || tiqueNossoRef.current) return;
+    // O HEROI DISPENSA ISTO, e mais: briga com ele. O bloco ao vivo agora e
+    // `sticky` — ele NUNCA sai da tela por conta propria, que era o unico
+    // trabalho deste efeito. E `scrollIntoView` calcula o delta uma vez, a partir
+    // da posicao ANTES do sticky prender: com a caixa presa contra a borda, a
+    // conta sai errada e a lista da um solavanco pra corrigir sozinha.
+    //
+    // Fica valendo so pra quem NAO tem heroi (sem permissao de editar), onde o
+    // bloco ao vivo continua sendo uma linha comum que pode sumir rolando.
+    if (canEdit) return;
     itemRefs.current.get(blocoAtivoId)?.scrollIntoView({ block: "center", behavior: "smooth" });
-  }, [blocoAtivoId, started, ended]);
+  }, [blocoAtivoId, started, ended, canEdit]);
 
   const remove = (id: string) =>
     startTx(async () => {
@@ -1044,6 +1078,138 @@ export function RundownGrid({
             const restanteMs = durMs - elapsedMs;
             const h: Heat = live ? heatOf(restanteMs) : done && overMs > 0 ? "red" : "normal";
             const liveRed = live && h === "red";
+
+            /* =========================== O HEROI ===========================
+               O bloco AO VIVO deixa de ser uma linha como as outras e vira o
+               unico objeto quente da tela — com a unica barra dourada do app
+               dentro dele.
+
+               POR QUE DENTRO E NAO NUMA BARRA FIXA: o contrato fica FISICO. Um
+               botao fixo no rodape precisa NOMEAR o bloco que conclui, e no
+               escuro, com pressa, ninguem le um rotulo que ja apertou seis
+               vezes. Aqui o botao esta dentro do card do bloco que ele conclui:
+               o alvo e a propria resposta.
+
+               A ALTURA E O ESTADO: 44/68 nas linhas comuns, 200 aqui. Da pra
+               saber onde o culto esta pela silhueta, antes de ler palavra
+               nenhuma — e sem depender de cor, que e o que quebra pra quem tem
+               daltonismo e pra quem olha de longe.
+
+               O CORPO DO HEROI NAO E TOCAVEL. E a regiao mais visada da tela (e
+               onde esta o texto que a pessoa le) e e onde o polegar descansa. So
+               agem as duas pastilhas do topo e a barra de baixo, longe uma da
+               outra. Nao existe nenhuma coordenada onde escorregar 20px
+               transforme "abrir pra editar" em "avancar o culto" — que era o
+               defeito numero 1 relatado pelo dono.
+
+               A altura e FIXA, e isso conserta uma ideia minha que nao parava em
+               pe: eu tinha proposto o heroi crescer pra cima com a observacao,
+               mantendo a barra parada. A revisao mostrou que isso nao sai de um
+               `sticky` de altura variavel. O requisito real era "a barra nao
+               danca" — altura fixa entrega isso e e mais simples. Observacao
+               longa fica com clamp aqui, e inteira no modo leitura. */
+            if (live && canEdit) {
+              return (
+                <li
+                  key={it.id}
+                  ref={(el) => {
+                    if (el) itemRefs.current.set(it.id, el);
+                    else itemRefs.current.delete(it.id);
+                  }}
+                  className="sticky bottom-2 top-2 z-20"
+                >
+                  <div
+                    className={cn(
+                      "relative flex h-[200px] flex-col overflow-hidden rounded-[22px] p-4 text-white shadow-lift",
+                      liveRed
+                        ? "bg-gradient-to-br from-[hsl(349_72%_32%)] to-[hsl(349_69%_14%)]"
+                        : "bg-gradient-to-br from-[hsl(349_72%_28%)] to-[hsl(349_69%_15%)]",
+                    )}
+                  >
+                    <div className="flex h-9 items-center justify-between">
+                      <span className="text-[11px] font-extrabold uppercase tracking-[.14em] text-[hsl(42_78%_66%)]">
+                        {liveRed ? "Ao vivo · estourou" : "Ao vivo"}
+                      </span>
+                      <div className="flex gap-2">
+                        {/* SO O +5. Encurtar o bloco que esta no palco joga o
+                            contador pro estouro na frente do pregador; o -5 mora
+                            no sheet, onde ninguem chega por acidente. */}
+                        <button
+                          onClick={() => salvarDuracao(it.id, it.durationMin + 5)}
+                          className="h-9 rounded-xl bg-white/[.13] px-3.5 text-[13px] font-bold text-[hsl(44_70%_96%)]"
+                        >
+                          +5 min
+                        </button>
+                        <button
+                          onClick={() => setEditing(it)}
+                          className="h-9 rounded-xl bg-white/[.13] px-3.5 text-[13px] font-bold text-[hsl(44_70%_96%)]"
+                        >
+                          Editar
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="mt-1.5 flex h-10 items-end justify-between gap-3">
+                      <span className="truncate font-display text-[23px] font-extrabold leading-none">
+                        {it.title}
+                      </span>
+                      <div className="shrink-0 text-right leading-none">
+                        <div className="text-[10px] font-extrabold uppercase tracking-[.1em] text-white/70">
+                          {restanteMs >= 0 ? "restam" : "estourou"}
+                        </div>
+                        <div className="mt-0.5 text-[34px] font-extrabold tabular-nums">
+                          {restanteMs >= 0 ? clock(restanteMs) : "\u2212" + clock(-restanteMs)}
+                        </div>
+                      </div>
+                    </div>
+
+                    <p className="mt-1 line-clamp-2 h-9 whitespace-pre-wrap break-words text-[13px] leading-tight text-white/85">
+                      {[it.responsible, it.note].filter(Boolean).join(" · ")}
+                    </p>
+
+                    {/* Quanto falta SEM ler numero — leitura periferica. */}
+                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/20">
+                      <i
+                        className={cn(
+                          "block h-full",
+                          liveRed ? "bg-[hsl(6_62%_58%)]" : "bg-[hsl(44_70%_96%)]/90",
+                        )}
+                        style={{
+                          width: Math.min(100, Math.max(0, (elapsedMs / Math.max(1, durMs)) * 100)) + "%",
+                        }}
+                      />
+                    </div>
+
+                    <div className="mt-auto">
+                      {barraPronta ? (
+                        <button
+                          onClick={() => marcarFeito(it)}
+                          className="press flex h-[52px] w-full flex-col items-center justify-center rounded-2xl bg-[hsl(42_78%_60%)] text-[hsl(32_70%_16%)] shadow-[0_6px_18px_hsl(42_78%_60%/.32)]"
+                        >
+                          <span className="text-[15px] font-bold">Concluir {it.title}</span>
+                          {rows[idx + 1] ? (
+                            <span className="mt-0.5 text-[11px] font-bold opacity-70">
+                              vai pra {rows[idx + 1].it.title}
+                            </span>
+                          ) : null}
+                        </button>
+                      ) : (
+                        /* O FIO. Nos 1,2s depois de QUALQUER troca de bloco ao
+                           vivo a barra nao existe — nasce como um fio e cresce.
+                           O segundo toque por reflexo acerta AUSENCIA VISIVEL, e
+                           nao um botao morto: botao morto le como "travou" e
+                           produz o terceiro toque. */
+                        <div
+                          aria-hidden
+                          className="h-1 w-full rounded-full bg-[hsl(42_78%_60%)]/45 transition-all duration-1000"
+                        />
+                      )}
+                    </div>
+                  </div>
+                </li>
+              );
+            }
+
             return (
               <li
                 key={it.id}
@@ -1231,53 +1397,49 @@ export function RundownGrid({
                       do bloco agora ficam no MESMO trilho, um sob o outro, em vez
                       de um em cada quina. Tique primeiro (é o gesto de todo
                       domingo), alça depois (é o de montar). */}
+                  {/* REABRIR EXISTE EM UM PIXEL SO DA TELA INTEIRA: a linha do
+                      ULTIMO bloco concluido. Nao no heroi (onde brigaria com a
+                      barra dourada), nao em todo concluido (onde seriam N alvos
+                      de rebobinar o culto espalhados pela lista).
+
+                      Um toque, como o dono decidiu depois de eu questionar duas
+                      vezes. A protecao nao vem de gesto extra: vem da DISTANCIA
+                      — ele fica bem acima da barra dourada — e de ser o unico
+                      alvo consequente fora do heroi. */}
+                  {canEdit && idx === ultimoFeitoIdx ? (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        desmarcarFeito(it);
+                      }}
+                      className="press mr-1 flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-border bg-card px-3 text-[13px] font-bold text-foreground"
+                    >
+                      <RotateCcw className="size-3.5" /> Reabrir
+                    </button>
+                  ) : null}
+
                   <div className="flex w-9 shrink-0 flex-col items-center gap-1 py-2">
-                    {canEdit && done ? (
-                      // DESMARCAR PEDE PRESSÃO, e não por capricho: desmarcar
-                      // reabre o bloco, o `liveIdx` volta, e a ponte manda o
-                      // ProPresenter reiniciar o cronômetro do palco — na frente
-                      // de quem está pregando. Isso não pode sair de um toque no
-                      // mesmo pixel do gesto que a equipe repete o culto inteiro.
-                      // `BotaoSegurar` é o que o próprio roteiro já usa pra
-                      // encerrar o culto; `aoDesistir` existe porque "dei um
-                      // tapinha e não aconteceu nada" é o modo de falha dele.
-                      <BotaoSegurar
-                        aoConfirmar={() => desmarcarFeito(it)}
-                        aoDesistir={() => showToast("Segure para desmarcar este bloco.")}
-                        textoTeclado={`Desmarcar "${it.title}" como concluído?`}
-                        aria-label="Segure para desmarcar feito"
-                        // Só o clique: barrar o pointerdown aqui (mesmo em
-                        // captura) mataria o gesto do próprio BotaoSegurar, que é
-                        // quem escuta esse evento pra começar a varredura.
-                        onClick={(e) => e.stopPropagation()}
-                        className="grid size-9 shrink-0 place-items-center rounded-full border-2 border-success bg-success text-white transition-colors"
-                      >
-                        <Check className="size-4" strokeWidth={3.5} />
-                      </BotaoSegurar>
-                    ) : canEdit ? (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          marcarFeito(it);
-                        }}
-                        aria-label="Marcar feito"
-                        className={cn(
-                          "grid size-9 shrink-0 place-items-center rounded-full border-2 transition-colors",
-                          live ? "border-primary text-primary" : "border-border text-transparent",
-                        )}
-                      >
-                        <Check className="size-4" strokeWidth={3.5} />
-                      </button>
-                    ) : (
-                      <span
-                        className={cn(
-                          "grid size-9 shrink-0 place-items-center rounded-full",
-                          done ? "bg-success text-white" : live ? "border-2 border-primary" : "border-2 border-border",
-                        )}
-                      >
-                        {done ? <Check className="size-4" strokeWidth={3.5} /> : null}
-                      </span>
-                    )}
+                    {/* O TIQUE DEIXOU DE SER BOTAO — virou so o estado do bloco.
+                        Ele era um alvo de 36px colado na borda de um card cuja
+                        superficie inteira abre o modal, e era assim que a equipe
+                        concluia bloco sem querer no meio do culto: mirando o card
+                        e acertando o circulo. Quem conclui agora e a barra
+                        dourada dentro do heroi, que e 15x maior e mora num lugar
+                        so da tela.
+
+                        Some junto a discussao de 44px (nao ha mais alvo pequeno
+                        pra acertar) e some o `BotaoSegurar` que ficava aqui com
+                        `touch-action: none` fixo em TODO bloco concluido, criando
+                        uma faixa onde a pagina nao rolava. */}
+                    <span
+                      aria-label={done ? "Bloco concluido" : "Bloco pendente"}
+                      className={cn(
+                        "grid size-9 shrink-0 place-items-center rounded-full",
+                        done ? "bg-success text-white" : "border-2 border-border",
+                      )}
+                    >
+                      {done ? <Check className="size-4" strokeWidth={3.5} /> : null}
+                    </span>
 
                     {canEdit && modo === "reordenar" && podeMover(it.id) ? (
                       /* AS SETAS. Elas não são enfeite de acessibilidade: são o
