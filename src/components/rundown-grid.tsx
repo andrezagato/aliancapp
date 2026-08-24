@@ -7,6 +7,7 @@ import {
   Trash2,
   ChevronDown,
   ChevronUp,
+  FileText,
   GripVertical,
   Check,
   Play,
@@ -264,7 +265,7 @@ export function RundownGrid({
    * resolve isso de verdade (só desloca a fronteira do erro). Num modo, a
    * pergunta não existe: ali dentro, dedo que anda MOVE.
    */
-  const [modo, setModo] = useState<"conduzir" | "reordenar">("conduzir");
+  const [modo, setModo] = useState<"conduzir" | "reordenar" | "observacoes">("conduzir");
   const [editing, setEditing] = useState<RundownItem | "new" | null>(null);
   const [contributing, setContributing] = useState<RundownItem | null>(null);
   const [manageKinds, setManageKinds] = useState(false);
@@ -303,11 +304,15 @@ export function RundownGrid({
   // o `items` antigo do servidor e o número pularia pra trás debaixo do dedo.
   const ocupado =
     drag !== null ||
-    // O MODO INTEIRO É "mão na massa", não só o instante do arraste. Sem isto o
-    // tempo real reescreve `items` no meio da reorganização e a ordem que a
-    // pessoa está montando se desfaz debaixo dela — e ela não teria como saber
-    // que foi o servidor, ia achar que o próprio dedo errou.
-    modo !== "conduzir" ||
+    // REORDENAR e "mao na massa" e pausa o tempo real: sem isto o servidor
+    // reescreve `items` no meio da reorganizacao e a ordem se desfaz debaixo da
+    // pessoa, que ia achar que errou o proprio dedo.
+    //
+    // OBSERVACOES nao pausa, de proposito. Ler nao e mexer, e a pessoa esta lendo
+    // JUSTAMENTE pra se preparar pro que vem — congelar a tela ali seria esconder
+    // dela a mudanca que ela precisa saber. O custo e que a lista pode se
+    // reorganizar enquanto ela le; o beneficio e que o que ela le e verdade.
+    modo === "reordenar" ||
     editing !== null || contributing !== null || manageKinds || manageTpl || duracaoAberta !== null;
   // O ritmo NUNCA fica mais lento que a verdade do servidor. `started`/`ended`
   // são otimistas: servem pra ACELERAR no instante em que a pessoa toca
@@ -1362,7 +1367,15 @@ export function RundownGrid({
                         era só o celular que não. O clamp segura a linha do bloco: uma
                         observação de seis linhas não pode empurrar o roteiro inteiro. */}
                     {it.note ? (
-                      <p className="mt-0.5 line-clamp-3 whitespace-pre-wrap break-words text-[13px] text-muted-foreground">
+                      <p
+                        className={cn(
+                          "mt-0.5 whitespace-pre-wrap break-words text-[13px] text-muted-foreground",
+                          // No modo leitura a nota abre inteira. E o unico lugar
+                          // do app onde a linha do bloco pode crescer sem limite,
+                          // e ali isso e o recurso, nao o defeito.
+                          modo === "observacoes" ? null : "line-clamp-3",
+                        )}
+                      >
                         {it.note}
                       </p>
                     ) : null}
@@ -1493,7 +1506,7 @@ export function RundownGrid({
         </BotaoSegurar>
       ) : null}
 
-      {canEdit && modo === "reordenar" ? (
+      {modo !== "conduzir" ? (
         /* O RODAPÉ DO MODO. "Pronto" é confirmação de saída, não de gravação —
            cada movimento já foi gravado quando aconteceu. Chamar de "Salvar"
            faria a pessoa achar que sair sem tocar desfaz, e não desfaz. */
@@ -1502,7 +1515,7 @@ export function RundownGrid({
             onClick={() => setModo("conduzir")}
             className="press flex-1 rounded-2xl bg-primary py-3 text-sm font-extrabold text-primary-foreground"
           >
-            Pronto
+            {modo === "observacoes" ? "Fechar observações" : "Pronto"}
           </button>
         </div>
       ) : null}
@@ -1528,6 +1541,18 @@ export function RundownGrid({
             className="press grid w-12 place-items-center rounded-2xl border border-dashed border-border text-muted-foreground"
           >
             <GripVertical className="size-5" />
+          </button>
+          {/* LER OS PROXIMOS. A observacao guarda setlist e passagens (dado de
+              producao: 10 das 13 notas ja sao lista), e na lista ela vive cortada
+              em tres linhas pra nao empurrar o roteiro. Aqui ela abre inteira, em
+              todos os blocos de uma vez — que e como alguem se prepara pro que
+              vem. Ler e um trabalho diferente de conduzir, e por isso e um modo. */}
+          <button
+            onClick={() => setModo("observacoes")}
+            aria-label="Ver observacoes de todos os blocos"
+            className="press grid w-12 place-items-center rounded-2xl border border-dashed border-border text-muted-foreground"
+          >
+            <FileText className="size-5" />
           </button>
           <button
             onClick={() => setManageKinds(true)}
