@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { CalendarDays, Check, Users } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
@@ -25,6 +25,7 @@ import { warm } from "@/lib/toasts";
 import { markSeen } from "@/lib/achievements-seen";
 import type { UnlockedBadge } from "@/lib/achievements";
 import { TodayCard } from "./today-card";
+import { CultoAoVivo } from "./culto-ao-vivo";
 import { NextScheduleHero } from "./next-schedule-hero";
 import { SwipeCard } from "./swipe-card";
 import { PendingInviteBanner } from "./pending-invite-banner";
@@ -38,6 +39,7 @@ export function VolunteerHome({
   userName,
   unread = 0,
   assignments,
+  aoVivo,
   children,
 }: {
   title: string;
@@ -45,6 +47,14 @@ export function VolunteerHome({
   userName: string;
   unread?: number;
   assignments: MyAssignment[];
+  /**
+   * O culto que está acontecendo agora. Chega como DADO, não como elemento
+   * pronto, e isso é o ponto: só aqui dentro dá pra saber se ele já está na tela.
+   * O corte today/herói/lista acontece no cliente (logo abaixo), então o servidor
+   * não tem como deduplicar — e um slot de elemento obrigaria a mover aquela
+   * derivação inteira pra lá.
+   */
+  aoVivo?: { eventId: string; title: string; startedAt: string } | null;
   children?: React.ReactNode;
 }) {
   const { showToast } = useToast();
@@ -87,19 +97,48 @@ export function VolunteerHome({
     });
   };
 
+  // CHECK-IN EM VOO — a trava que faltava, e ela precisa ser PRÓPRIA.
+  //
+  // O botão não tinha estado de espera nenhum: `const [, startTransition]`
+  // descarta a flag `pending`, e entre o toque e qualquer mudança na tela roda o
+  // `getCoords` (timeout de 6s, alta precisão, mais o alerta nativo de permissão
+  // do iOS na primeira vez) e só então o `fazerCheckin`. Nesse intervalo a tela
+  // não mudava NADA e o botão continuava vivo — então a pessoa tocava de novo, no
+  // mesmo pixel. O segundo toque disparava um segundo pedido de GPS e um segundo
+  // `fazerCheckin`; o INSERT duplicado morre no `unique` de `checkins`, mas o
+  // `logActivity` grava duas vezes e o `notificarConquistas` roda duas vezes em
+  // paralelo (dois pushes, duas telas de conquista). E no ramo "fora do local",
+  // o segundo toque empilhava um `window.confirm` em cima do primeiro.
+  //
+  // Por que NÃO reusar a flag do `useTransition`: ela é uma só pra todas as
+  // transições deste componente — confirmar escala, recusar, carregar substitutos.
+  // Usá-la aqui desabilitaria o check-in enquanto qualquer outra coisa estivesse
+  // no ar, o que é uma trava mais larga que o problema.
+  const [checkinEmVoo, setCheckinEmVoo] = useState<string | null>(null);
+  // Qual escala acabou de ser marcada NESTA sessão — ver `today`, mais abaixo.
+  const [marcadoAgora, setMarcadoAgora] = useState<string | null>(null);
+
   const doCheckin = (a: MyAssignment, force = false) => {
+    setCheckinEmVoo(a.assignmentId);
     startTransition(async () => {
       const coords = await getCoords();
       const r = await fazerCheckin(a.assignmentId, a.teamId, a.eventId, coords?.lat ?? null, coords?.lng ?? null, force);
       if (r.ok) {
         patch(a.assignmentId, { checkedIn: true });
+        setCheckinEmVoo(null);
+        setMarcadoAgora(a.assignmentId);
         showToast(warm("checkin"));
         if (r.unlocked && r.unlocked.length > 0) celebrateNew(r.unlocked);
       } else if (r.code === "outside") {
         if (typeof window !== "undefined" && window.confirm("Você não está no local do evento. Fazer check-in mesmo assim?")) {
+          // Segue em voo de propósito: a chamada recursiva reassume a trava, e
+          // soltar aqui reabriria o botão exatamente no intervalo do segundo GPS.
           doCheckin(a, true);
+        } else {
+          setCheckinEmVoo(null);
         }
       } else {
+        setCheckinEmVoo(null);
         showToast(r.error);
       }
     });
@@ -158,17 +197,95 @@ export function VolunteerHome({
     }
   };
 
+  // O DIA DA IGREJA PRECISA SER RECONFERIDO QUANDO A PESSOA VOLTA PRO APP.
+  //
+  // `todaySP` é calculado no render, e nada obriga um render a acontecer. Num PWA
+  // instalado na tela de início — que é como a igreja usa — o app não fecha: fica
+  // suspenso no alternador de tarefas por dias. Quem abriu no domingo à noite e
+  // reabre na segunda de manhã pelo alternador não dispara render nenhum, e a
+  // tela segue dizendo "É HOJE", com botão de check-in vivo, pro culto de ONTEM.
+  //
+  // Só `visibilitychange` e `focus`, sem cronômetro: o caso real é justamente o
+  // do app voltando do bolso, e um intervalo re-renderizaria a Home inteira pra
+  // sempre pra cobrir a virada de meia-noite com o app aberto e olhando — que não
+  // é o problema que alguém relatou. E só re-renderiza se o dia REALMENTE virou.
+  const [, reconferirDia] = useState(0);
+  const diaRef = useRef<string | null>(null);
+  useEffect(() => {
+    const conferir = () => {
+      const agora = churchDateISO(new Date().toISOString());
+      if (diaRef.current !== null && agora !== diaRef.current) reconferirDia((n) => n + 1);
+      diaRef.current = agora;
+    };
+    const aoVoltar = () => {
+      if (document.visibilityState === "visible") conferir();
+    };
+    document.addEventListener("visibilitychange", aoVoltar);
+    window.addEventListener("focus", conferir);
+    return () => {
+      document.removeEventListener("visibilitychange", aoVoltar);
+      window.removeEventListener("focus", conferir);
+    };
+  }, []);
+
   // convites pendentes sobem pro topo; o resto (confirmado/presente) vira today/hero/lista
   const todaySP = churchDateISO(new Date().toISOString());
+  diaRef.current = todaySP;
   const sorted = [...items].sort((a, b) => (a.startsAt < b.startsAt ? -1 : 1));
 
   const pending = sorted.filter((a) => a.status === "convidado");
   const rest = sorted.filter((a) => a.status !== "convidado");
-  const today = rest.find((a) => churchDateISO(a.startsAt) === todaySP) || null;
+  // QUAL ESCALA DE HOJE O CARD MOSTRA — e por que não é simplesmente a primeira.
+  //
+  // Era `rest.find(...)`, ou seja a primeira do dia em ordem cronológica. Quem
+  // serve de manhã E de noite (acontece toda semana na Mídias) via o card preso
+  // na escala da MANHÃ o dia inteiro — e o único botão de check-in da tela
+  // pertencia a ela. À noite, a pessoa tocava nele achando que marcava presença
+  // no culto da noite e gravava presença no da manhã, que já tinha acabado.
+  //
+  // Agora o card mostra a primeira de hoje AINDA NÃO marcada: o botão sempre
+  // pertence a um compromisso que a pessoa ainda tem pela frente. Marcou a da
+  // manhã, o card passa pra da noite, que é de fato o próximo compromisso dela
+  // no dia.
+  //
+  // E se todas já estiverem marcadas, mostra a ÚLTIMA em vez de nenhuma: o card
+  // some seria "nada some da tela" ao contrário, e o "Presente" é justamente a
+  // confirmação que a pessoa quer continuar vendo.
+  const deHoje = rest.filter((a) => churchDateISO(a.startsAt) === todaySP);
+  //
+  // E O CARD NÃO PULA NO INSTANTE DO CHECK-IN. Sem `marcadoAgora`, quem serve de
+  // manhã e de noite marcava a da manhã e o card trocava de dono NO MESMO PIXEL:
+  // mesmo formato, mesmo rótulo "É hoje", e o botão de check-in vivo de novo —
+  // agora pertencendo ao culto da NOITE. Um segundo toque por reflexo (que é
+  // exatamente o que o commit do `checkinEmVoo` documenta como comportamento real
+  // das pessoas) marcaria presença num culto que ainda nem começou.
+  //
+  // Preso em quem acabou de marcar, o card fica no "Presente" — a confirmação que
+  // a pessoa quer ver — e só avança no próximo carregamento da tela, quando não
+  // há dedo nenhum a caminho daquele pixel.
+  const today =
+    (marcadoAgora ? deHoje.find((a) => a.assignmentId === marcadoAgora) : null) ||
+    deHoje.find((a) => !a.checkedIn) ||
+    deHoje[deHoje.length - 1] ||
+    null;
   const upcoming = rest.filter((a) => a !== today);
   const hero = upcoming[0] || null;
   const list = upcoming.slice(1);
   const nothing = pending.length === 0 && !today && !hero && list.length === 0;
+
+  // O CULTO AO VIVO SÓ SOBE SE ELE JÁ NÃO ESTIVER NA TELA.
+  //
+  // A comparação é contra os TRÊS lugares onde uma escala aparece, não só contra
+  // o `today`. Quem serve de manhã e de noite tem `today` = a escala da MANHÃ
+  // (`rest.find` pega a primeira do dia) enquanto o culto ao vivo é o da NOITE —
+  // que está no `hero`. Conferindo só o `today`, o mesmo culto apareceria duas
+  // vezes, um card abaixo do outro.
+  const jaNaTela =
+    !!aoVivo &&
+    (today?.eventId === aoVivo.eventId ||
+      hero?.eventId === aoVivo.eventId ||
+      list.some((a) => a.eventId === aoVivo.eventId));
+  const mostrarAoVivo = aoVivo && !jaNaTela;
 
   // abre o modal da escala em cima da Home — antes isso era router.push e
   // mudava de aba
@@ -185,10 +302,21 @@ export function VolunteerHome({
         <div className="space-y-3">
           <PendingInviteBanner pending={pending} onRespond={openRespond} />
 
+          {/* AGORA -> PRÓXIMA -> A SEGUINTE. O card do culto ao vivo era o
+              primeiro dos `children`, e os children são renderizados DEPOIS do
+              herói e da lista — então o culto que estava acontecendo nascia em
+              sexto lugar na página, abaixo de escalas de semanas à frente.
+              Nas Home de líder e admin ele já era o primeiro filho da HomeShell;
+              a queixa era exclusiva do voluntário, porque só esta tela desenha
+              conteúdo próprio antes dos children. */}
+          {mostrarAoVivo ? (
+            <CultoAoVivo eventId={aoVivo.eventId} title={aoVivo.title} startedAt={aoVivo.startedAt} />
+          ) : null}
+
           {nothing ? <EmptyCard /> : null}
           {today ? (
             <div className="animate-fade-up" style={{ animationDelay: "50ms" }}>
-              <TodayCard a={today} onConfirm={() => confirm(today)} onCancel={() => openRespond(today)} onCheckin={() => checkin(today)} />
+              <TodayCard a={today} onConfirm={() => confirm(today)} onCancel={() => openRespond(today)} onCheckin={() => checkin(today)} checkinEmVoo={checkinEmVoo === today.assignmentId} />
             </div>
           ) : null}
           {hero ? (

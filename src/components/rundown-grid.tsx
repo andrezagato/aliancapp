@@ -5,6 +5,9 @@ import { useRouter } from "next/navigation";
 import {
   Plus,
   Trash2,
+  ChevronDown,
+  ChevronUp,
+  FileText,
   GripVertical,
   Check,
   Play,
@@ -77,7 +80,23 @@ import { DuracaoPopover } from "@/components/rundown-duracao-popover";
  * o único campo com texto de verdade seria pior que a irregularidade que a altura
  * fixa resolve.
  */
-const ALTURA_BLOCO = 92;
+const ALTURA_BLOCO = 72;
+/**
+ * A ALTURA E O ESTADO. Bloco concluido encolhe pra 52px — e nao e economia de
+ * pixel, e leitura: a silhueta da lista passa a dizer onde o culto esta ANTES de
+ * qualquer palavra ser lida, e sem depender de cor (que nao serve pra quem tem
+ * daltonismo nem pra quem olha de longe).
+ *
+ * Veio de teste no aparelho: com 6 blocos, dois concluidos ocupavam meia tela
+ * cada um, empurrando o bloco AO VIVO pra fora da area visivel. O que ja passou
+ * e a informacao menos urgente da tela e estava ocupando o lugar mais nobre.
+ *
+ * As duas alturas encolheram de novo quando a linha passou a ter DUAS linhas de
+ * texto fixas (titulo + meta) em vez de titulo + responsavel + nota de tres
+ * linhas: sem conteudo variavel, a caixa nao precisa mais reservar espaco pro
+ * pior caso.
+ */
+const ALTURA_FEITO = 56;
 // Cor de bloco vem da Paleta de Categoria (DESIGN.md) — a rampa antiga era a
 // paleta default do Tailwind (ciano/violeta/azul), fria e de outra casa.
 const SWATCHES = [...CATEGORY_HEXES, CATEGORY_NEUTRAL];
@@ -92,16 +111,6 @@ const SWATCHES = [...CATEGORY_HEXES, CATEGORY_NEUTRAL];
  */
 const TRAVA_TTL_MS = 2 * 60_000;
 
-/**
- * Quanto tempo o auto-scroll pro bloco ao vivo fica em silêncio depois de UM
- * TIQUE NOSSO (F3 do DECISOES-TIQUE.md).
- *
- * Sem isto, marcar um bloco como feito troca `blocoAtivoId` na hora, o efeito de
- * centralização dispara no mesmo quadro e a lista desliza debaixo do dedo que
- * acabou de tocar — o segundo toque, se vier, acerta outro bloco. ~700ms cobre
- * o tempo de o dedo sair da tela depois do toque.
- */
-const SEGURA_SCROLL_MS = 700;
 
 /**
  * Quanto antes da hora marcada o roteiro já conta como "ao vivo" pra sincronia.
@@ -177,7 +186,37 @@ function Contador({
  * o realce do card arrastado). Redimensionar saiu por decisão do dono — a
  * duração agora se muda pelo popover, que não depende de precisão de pixel.
  */
-type Drag = { mode: "reorder"; id: string } | null;
+// `pointerId` entrou junto porque sem ele os listeners de window não sabem de
+// QUEM é o evento: com dois dedos na tela (mão apoiada, o que acontece segurando
+// o celular de lado), o segundo `beginReorder` sobrescrevia o `drag.id` e o dedo
+// #1 passava a arrastar o bloco do dedo #2 — e o primeiro que levantasse
+// persistia a ordem, matando o gesto do outro.
+// `armado` separa "o dedo encostou na alça" de "o dedo está ARRASTANDO". Antes só
+// existia o segundo estado, e ele começava no toque — por isso os 2-5px que todo
+// dedo escorrega ao encostar já reordenavam. `origem` guarda onde o dedo pousou,
+// pra medir a distância percorrida.
+type Drag = {
+  mode: "reorder";
+  id: string;
+  pointerId: number;
+  armado: boolean;
+  origem: { x: number; y: number };
+} | null;
+
+/**
+ * Quanto o dedo precisa andar pra virar arraste.
+ *
+ * DISTÂNCIA, não tempo. Atraso pune quem acertou o gesto — segurar 300ms antes de
+ * qualquer coisa acontecer é o que faz uma tela parecer travada. Distância só
+ * filtra quem NÃO quis arrastar: quem quer arrastar já vai andar muito mais que
+ * isso, e nem percebe o limiar.
+ *
+ * 8px é abaixo do que uma rolagem intencional percorre e acima do escorregão de
+ * quem só quis encostar. Não usamos apertar-e-segurar: o iOS sequestra pressão
+ * longa como seleção de texto (está escrito em rundown-salvaguardas), e segurar
+ * poria latência justamente no gesto que precisa parecer imediato.
+ */
+const LIMIAR_ARME = 8;
 
 export function RundownGrid({
   eventId,
@@ -224,6 +263,15 @@ export function RundownGrid({
   const [started, setStarted] = useState<string | null>(startedAt);
   const [ended, setEnded] = useState<string | null>(endedAt);
   const [drag, setDrag] = useState<Drag>(null);
+  /**
+   * MODO DA TELA. Conduzir é o domingo; reordenar é montar.
+   *
+   * Virou modo porque arrastar solto no meio da lista é ambíguo por natureza —
+   * o mesmo dedo, no mesmo pixel, pode querer rolar ou mover, e nenhum limiar
+   * resolve isso de verdade (só desloca a fronteira do erro). Num modo, a
+   * pergunta não existe: ali dentro, dedo que anda MOVE.
+   */
+  const [modo, setModo] = useState<"conduzir" | "reordenar" | "observacoes">("conduzir");
   const [editing, setEditing] = useState<RundownItem | "new" | null>(null);
   const [contributing, setContributing] = useState<RundownItem | null>(null);
   const [manageKinds, setManageKinds] = useState(false);
@@ -261,7 +309,17 @@ export function RundownGrid({
   // O popover entra na conta: um refresh chegando entre dois toques no "+" traria
   // o `items` antigo do servidor e o número pularia pra trás debaixo do dedo.
   const ocupado =
-    drag !== null || editing !== null || contributing !== null || manageKinds || manageTpl || duracaoAberta !== null;
+    drag !== null ||
+    // REORDENAR e "mao na massa" e pausa o tempo real: sem isto o servidor
+    // reescreve `items` no meio da reorganizacao e a ordem se desfaz debaixo da
+    // pessoa, que ia achar que errou o proprio dedo.
+    //
+    // OBSERVACOES nao pausa, de proposito. Ler nao e mexer, e a pessoa esta lendo
+    // JUSTAMENTE pra se preparar pro que vem — congelar a tela ali seria esconder
+    // dela a mudanca que ela precisa saber. O custo e que a lista pode se
+    // reorganizar enquanto ela le; o beneficio e que o que ela le e verdade.
+    modo === "reordenar" ||
+    editing !== null || contributing !== null || manageKinds || manageTpl || duracaoAberta !== null;
   // O ritmo NUNCA fica mais lento que a verdade do servidor. `started`/`ended`
   // são otimistas: servem pra ACELERAR no instante em que a pessoa toca
   // Iniciar, nunca pra desacelerar por causa de uma action que falhou — um
@@ -278,11 +336,6 @@ export function RundownGrid({
   // reexecutar o efeito (ele depende da TROCA de bloco, não de `ocupado`).
   const ocupadoRef = useRef(ocupado);
   ocupadoRef.current = ocupado;
-  // TIQUE NOSSO (F3): fica `true` por `SEGURA_SCROLL_MS` depois que ESTE
-  // aparelho marca um bloco como feito, pra segurar o auto-scroll abaixo — não
-  // é sobre outro alguém ticando em outro aparelho, é sobre não competir com o
-  // dedo que acabou de tocar aqui.
-  const tiqueNossoRef = useRef(false);
 
   const listRef = useRef(list);
   listRef.current = list;
@@ -317,6 +370,14 @@ export function RundownGrid({
       await reordenarCronograma(eventId, next.map((x) => x.id));
       router.refresh();
     });
+  // Espelhado em ref pelo mesmo motivo do `listRef` logo acima: `finalizar`
+  // precisa chamar isto e precisa ser ESTÁVEL. Se `persistOrder` entrasse nas
+  // deps, `finalizar` mudaria de identidade a cada render, `soltarListeners`
+  // junto — e o efeito de desmonte, que depende dele, rodaria sua limpeza a cada
+  // render, arrancando os listeners NO MEIO do arraste. O `eslint-disable` que
+  // estava aqui antes escondia exatamente essa armadilha em vez de resolvê-la.
+  const persistOrderRef = useRef(persistOrder);
+  persistOrderRef.current = persistOrder;
   const salvarDuracao = (id: string, min: number) => {
     salvarDurRef.current = null;
     const proxima = filaRef.current.then(async () => {
@@ -379,70 +440,279 @@ export function RundownGrid({
   const onPointerMove = useCallback((e: PointerEvent) => {
     const d = dragRef.current;
     if (!d) return;
+    // FILTRA PELO PONTEIRO QUE COMEÇOU O GESTO. Este era o furo: o filtro existia
+    // só no soltar e no cancelar, e o handler que ARMA e CALCULA aceitava evento
+    // de qualquer dedo na página.
+    //
+    // O acidente: dedo #1 encosta na alça do bloco 3 e fica parado. A outra mão
+    // segura o aparelho e o polegar #2 desliza na borda. O `pointermove` do dedo
+    // #2 chega aqui, e a distância é medida entre a coordenada DELE e a origem do
+    // dedo #1 — o limiar de 8px é atropelado na hora, o gesto arma sem ninguém ter
+    // arrastado nada, e a `vaga` sai do Y do polegar #2: o bloco 3 salta pra onde
+    // ele está. Como o pointerup do #2 é descartado pelo filtro (que lá existe), o
+    // gesto nem termina; quando o #1 levanta, a ordem acidental é GRAVADA — com
+    // push de tempo real pro aparelho de toda a equipe, no meio do culto.
+    if (e.pointerId !== d.pointerId) return;
+    // Ainda não armou? Só arma se o dedo andou o bastante — e enquanto não armar,
+    // NADA se move. É aqui que morre o "mudou a ordem sem eu querer".
+    if (!d.armado) {
+      const dx = e.clientX - d.origem.x;
+      const dy = e.clientY - d.origem.y;
+      if (dx * dx + dy * dy < LIMIAR_ARME * LIMIAR_ARME) return;
+      // Euclidiana, não só vertical: quem começa o gesto na diagonal (o polegar
+      // faz arco, não linha reta) armaria tarde demais medindo só o eixo Y.
+      dragRef.current = { ...d, armado: true };
+      setDrag(dragRef.current);
+    }
     const ids = listRef.current.map((x) => x.id);
-    let over = ids.length - 1;
+    // `vaga` é ONDE ENTRA, não sobre quem passou: 0 = antes do primeiro, 1 = entre
+    // o 1º e o 2º, e assim por diante até `ids.length` = depois do último. O laço
+    // acha a primeira linha cujo meio está ABAIXO do dedo; se nenhuma está, o dedo
+    // passou de todas e a vaga é o fim.
+    //
+    // O padrão era `ids.length - 1`, que é a última LINHA, não a última VAGA —
+    // então arrastar pra depois do último bloco parava uma casa antes.
+    let vaga = ids.length;
     for (let i = 0; i < ids.length; i++) {
       const el = itemRefs.current.get(ids[i]);
       if (!el) continue;
       const r = el.getBoundingClientRect();
       if (e.clientY < r.top + r.height / 2) {
-        over = i;
+        vaga = i;
         break;
       }
     }
     const cur = listRef.current;
     const from = cur.findIndex((x) => x.id === d.id);
-    if (from !== -1 && over !== from) {
+    if (from === -1) return;
+    // ERRO DE ÍNDICE — este era o "pula duas casas".
+    //
+    // `vaga` descreve o array de ANTES. O splice de remoção acontece primeiro e
+    // desce em 1 todos os índices acima de `from`; inserir na `vaga` crua depois
+    // disso põe o bloco uma posição além. Traço com [A,B,C] e A na mão, dedo logo
+    // depois do meio de B: vaga=2, remove A -> [B,C], insere em 2 -> [B,C,A],
+    // quando o certo é [B,A,C]. Só acontecia PRA BAIXO — pra cima os índices não
+    // se deslocam —, e é essa assimetria que fazia o gesto parecer aleatório em
+    // vez de só sensível.
+    let alvo = vaga > from ? vaga - 1 : vaga;
+    // TRAVA NO PISO. Sem isto o dedo arrasta o bloco pra cima do ao vivo e o
+    // culto teleporta pra ele — o `liveIdx` é derivado da ordem, então "subiu
+    // acima do ao vivo" e "virou o ao vivo" são a mesma coisa. O bloco encosta
+    // no piso e para, em vez de recusar o gesto inteiro: parar é legível, e
+    // recusar no meio do arraste pareceria travamento.
+    const piso = pisoRef.current;
+    if (alvo <= piso) alvo = piso + 1;
+    if (alvo !== from) {
       const next = [...cur];
       const [moved] = next.splice(from, 1);
-      next.splice(over, 0, moved);
+      next.splice(alvo, 0, moved);
       setList(next);
     }
   }, []);
 
-  const onPointerUp = useCallback(() => {
-    const d = dragRef.current;
+  // ---- FIM DE GESTO GARANTIDO ---------------------------------------------
+  //
+  // Antes existia UM caminho de saída: `pointerup` com {once:true}. Quando o iOS
+  // cancelava o ponteiro — central de controle, notificação, segundo dedo,
+  // chamada chegando — esse pointerup NUNCA vinha, e nada era desfeito:
+  //
+  //   · `drag` ficava não-nulo pra sempre. E `drag` alimenta `ocupado`, que é a
+  //     válvula do tempo real: o roteiro daquele aparelho PARAVA de receber
+  //     atualização pelo resto do culto, em silêncio;
+  //   · `suppressClickRef` ficava true, e o guarda do clique no card engolia
+  //     tudo — o modal do bloco não abria mais;
+  //   · o `pointermove` seguia pendurado na window com o `dragRef` apontando pro
+  //     bloco: QUALQUER movimento de dedo na página passava a reordenar o roteiro.
+  //
+  // Só se curava quando alguém agarrava a alça de novo e completava um gesto
+  // limpo. É o candidato mais forte pro "não está muito estável" relatado ao vivo.
+  //
+  // Os handlers moram em refs porque `finalizar` precisa REMOVER os dois, e os
+  // dois precisam CHAMAR `finalizar` — a referência estável tem que existir antes
+  // de cada um ser definido, senão o removeEventListener recebe outra função e
+  // não remove nada.
+  const aoSoltarRef = useRef<((e: PointerEvent) => void) | null>(null);
+  const aoCancelarRef = useRef<((e: PointerEvent) => void) | null>(null);
+  const ordemAoIniciarRef = useRef<RundownItem[] | null>(null);
+
+  const soltarListeners = useCallback(() => {
     window.removeEventListener("pointermove", onPointerMove);
-    setDrag(null);
-    // Mantém a trava por um instante: o click sintético do fim do gesto chega
-    // logo depois deste pointerup; limpamos em seguida pra taps normais valerem.
-    window.setTimeout(() => {
-      suppressClickRef.current = false;
-    }, 60);
-    if (!d) return;
-    persistOrder(listRef.current);
-    setFlashId(d.id);
-    window.setTimeout(() => setFlashId(null), 900);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (aoSoltarRef.current) window.removeEventListener("pointerup", aoSoltarRef.current);
+    if (aoCancelarRef.current) window.removeEventListener("pointercancel", aoCancelarRef.current);
   }, [onPointerMove]);
 
-  const beginReorder = (e: React.PointerEvent, it: RundownItem) => {
-    e.preventDefault();
-    e.stopPropagation();
-    suppressClickRef.current = true;
-    setDrag({ mode: "reorder", id: it.id });
-    window.addEventListener("pointermove", onPointerMove);
-    window.addEventListener("pointerup", onPointerUp, { once: true });
+  const finalizar = useCallback(
+    (persistir: boolean) => {
+      const d = dragRef.current;
+      soltarListeners();
+      setDrag(null);
+      // Mantém a trava por um instante: o click sintético do fim do gesto chega
+      // logo depois; limpamos em seguida pra taps normais valerem.
+      window.setTimeout(() => {
+        suppressClickRef.current = false;
+      }, 60);
+      const antes = ordemAoIniciarRef.current;
+      ordemAoIniciarRef.current = null;
+      if (!d) return;
+      if (persistir) {
+        // GRAVAR SÓ SE HOUVE ARRASTE E SE A ORDEM MUDOU DE VERDADE.
+        //
+        // Sem armar, o gesto foi um toque na alça e não há nada a dizer ao
+        // servidor. E mesmo armado, a pessoa pode ter arrastado e voltado pro
+        // mesmo lugar. Gravar nesses casos custaria um `reordenarCronograma`, um
+        // `router.refresh()` e um push de tempo real pra todo aparelho da equipe
+        // — durante o culto — pra comunicar exatamente nada.
+        const mudou =
+          d.armado && (antes === null || antes.some((x, i) => x.id !== listRef.current[i]?.id));
+        if (mudou) {
+          persistOrderRef.current(listRef.current);
+          setFlashId(d.id);
+          window.setTimeout(() => setFlashId(null), 900);
+        }
+        return;
+      }
+      // CANCELADO VOLTA ATRÁS, e isso é decisão, não descuido. `pointercancel` no
+      // iOS é quase sempre o sistema tomando o gesto pra si — ou seja, o caso
+      // ACIDENTAL, que é justamente o que a pessoa reclamou. Gravar a ordem de um
+      // gesto que ela não terminou seria transformar o acidente em fato no banco,
+      // com push de tempo real pra equipe inteira e sem nada na tela dizendo o quê.
+      if (antes) setList(antes);
+    },
+    [soltarListeners],
+  );
+
+  const aoSoltar = useCallback(
+    (e: PointerEvent) => {
+      const d = dragRef.current;
+      if (d && e.pointerId !== d.pointerId) return;
+      finalizar(true);
+    },
+    [finalizar],
+  );
+
+  const aoCancelar = useCallback(
+    (e: PointerEvent) => {
+      const d = dragRef.current;
+      if (d && e.pointerId !== d.pointerId) return;
+      finalizar(false);
+    },
+    [finalizar],
+  );
+
+  useEffect(() => {
+    aoSoltarRef.current = aoSoltar;
+    aoCancelarRef.current = aoCancelar;
+  }, [aoSoltar, aoCancelar]);
+
+  // DESMONTE NO MEIO DO GESTO. Trocar de rota (o `router.replace` do "fixar neste
+  // culto"), um Suspense re-suspendendo, o culto encerrando — qualquer um desmonta
+  // esta tela com o dedo na alça. Sem esta limpeza os listeners sobrevivem na
+  // window com closures de um componente morto, e o pointerup seguinte dispara
+  // `persistOrder` de uma tela que não existe mais.
+  useEffect(() => () => soltarListeners(), [soltarListeners]);
+
+  /**
+   * MOVER UMA CASA, pelo botão. É o caminho de teclado e de leitor de tela — o
+   * arraste não tem equivalente acessível, e sem isto o modo seria inalcançável
+   * pra quem navega por Tab. Também serve pro dedo que prefere precisão a gesto.
+   */
+  const moverUma = (id: string, delta: -1 | 1) => {
+    const cur = listRef.current;
+    const from = cur.findIndex((x) => x.id === id);
+    if (from === -1) return;
+    const alvo = from + delta;
+    // Mesmo piso do arraste: nada passa pra cima do bloco ao vivo.
+    if (alvo <= pisoRef.current || alvo >= cur.length) return;
+    const next = [...cur];
+    const [moved] = next.splice(from, 1);
+    next.splice(alvo, 0, moved);
+    setList(next);
+    persistOrderRef.current(next);
+    setFlashId(id);
+    window.setTimeout(() => setFlashId(null), 900);
   };
 
-  const toggleDone = (it: RundownItem) => {
-    const done = !it.doneAt;
-    // Marca que o PRÓXIMO troco de bloco ao vivo veio de um toque aqui, e
-    // segura o auto-scroll por um instante — ver `SEGURA_SCROLL_MS` (F3).
-    tiqueNossoRef.current = true;
-    window.setTimeout(() => {
-      tiqueNossoRef.current = false;
-    }, SEGURA_SCROLL_MS);
+  const beginReorder = (e: React.PointerEvent, it: RundownItem) => {
+    // Só o botão primário arma. Antes, botão direito do mouse também armava — e no
+    // computador da régia o menu de contexto engole o pointerup, o que reproduzia
+    // exatamente o travamento do pointercancel.
+    if (e.button !== 0) return;
+    // Só dentro do modo, e só abaixo do piso. Fora do modo o dedo na lista é
+    // rolagem, sempre — que é o que acaba com a ambiguidade de vez.
+    if (modo !== "reordenar" || !podeMover(it.id)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    // Um gesto por vez: se sobrou algo de um anterior, encerra sem gravar.
+    if (dragRef.current) finalizar(false);
+    suppressClickRef.current = true;
+    ordemAoIniciarRef.current = listRef.current;
+    setDrag({
+      mode: "reorder",
+      id: it.id,
+      pointerId: e.pointerId,
+      armado: false,
+      origem: { x: e.clientX, y: e.clientY },
+    });
+    window.addEventListener("pointermove", onPointerMove);
+    if (aoSoltarRef.current) window.addEventListener("pointerup", aoSoltarRef.current);
+    if (aoCancelarRef.current) window.addEventListener("pointercancel", aoCancelarRef.current);
+  };
+
+  /**
+   * AFIRMAR, NUNCA INVERTER — e é essa palavra que conserta o telão piscando.
+   *
+   * Antes existia um `toggleDone` que decidia o destino assim:
+   *
+   *     const done = !it.doneAt;
+   *
+   * O servidor nunca foi toggle (recebe estado absoluto e, ao marcar, ainda faz
+   * `.is("done_at", null)`). O CLIENTE é que era — e ele decidia lendo um estado
+   * que o tempo real acabara de trocar por baixo dele.
+   *
+   * O acidente, em ordem: A tica o bloco 5. O realtime chega no aparelho de B. A
+   * linha NÃO SAI DO LUGAR — muda cor, risco e o anel do ao vivo, mas fica no
+   * mesmo pixel. O dedo de B já estava a caminho do mesmo tique. B toca achando
+   * que MARCA, o `!it.doneAt` agora vale false, e B DESMARCA. Duas pessoas
+   * querendo a mesma coisa produzem o oposto dela.
+   *
+   * Com marcar e desmarcar separados, o toque de domingo só sabe afirmar: dois
+   * dedos afirmando a mesma coisa dão um resultado só, e toque duplo acidental
+   * vira no-op no `.is("done_at", null)` que já existia no servidor.
+   */
+  const marcarFeito = (it: RundownItem) => {
+    if (it.doneAt) return; // já está feito: afirmar de novo não tem o que dizer
     setList((prev) =>
-      prev.map((x) => (x.id === it.id ? { ...x, doneAt: done ? new Date().toISOString() : null } : x)),
+      prev.map((x) => (x.id === it.id ? { ...x, doneAt: new Date().toISOString() } : x)),
     );
     startTx(async () => {
-      const r = await marcarBlocoFeito(it.id, eventId, done);
+      const r = await marcarBlocoFeito(it.id, eventId, true);
       // Sem isto o bloco "destica sozinho" quando a action falha — o próximo
       // `items` do servidor (sem a marca) sobrescreve o palpite otimista de
       // cima, e ninguém entende por quê (F2).
       if (r.ok) router.refresh();
       else showToast(r.error);
+    });
+  };
+
+  const desmarcarFeito = (it: RundownItem) => {
+    const antes = it.doneAt;
+    if (!antes) return;
+    setList((prev) => prev.map((x) => (x.id === it.id ? { ...x, doneAt: null } : x)));
+    startTx(async () => {
+      // Manda o carimbo que ESTA tela viu: se outra pessoa reabriu e concluiu o
+      // bloco no meio do gesto de segurar, o servidor recusa em vez de apagar a
+      // marca nova dela.
+      const r = await marcarBlocoFeito(it.id, eventId, false, antes);
+      if (r.ok) {
+        router.refresh();
+        return;
+      }
+      // REPÕE O CARIMBO ORIGINAL, não "agora". `rundown-timing` empurra todo bloco
+      // seguinte pelo `done_at` do anterior, então inventar a hora aqui deslocaria
+      // a projeção do resto do culto e faria o "atrasado/adiantado" mentir até
+      // alguém recarregar a página.
+      setList((prev) => prev.map((x) => (x.id === it.id ? { ...x, doneAt: antes } : x)));
+      showToast(r.error);
     });
   };
 
@@ -536,10 +806,67 @@ export function RundownGrid({
   // nunca com a mão na massa (arraste/modal aberto). Reusa o mapa de refs que o
   // arraste já mantém.
   const blocoAtivoId = rows.find((r) => r.status === "live")?.it.id ?? null;
+
+  /**
+   * O PISO: o último índice que já é passado ou presente. Nada se move até aqui.
+   *
+   * É a resposta pra "quem fica ao vivo quando alguém reordena?" — e a resposta
+   * só é simples porque o ao vivo é DERIVADO, não guardado: `liveIdx` é o
+   * primeiro bloco sem `done_at` (rundown-timing). Se um bloco futuro pudesse
+   * subir acima do ao vivo, ele passaria a ser o primeiro-sem-done e o culto
+   * TELEPORTARIA pra ele — o monitor de palco trocaria e a ponte reiniciaria o
+   * cronômetro, tudo isso como efeito colateral de arrastar um card.
+   *
+   * Com o piso, reordenar mexe só no FUTURO: `liveIdx` não pode mudar, e a
+   * projeção de horários não anda pra trás (ela é ancorada nos `done_at`, que
+   * ficam todos acima do piso). O caso real que motivou o modo continua
+   * atendido: louvor ao vivo, palavra e oferta trocando de lugar abaixo dele.
+   */
+  const pisoIdx = rows.reduce((acc, r, i) => (r.status === "done" || r.status === "live" ? i : acc), -1);
+  const podeMover = (id: string) => rows.findIndex((r) => r.it.id === id) > pisoIdx;
+  /** O ULTIMO bloco concluido — o unico que carrega a pastilha Reabrir. */
+  const ultimoFeitoIdx = rows.reduce((acc, r, i) => (r.status === "done" ? i : acc), -1);
+  // Espelhado em ref porque `onPointerMove` é um useCallback estável (deps []) e
+  // não pode fechar sobre um valor que muda a cada render — mesma razão do
+  // `listRef` logo acima.
+  const pisoRef = useRef(pisoIdx);
+  pisoRef.current = pisoIdx;
+
+  /**
+   * A CARÊNCIA DA BARRA DOURADA — 1,2s em que ela não existe.
+   *
+   * Armada pela TROCA do bloco ao vivo, seja qual for a causa: meu toque, o
+   * tique de outra pessoa chegando pelo tempo real, sair do modo reordenar,
+   * "iniciar" virando "concluir". Uma regra cobre a família inteira de acidentes
+   * de segundo toque — inclusive os que ninguém imaginou ainda. Prender a
+   * carência a "quem tocou" deixaria o caso das duas pessoas de fora, que é
+   * justamente o que mais acontece no domingo.
+   *
+   * A INÉRCIA VEM DAQUI, do estado — nunca do CSS. `prefers-reduced-motion` zera
+   * duração de animação e de transição com `!important` (globals.css), então uma
+   * barra que só "cresce" visualmente estaria CLICÁVEL desde o primeiro quadro
+   * pra quem pediu menos movimento. Invisível e clicável é pior que tudo que a
+   * gente discutiu: o CSS faz o desenho, o estado faz a trava.
+   */
+  const [barraPronta, setBarraPronta] = useState(true);
   useEffect(() => {
-    if (!blocoAtivoId || !started || ended || ocupadoRef.current || tiqueNossoRef.current) return;
+    setBarraPronta(false);
+    const t = window.setTimeout(() => setBarraPronta(true), 1200);
+    return () => window.clearTimeout(t);
+  }, [blocoAtivoId]);
+  useEffect(() => {
+    if (!blocoAtivoId || !started || ended || ocupadoRef.current) return;
+    // O HEROI DISPENSA ISTO, e mais: briga com ele. O bloco ao vivo agora e
+    // `sticky` — ele NUNCA sai da tela por conta propria, que era o unico
+    // trabalho deste efeito. E `scrollIntoView` calcula o delta uma vez, a partir
+    // da posicao ANTES do sticky prender: com a caixa presa contra a borda, a
+    // conta sai errada e a lista da um solavanco pra corrigir sozinha.
+    //
+    // Fica valendo so pra quem NAO tem heroi (sem permissao de editar), onde o
+    // bloco ao vivo continua sendo uma linha comum que pode sumir rolando.
+    if (canEdit) return;
     itemRefs.current.get(blocoAtivoId)?.scrollIntoView({ block: "center", behavior: "smooth" });
-  }, [blocoAtivoId, started, ended]);
+  }, [blocoAtivoId, started, ended, canEdit]);
 
   const remove = (id: string) =>
     startTx(async () => {
@@ -734,7 +1061,11 @@ export function RundownGrid({
             const done = status === "done";
             const live = status === "live";
             const last = idx === rows.length - 1;
-            const reorderingThis = drag?.mode === "reorder" && drag.id === it.id;
+            // O realce (escala, giro, anel) aparece no instante em que o arraste
+            // ARMA, não quando o dedo encosta. É o retorno que faltava: antes ele
+            // acendia no toque, então acendia também em todo encostão que não
+            // virava arraste — e quem estava só rolando a lista via o card pular.
+            const reorderingThis = drag?.mode === "reorder" && drag.armado && drag.id === it.id;
             const durMs = it.durationMin * 60000;
             const elapsedMs = live ? (now != null ? now - startMs : 0) : done ? endMs - startMs : durMs;
             const overMs = Math.max(0, elapsedMs - durMs);
@@ -742,6 +1073,294 @@ export function RundownGrid({
             const restanteMs = durMs - elapsedMs;
             const h: Heat = live ? heatOf(restanteMs) : done && overMs > 0 ? "red" : "normal";
             const liveRed = live && h === "red";
+
+            /* ===================== OS MODOS SAO OUTRA TELA =====================
+               Nem reordenar nem ler tem heroi. Isso saiu de teste no aparelho, e
+               a razao e simples quando se ve: nos dois modos a pessoa foi ali pra
+               VER TUDO — a ordem inteira, ou as observacoes todas. Um card de
+               230px no meio da lista come metade da tela pra mostrar o que ela ja
+               sabe (qual bloco esta ao vivo) e empurra pra fora justamente o que
+               ela foi olhar.
+
+               O heroi e o objeto de CONDUZIR. Fora dali ele nao tem trabalho, e
+               ocupar espaco sem trabalho e o defeito, nao o recurso. */
+            if (modo === "reordenar") {
+              const movivel = podeMover(it.id);
+              return (
+                <li key={it.id} className="flex items-center gap-2">
+                  <div
+                    className={cn(
+                      "flex h-11 flex-1 items-center gap-2 overflow-hidden rounded-xl border bg-card pr-2",
+                      live
+                        ? "border-2 border-primary"
+                        : done
+                          ? "border-border/60 opacity-55"
+                          : "border-border",
+                    )}
+                  >
+                    <i className="h-full w-1.5 shrink-0" style={{ backgroundColor: color }} />
+                    <span className="grid size-5 shrink-0 place-items-center text-muted-foreground">
+                      {done ? (
+                        <Check className="size-3.5" strokeWidth={3} />
+                      ) : live ? (
+                        <Play className="size-3.5 fill-primary text-primary" strokeWidth={0} />
+                      ) : movivel ? (
+                        <GripVertical className="size-4" />
+                      ) : null}
+                    </span>
+                    <span
+                      className={cn(
+                        "min-w-0 flex-1 truncate text-[15px]",
+                        live ? "font-extrabold" : done ? "text-muted-foreground" : "font-bold",
+                      )}
+                    >
+                      {it.title}
+                    </span>
+                    {live ? (
+                      <span className="shrink-0 text-[11.5px] text-muted-foreground">ao vivo, travado</span>
+                    ) : null}
+                  </div>
+                  {movivel ? (
+                    <div className="flex shrink-0 flex-col">
+                      <button
+                        onPointerDown={(e) => beginReorder(e, it)}
+                        onClick={(e) => e.stopPropagation()}
+                        aria-label={`Arrastar ${it.title}`}
+                        style={{ touchAction: "none" }}
+                        className="grid h-11 w-9 cursor-grab place-items-center rounded-lg text-muted-foreground/60 active:cursor-grabbing"
+                      >
+                        <GripVertical className="size-5" />
+                      </button>
+                    </div>
+                  ) : null}
+                  {movivel ? (
+                    <div className="flex shrink-0 flex-col gap-0.5">
+                      <button
+                        onClick={() => moverUma(it.id, -1)}
+                        aria-label={`Mover ${it.title} para cima`}
+                        className="grid h-5 w-8 place-items-center rounded text-muted-foreground hover:bg-muted"
+                      >
+                        <ChevronUp className="size-4" />
+                      </button>
+                      <button
+                        onClick={() => moverUma(it.id, 1)}
+                        aria-label={`Mover ${it.title} para baixo`}
+                        className="grid h-5 w-8 place-items-center rounded text-muted-foreground hover:bg-muted"
+                      >
+                        <ChevronDown className="size-4" />
+                      </button>
+                    </div>
+                  ) : null}
+                </li>
+              );
+            }
+
+            if (modo === "observacoes") {
+              /* SO NOME E OBSERVACAO. Todo o resto — horario, duracao, contador,
+                 responsavel — ja esta no cronograma, a um toque de distancia.
+                 Repetir aqui seria transformar a tela de LER numa segunda copia
+                 da tela de conduzir, e aí nao serviria pra nenhuma das duas. */
+              return (
+                <li key={it.id} className="flex gap-2">
+                  <i
+                    className="mt-1 h-full w-1 shrink-0 rounded-full"
+                    style={{ backgroundColor: color, opacity: done ? 0.4 : 1 }}
+                  />
+                  <div className="min-w-0 flex-1 pb-3">
+                    <p
+                      className={cn(
+                        "font-display text-[17px] font-extrabold leading-tight",
+                        done && "text-muted-foreground line-through",
+                        live && "text-primary",
+                      )}
+                    >
+                      {it.title}
+                    </p>
+                    {it.note ? (
+                      <p className="mt-1 whitespace-pre-wrap break-words text-[14px] leading-snug text-foreground/80">
+                        {it.note}
+                      </p>
+                    ) : (
+                      <p className="mt-1 text-[13px] italic text-muted-foreground">Sem observação</p>
+                    )}
+                  </div>
+                </li>
+              );
+            }
+
+            /* =========================== O HEROI ===========================
+               O bloco AO VIVO deixa de ser uma linha como as outras e vira o
+               unico objeto quente da tela — com a unica barra dourada do app
+               dentro dele.
+
+               POR QUE DENTRO E NAO NUMA BARRA FIXA: o contrato fica FISICO. Um
+               botao fixo no rodape precisa NOMEAR o bloco que conclui, e no
+               escuro, com pressa, ninguem le um rotulo que ja apertou seis
+               vezes. Aqui o botao esta dentro do card do bloco que ele conclui:
+               o alvo e a propria resposta.
+
+               A ALTURA E O ESTADO: 44/68 nas linhas comuns, 200 aqui. Da pra
+               saber onde o culto esta pela silhueta, antes de ler palavra
+               nenhuma — e sem depender de cor, que e o que quebra pra quem tem
+               daltonismo e pra quem olha de longe.
+
+               O CORPO DO HEROI NAO E TOCAVEL. E a regiao mais visada da tela (e
+               onde esta o texto que a pessoa le) e e onde o polegar descansa. So
+               agem as duas pastilhas do topo e a barra de baixo, longe uma da
+               outra. Nao existe nenhuma coordenada onde escorregar 20px
+               transforme "abrir pra editar" em "avancar o culto" — que era o
+               defeito numero 1 relatado pelo dono.
+
+               NAO E STICKY, e isso saiu de teste no aparelho: grudar o heroi
+               fazia a rolagem perder o sentido — a pessoa desliza pra ver outra
+               parte do roteiro e o heroi vem junto, tapando o que ela foi olhar.
+               Quem gruda e o cabecalho "Ordem do culto", que e referencia; o
+               heroi e conteudo, e conteudo tem que sair da tela quando a pessoa
+               rola pra longe dele.
+
+               A altura e FIXA, e isso conserta uma ideia minha que nao parava em
+               pe: eu tinha proposto o heroi crescer pra cima com a observacao,
+               mantendo a barra parada. A revisao mostrou que isso nao sai de um
+               `sticky` de altura variavel. O requisito real era "a barra nao
+               danca" — altura fixa entrega isso e e mais simples. Observacao
+               longa fica com clamp aqui, e inteira no modo leitura (que o heroi
+               tambem obedece, logo abaixo — a primeira versao deste passo
+               esqueceu disso e o comentario mentia). */
+            if (live && canEdit && modo === "conduzir") {
+              return (
+                <li
+                  key={it.id}
+                  ref={(el) => {
+                    if (el) itemRefs.current.set(it.id, el);
+                    else itemRefs.current.delete(it.id);
+                  }}
+                >
+                  <div
+                    className={cn(
+                      "relative flex flex-col overflow-hidden rounded-[22px] p-4 text-white shadow-lift",
+                      liveRed
+                        ? "bg-gradient-to-br from-[hsl(349_72%_32%)] to-[hsl(349_69%_14%)]"
+                        : "bg-gradient-to-br from-[hsl(349_72%_28%)] to-[hsl(349_69%_15%)]",
+                    )}
+                  >
+                    {/* LINHA 1 — o rotulo e o progresso EMPILHAM na altura dos
+                        botoes, e isso e pura recuperacao de espaco: as pastilhas
+                        tem 36px e o rotulo "Ao vivo" e uma linha de 11px centrada
+                        nelas, entao sobravam ~20px de nada. O progresso passa a
+                        ocupar essa sobra, comecando alinhado com o rotulo e indo
+                        ate onde o "+5 min" comeca.
+
+                        Ideia do dono olhando a tela — e alem de devolver altura,
+                        junta as duas coisas que respondem "como esta o bloco AGORA"
+                        no mesmo canto. */}
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex min-w-0 flex-1 flex-col justify-between self-stretch py-0.5">
+                        <span className="truncate text-[11px] font-extrabold uppercase tracking-[.14em] text-[hsl(42_78%_66%)]">
+                          {liveRed ? "Ao vivo · estourou" : "Ao vivo"}
+                        </span>
+                        <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-black/25">
+                          <i
+                            className={cn(
+                              "block h-full rounded-full transition-[width] duration-500",
+                              liveRed ? "bg-[hsl(6_62%_62%)]" : "bg-[hsl(42_78%_60%)]",
+                            )}
+                            style={{
+                              width: Math.min(100, Math.max(0, (elapsedMs / Math.max(1, durMs)) * 100)) + "%",
+                            }}
+                          />
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 gap-2">
+                        <button
+                          onClick={() => salvarDuracao(it.id, it.durationMin + 5)}
+                          className="h-9 rounded-xl bg-white/[.13] px-3.5 text-[13px] font-bold text-[hsl(44_70%_96%)]"
+                        >
+                          +5 min
+                        </button>
+                        <button
+                          onClick={() => setEditing(it)}
+                          className="h-9 rounded-xl bg-white/[.13] px-3.5 text-[13px] font-bold text-[hsl(44_70%_96%)]"
+                        >
+                          Editar
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* GRADE, E NAO DUAS PILHAS. O titulo ficava FORA da divisao,
+                        entao a coluna da direita so comecava embaixo dele — e o
+                        "RESTAM" nascia alinhado com a primeira linha da observacao
+                        em vez de com o nome do bloco. O dono viu na tela e a
+                        leitura dele esta certa: contador e nome sao PARES, os dois
+                        respondem "o que esta acontecendo", e par que nao alinha
+                        parece desalinho.
+
+                        A coluna da direita atravessa as duas linhas (`row-span-2`),
+                        entao ela comeca no topo do titulo. O titulo continua com a
+                        largura da coluna esquerda inteira, sem apertar.
+
+                        A ALTURA da grade e fixa e vem da direita: rotulo + contador
+                        + "comecou" + botao. Se viesse do texto, um setlist de dez
+                        linhas esticaria o heroi e empurraria o botao pra fora da
+                        tela — no meio do culto, que e quando ele mais precisa estar
+                        a mao. Observacao maior que isso e cortada, e se le inteira
+                        no modo observacoes. */}
+                    <div className="mt-2.5 grid h-[152px] grid-cols-[1fr_150px] grid-rows-[auto_1fr] gap-x-3">
+                      <p className="col-start-1 row-start-1 truncate font-display text-[23px] font-extrabold leading-none">
+                        {it.title}
+                      </p>
+
+                      <div className="col-start-1 row-start-2 mt-1.5 min-h-0 overflow-hidden">
+                        {it.responsible ? (
+                          <p className="truncate text-[12.5px] font-bold text-white/70">{it.responsible}</p>
+                        ) : null}
+                        {it.note ? (
+                          <p className="whitespace-pre-wrap break-words text-[13px] leading-snug text-white/85">
+                            {it.note}
+                          </p>
+                        ) : null}
+                      </div>
+
+                      <div className="col-start-2 row-span-2 row-start-1 flex flex-col text-right leading-none">
+                        <div className="text-[11px] font-extrabold uppercase tracking-[.1em] text-white/70">
+                          {restanteMs >= 0 ? "restam" : "estourou"}
+                        </div>
+                        {/* `break-all` porque o contador estourado de um culto longo
+                            vira "-2:22:14" e precisa quebrar em vez de escapar da
+                            caixa — antes ele aterrissava em cima do botao Editar. */}
+                        <div className="mt-1 break-all font-display text-[29px] font-extrabold leading-none tabular-nums">
+                          {restanteMs >= 0 ? clock(restanteMs) : "\u2212" + clock(-restanteMs)}
+                        </div>
+                        <div className="mt-1.5 text-[11px] tabular-nums text-white/60">
+                          comecou {fmt(startMs)}
+                        </div>
+
+                        <div className="mt-auto">
+                          {barraPronta ? (
+                            <button
+                              onClick={() => marcarFeito(it)}
+                              className="press flex h-16 w-full items-center justify-center rounded-2xl bg-[hsl(42_78%_60%)] px-2 text-center text-[15px] font-extrabold leading-tight text-[hsl(32_70%_16%)] shadow-[0_6px_18px_hsl(42_78%_60%/.32)]"
+                            >
+                              Concluir {it.title}
+                            </button>
+                          ) : (
+                            /* O FIO. Nos 1,2s depois de QUALQUER troca de bloco ao
+                               vivo a barra nao existe — nasce como um fio e cresce.
+                               O segundo toque por reflexo acerta AUSENCIA VISIVEL,
+                               e nao um botao morto: botao morto le como "travou" e
+                               produz o terceiro toque. */
+                            <div
+                              aria-hidden
+                              className="h-1 w-full rounded-full bg-[hsl(42_78%_60%)]/45 transition-all duration-1000"
+                            />
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </li>
+              );
+            }
+
             return (
               <li
                 key={it.id}
@@ -833,18 +1452,6 @@ export function RundownGrid({
                         className={HEAT_TEXT[h]}
                       />
                     </div>
-                  ) : done ? (
-                    /* CONCLUÍDO segue PROGRESSIVO, e isso é decisão antiga e
-                       deliberada: contagem regressiva de um bloco que já acabou
-                       não quer dizer nada — o que interessa ali é quanto ele
-                       realmente levou. Na coluna fina os dois números empilham
-                       em vez de ficar lado a lado. */
-                    <div className="relative z-10 flex flex-col items-center gap-1.5 rounded bg-card px-0.5">
-                      <Contador label="corrido" value={clock(elapsedMs)} className="text-muted-foreground" />
-                      {overMs > 0 ? (
-                        <Contador label="passou" value={`+${clock(overMs)}`} className="text-destructive-ink" />
-                      ) : null}
-                    </div>
                   ) : null /* FUTURO: nada. A duração planejada agora mora na
                               coluna 1, e um "0:00" ou um travessão aqui seria
                               inventar informação. A coluna nunca fica visualmente
@@ -853,7 +1460,7 @@ export function RundownGrid({
 
                 {/* ---- COLUNA 3: o que é o bloco ---------------------------- */}
                 <div
-                  style={{ minHeight: ALTURA_BLOCO }}
+                  style={{ minHeight: done ? ALTURA_FEITO : ALTURA_BLOCO }}
                   onClick={() => {
                     if (drag || suppressClickRef.current) return;
                     if (canEdit) setEditing(it);
@@ -870,20 +1477,57 @@ export function RundownGrid({
                     flashId === it.id && "animate-pop ring-2 ring-primary",
                   )}
                 >
-                  <div className="my-2.5 ml-3 min-w-0 flex-1 pr-1">
-                    <p className={cn("font-semibold leading-tight", done && "line-through")}>{it.title}</p>
-                    {/* O TIPO saiu da linha exibida (ago/2026): na Aliança ele é
-                        quase sempre a MESMA palavra do título ("Louvor"/"Louvor"),
-                        e repetir dobrado gastava a única linha de contexto. O campo
-                        continua no banco e no modal do bloco, onde ele faz o
-                        trabalho dele: dar nome padrão e a COR — que é como o tipo
-                        aparece aqui, no nó da trilha. Sem responsável a linha não
-                        existe: um travessão no celular é ruído (na régia ele fica,
-                        porque célula de grade vazia parece defeito). */}
-                    {it.responsible ? (
-                      <p className="text-[12.5px] text-muted-foreground">{it.responsible}</p>
-                    ) : null}
-                    {it.note ? <p className="mt-0.5 text-[13px] text-muted-foreground">{it.note}</p> : null}
+                  <div className={cn("ml-3 min-w-0 flex-1 pr-1", done ? "my-1.5" : "my-2.5")}>
+                    {/* DUAS LINHAS, SEMPRE — a altura do bloco deixa de depender
+                        do conteudo.
+
+                        Antes a observacao esticava a linha (line-clamp-3), entao
+                        blocos com nota eram mais altos que blocos sem, e a lista
+                        "respirava" de forma imprevisivel enquanto o culto andava.
+                        Agora a linha 2 e uma so, e o que aparece nela muda com o
+                        estado — mas a caixa nao muda de tamanho nunca.
+
+                        BLOCO CONCLUIDO NAO MOSTRA OBSERVACAO. O setlist e as
+                        passagens de um bloco que ja acabou sao historia; o que
+                        interessa ali e quanto ele levou. E isso conserta de
+                        quebra o defeito que o dono viu: a pastilha Reabrir
+                        empurrava o "levou X min" pro lado ate espremer o titulo.
+                        Agora o texto mora ABAIXO do titulo e a pastilha fica na
+                        direita — quando ela some (nos concluidos que nao sao o
+                        ultimo), so ela some: o texto nao se move um pixel. */}
+                    <p
+                      className={cn(
+                        "truncate leading-tight",
+                        done ? "text-[15px] font-medium text-muted-foreground line-through" : "font-semibold",
+                      )}
+                    >
+                      {it.title}
+                    </p>
+
+                    {done ? (
+                      <p className="mt-0.5 truncate text-[12.5px] tabular-nums text-muted-foreground">
+                        levou {Math.max(1, Math.round(elapsedMs / 60000))} min
+                        {overMs > 0 ? (
+                          <span className="font-bold text-destructive-ink">
+                            {" "}
+                            +{Math.round(overMs / 60000)}
+                          </span>
+                        ) : null}
+                      </p>
+                    ) : (
+                      /* UMA LINHA SO, com reticencias fazendo o convite. O `…` no
+                         fim de uma nota cortada e a pista de que ha mais — e o
+                         "mais" mora no modo observacoes, que existe pra isso.
+                         O TIPO nao entra aqui: na Alianca ele e quase sempre a
+                         MESMA palavra do titulo ("Louvor"/"Louvor"), e repetir
+                         gastaria a unica linha de contexto que o bloco tem. */
+                      <p className="mt-0.5 truncate text-[12.5px] text-muted-foreground">
+                        {[it.responsible, it.note ? it.note.split("\n")[0] : null]
+                          .filter(Boolean)
+                          .join(" · ")}
+                        {it.note && (it.note.includes("\n") || it.note.length > 40) ? " …" : ""}
+                      </p>
+                    )}
                     {it.link ? (
                       <a
                         href={it.link}
@@ -915,48 +1559,34 @@ export function RundownGrid({
                       do bloco agora ficam no MESMO trilho, um sob o outro, em vez
                       de um em cada quina. Tique primeiro (é o gesto de todo
                       domingo), alça depois (é o de montar). */}
-                  <div className="flex w-9 shrink-0 flex-col items-center gap-1 py-2">
-                    {canEdit ? (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleDone(it);
-                        }}
-                        aria-label={done ? "Desmarcar feito" : "Marcar feito"}
-                        className={cn(
-                          "grid size-9 shrink-0 place-items-center rounded-full border-2 transition-colors",
-                          done
-                            ? "border-success bg-success text-white"
-                            : live
-                              ? "border-primary text-primary"
-                              : "border-border text-transparent",
-                        )}
-                      >
-                        <Check className="size-4" strokeWidth={3.5} />
-                      </button>
-                    ) : (
-                      <span
-                        className={cn(
-                          "grid size-9 shrink-0 place-items-center rounded-full",
-                          done ? "bg-success text-white" : live ? "border-2 border-primary" : "border-2 border-border",
-                        )}
-                      >
-                        {done ? <Check className="size-4" strokeWidth={3.5} /> : null}
-                      </span>
-                    )}
+                  {/* O TIQUE SUMIU DE VEZ. Ele ja tinha deixado de ser botao;
+                      agora sai da tela. Com a altura dizendo o estado (52 feito,
+                      92 futuro), o risco no titulo e o "levou 24 min", o circulo
+                      so repetia o que tres outros sinais ja diziam — e o circulo
+                      VAZIO dos futuros nao dizia nada. Em troca a linha ganhou 36
+                      px de largura, que e exatamente o que faltava pro conteudo.
 
-                    {canEdit ? (
-                      <button
-                        onPointerDown={(e) => beginReorder(e, it)}
-                        onClick={(e) => e.stopPropagation()}
-                        aria-label="Arrastar pra reordenar"
-                        style={{ touchAction: "none" }}
-                        className="grid size-9 shrink-0 cursor-grab place-items-center rounded-lg text-muted-foreground/60 hover:bg-muted active:cursor-grabbing"
-                      >
-                        <GripVertical className="size-5" />
-                      </button>
-                    ) : null}
-                  </div>
+                      REABRIR EXISTE EM UM PIXEL SO DA TELA INTEIRA: a linha do
+                      ULTIMO bloco concluido. Nao no heroi (onde brigaria com a
+                      barra dourada), nao em todo concluido (onde seriam N alvos
+                      de rebobinar o culto espalhados pela lista).
+
+                      Um toque, como o dono decidiu depois de eu questionar duas
+                      vezes. A protecao nao vem de gesto extra: vem da DISTANCIA
+                      — ele fica bem acima da barra dourada — e de ser o unico
+                      alvo consequente fora do heroi. */}
+                  {canEdit && idx === ultimoFeitoIdx ? (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        desmarcarFeito(it);
+                      }}
+                      className="press mx-1.5 flex h-9 shrink-0 items-center gap-1 self-center rounded-full border border-border bg-card px-2.5 text-[12.5px] font-bold text-foreground"
+                    >
+                      <RotateCcw className="size-3.5" /> Reabrir
+                    </button>
+                  ) : null}
+
                 </div>
               </li>
             );
@@ -974,28 +1604,76 @@ export function RundownGrid({
         </BotaoSegurar>
       ) : null}
 
-      {canEdit ? (
-        <div className="mt-2 flex gap-2">
+      {modo !== "conduzir" ? (
+        /* O RODAPÉ DO MODO. "Pronto" é confirmação de saída, não de gravação —
+           cada movimento já foi gravado quando aconteceu. Chamar de "Salvar"
+           faria a pessoa achar que sair sem tocar desfaz, e não desfaz. */
+        <div className="mt-2 flex items-center gap-3">
+          <button
+            onClick={() => setModo("conduzir")}
+            className="press flex-1 rounded-2xl bg-primary py-3 text-sm font-extrabold text-primary-foreground"
+          >
+            {modo === "observacoes" ? "Fechar observações" : "Pronto"}
+          </button>
+        </div>
+      ) : null}
+
+      {canEdit && modo === "conduzir" ? (
+        /* OS TRES COM NOME ESCRITO. Icone sozinho nao ensina — o proprio arquivo
+           ja tinha aprendido isso com a pastilha de duracao ("ninguem adivinharia
+           que se toca nela sem uma pista visual"), e o dono repetiu vendo a tela:
+           "so o simbolo nao ajuda a entender".
+
+           Empilhados em coluna dentro de cada botao, os tres cabem lado a lado
+           num iPhone SE com folga — em linha, "Observacoes" sozinha ja estouraria.
+
+           MODELOS E TIPOS continuam so como icone, e so fora do culto: sao
+           ferramenta de montagem, e nas palavras do dono "nao e essa hora de usar
+           isso". Nao foram removidos, foram postos na hora certa. */
+        <div className="mt-2 flex items-stretch gap-2">
           <button
             onClick={() => setEditing("new")}
-            className="press flex flex-1 items-center justify-center gap-2 rounded-2xl border border-dashed border-primary/40 py-3 text-sm font-bold text-primary"
+            className="press flex flex-1 flex-col items-center justify-center gap-1 rounded-2xl border border-dashed border-primary/40 py-2.5 text-[12.5px] font-bold text-primary"
           >
-            <Plus className="size-4" /> Adicionar bloco
+            <Plus className="size-5" />
+            Bloco
           </button>
           <button
-            onClick={() => setManageTpl(true)}
-            aria-label="Modelos de cronograma"
-            className="press grid w-12 place-items-center rounded-2xl border border-dashed border-border text-muted-foreground"
+            onClick={() => setModo("reordenar")}
+            className="press flex flex-1 flex-col items-center justify-center gap-1 rounded-2xl border border-dashed border-border py-2.5 text-[12.5px] font-bold text-muted-foreground"
           >
-            <LayoutTemplate className="size-5" />
+            <GripVertical className="size-5" />
+            Reordenar
           </button>
+          {/* LER OS PROXIMOS. A observacao guarda setlist e passagens (dado de
+              producao: 10 das 13 notas ja sao lista), e na lista ela vive cortada
+              pra nao empurrar o roteiro. No modo ela abre inteira, em todos os
+              blocos — que e como alguem se prepara pro que vem. */}
           <button
-            onClick={() => setManageKinds(true)}
-            aria-label="Gerenciar tipos"
-            className="press grid w-12 place-items-center rounded-2xl border border-dashed border-border text-muted-foreground"
+            onClick={() => setModo("observacoes")}
+            className="press flex flex-1 flex-col items-center justify-center gap-1 rounded-2xl border border-dashed border-border py-2.5 text-[12.5px] font-bold text-muted-foreground"
           >
-            <Settings2 className="size-5" />
+            <FileText className="size-5" />
+            Observações
           </button>
+          {!started || ended ? (
+            <button
+              onClick={() => setManageTpl(true)}
+              aria-label="Modelos de cronograma"
+              className="press grid w-11 shrink-0 place-items-center rounded-2xl border border-dashed border-border text-muted-foreground"
+            >
+              <LayoutTemplate className="size-5" />
+            </button>
+          ) : null}
+          {!started || ended ? (
+            <button
+              onClick={() => setManageKinds(true)}
+              aria-label="Gerenciar tipos"
+              className="press grid w-11 shrink-0 place-items-center rounded-2xl border border-dashed border-border text-muted-foreground"
+            >
+              <Settings2 className="size-5" />
+            </button>
+          ) : null}
         </div>
       ) : null}
 

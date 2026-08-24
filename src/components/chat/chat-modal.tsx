@@ -12,10 +12,17 @@ import { cn } from "@/lib/utils";
 import { useVisualViewport } from "@/lib/use-visual-viewport";
 import { BotaoSom } from "@/components/chat/botao-som";
 import type { EstadoSom } from "@/lib/alerta";
-import type { CanalChat, ChatMessageView } from "@/lib/chat";
+import type { CanalChat, ChatChannelType, ChatMessageView } from "@/lib/chat";
 
 type Role = "admin" | "leader" | "volunteer";
 type Tab = "geral" | "eventos" | "equipes";
+
+/** Tipo de canal → aba onde ele mora (usado pelo deep link do push). */
+const TAB_DO_TIPO: Record<ChatChannelType, Tab> = {
+  avisos: "geral",
+  evento: "eventos",
+  equipe: "equipes",
+};
 
 /** Só admin posta em Avisos; nos demais canais quem enxerga o canal posta. */
 export function canPostNoCanal(type: string, role: Role): boolean {
@@ -36,6 +43,7 @@ export function ChatModal({
   meId,
   role,
   som,
+  alvo,
   onOpenChannel,
   onClose,
   onMuteChange,
@@ -45,6 +53,16 @@ export function ChatModal({
   role: Role;
   /** Som do alerta NESTE aparelho — vem do balão, que é quem vigia o Realtime. */
   som: EstadoSom;
+  /**
+   * Canal que o deep link do push pediu (`/inicio?chat=…`, resolvido no balão).
+   * Quem seleciona canal é este componente — `tab` + `eventoRef`/`equipeRef` —,
+   * então o alvo entra aqui como posição inicial e vence a posição salva.
+   *
+   * E pode CHEGAR depois, com o modal já aberto: é o plano B do sw.js (ver o
+   * efeito lá embaixo). O balão manda um objeto novo a cada toque de
+   * notificação, e é a identidade dele que separa um pedido do outro.
+   */
+  alvo?: CanalChat | null;
   onOpenChannel: (c: CanalChat) => void;
   onClose: () => void;
   onMuteChange: (type: string, ref: string, muted: boolean) => void;
@@ -53,27 +71,78 @@ export function ChatModal({
   const eventos = useMemo(() => canais.filter((c) => c.type === "evento"), [canais]);
   const equipes = useMemo(() => canais.filter((c) => c.type === "equipe"), [canais]);
 
-  const [tab, setTab] = useState<Tab>("geral");
-  const [eventoRef, setEventoRef] = useState<string | null>(null);
-  const [equipeRef, setEquipeRef] = useState<string | null>(null);
-
-  // Restaura a última posição (aba + sub-canal) do aparelho — comunicação ágil
-  // durante o evento sem ficar reabrindo e reprocurando.
-  const restored = useRef(false);
-  useEffect(() => {
-    if (restored.current) return;
-    restored.current = true;
+  // A POSIÇÃO SALVA É LIDA NO RENDER, NÃO NUM EFEITO — e isso conserta um bug
+  // que apagava aviso não lido em silêncio.
+  //
+  // O restore morava num `useEffect`. Efeitos rodam DEPOIS do primeiro render e
+  // na ordem de declaração, então a sequência era: 1º render nasce com
+  // `tab="geral"`, o que faz `active` valer `avisos`; o efeito do restore apenas
+  // AGENDA um `setTab`; e o efeito de reporte, declarado logo abaixo, roda ainda
+  // no mesmo commit com o `active` velho — chamando `onOpenChannel(avisos)`, que
+  // grava `last_read_at` no servidor.
+  //
+  // Ou seja: bastava a pessoa tocar no balão pra responder na equipe dela, e os
+  // avisos não lidos do mural perdiam o badge sem ela ter visto nenhum.
+  // `marcarCanalLido` é gravação, não tem desfazer.
+  //
+  // Como inicializador preguiçoso, a posição salva já está no PRIMEIRO render:
+  // `active` nasce certo e o reporte não tem estado transitório pra tropeçar.
+  // Ler `localStorage` no render é seguro aqui porque este componente só monta
+  // no cliente — o balão renderiza `{open ? <ChatModal/> : null}` e `open` nasce
+  // false, então ele nunca existe no HTML do servidor.
+  const [posSalva] = useState<{ tab?: Tab; eventoRef?: string; equipeRef?: string } | null>(() => {
+    // Quem chegou pela notificação pediu um canal específico: a posição salva
+    // perde, e nem é lida.
+    if (alvo) return null;
     try {
       const raw = localStorage.getItem(`chat:pos:${meId}`);
-      if (!raw) return;
+      if (!raw) return null;
       const p = JSON.parse(raw) as { tab?: Tab; eventoRef?: string; equipeRef?: string };
-      if (p.tab === "geral" || p.tab === "eventos" || p.tab === "equipes") setTab(p.tab);
-      if (p.eventoRef) setEventoRef(p.eventoRef);
-      if (p.equipeRef) setEquipeRef(p.equipeRef);
+      return {
+        tab: p.tab === "geral" || p.tab === "eventos" || p.tab === "equipes" ? p.tab : undefined,
+        eventoRef: p.eventoRef,
+        equipeRef: p.equipeRef,
+      };
     } catch {
       /* localStorage indisponível — segue no padrão */
+      return null;
     }
-  }, [meId]);
+  });
+
+  // Quando o balão monta este componente pelo deep link, o alvo já entra como
+  // estado INICIAL — é o caminho comum e não custa efeito nenhum.
+  const [tab, setTab] = useState<Tab>(
+    alvo ? TAB_DO_TIPO[alvo.type] : (posSalva?.tab ?? "geral"),
+  );
+  const [eventoRef, setEventoRef] = useState<string | null>(
+    alvo?.type === "evento" ? alvo.ref : (posSalva?.eventoRef ?? null),
+  );
+  const [equipeRef, setEquipeRef] = useState<string | null>(
+    alvo?.type === "equipe" ? alvo.ref : (posSalva?.equipeRef ?? null),
+  );
+
+  // …mas o alvo deixou de ser SÓ estado inicial. No plano B do sw.js (o
+  // `client.navigate()` rejeita com o app em segundo plano e o worker manda o
+  // destino por mensagem) ele chega com o modal já ABERTO: a pessoa estava lendo
+  // a Equipe A quando tocou no aviso da Equipe B. Aí `open` já é `true`, o balão
+  // não remonta este componente, o `useState` acima não é reavaliado — e sem
+  // este efeito a mensagem seria entregue e a tela não se moveria.
+  //
+  // Efeito, e não `key` no ChatModal: remontar jogaria fora o rascunho de quem
+  // estava no meio de uma frase, e trocar de conversa não é motivo pra isso.
+  //
+  // A comparação é por IDENTIDADE, não por `type:ref`: o balão manda um objeto
+  // novo a cada toque, então tocar duas vezes na notificação do MESMO canal
+  // (tendo trocado de aba no meio) volta pra ele. O ref nasce com o alvo do
+  // mount justamente pra este efeito não repetir o que o `useState` já fez.
+  const alvoVisto = useRef<CanalChat | null | undefined>(alvo);
+  useEffect(() => {
+    if (!alvo || alvo === alvoVisto.current) return;
+    alvoVisto.current = alvo;
+    setTab(TAB_DO_TIPO[alvo.type]);
+    if (alvo.type === "evento") setEventoRef(alvo.ref);
+    if (alvo.type === "equipe") setEquipeRef(alvo.ref);
+  }, [alvo]);
 
   // Canal ativo derivado da aba + seleção (cai no 1º item se a seleção sumiu).
   const active: CanalChat | null = useMemo(() => {

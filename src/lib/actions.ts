@@ -1965,7 +1965,22 @@ export async function removerAtalhoStage(id: string): Promise<ActionResult> {
 }
 
 /** Marca/desmarca um bloco como feito (carimba a hora real de término). */
-export async function marcarBlocoFeito(id: string, eventId: string, done: boolean): Promise<ActionResult> {
+export async function marcarBlocoFeito(
+  id: string,
+  eventId: string,
+  done: boolean,
+  /**
+   * O `done_at` que o CLIENTE viu quando decidiu desmarcar. Só usado no caminho
+   * `done === false`, e é o que transforma o desmarcar numa comparação-e-troca
+   * de verdade.
+   *
+   * Sem ele, `.not("done_at","is",null)` só pergunta "está marcado?" — e a
+   * resposta continua sim se OUTRA pessoa reabriu e concluiu o bloco de novo no
+   * meio do gesto. O desmarcar apagaria a marca NOVA achando que apagava a
+   * velha, e nada avisaria. Comparando o carimbo, some quem chegou atrasado.
+   */
+  esperadoDoneAt?: string | null,
+): Promise<ActionResult> {
   const session = await getSession();
   if (!session) return fail("Sessão expirada.");
   if (!(await podeEditarCronograma(session, eventId))) return fail("Sem permissão.");
@@ -1982,6 +1997,19 @@ export async function marcarBlocoFeito(id: string, eventId: string, done: boolea
   // precisava mudar. Essa mesma confusão ("0 linhas" = falha) já aconteceu
   // duas vezes neste repo (migrations 0029 e 0049) — aqui é intencional.
   if (done) query = query.is("done_at", null);
+  // GUARDA SIMÉTRICO, que faltava. Desmarcar passava SEMPRE.
+  //
+  // O `.not(...)` sozinho só pergunta "está marcado?", e isso NÃO basta pro caso
+  // que interessa: se outra pessoa reabriu e concluiu o bloco de novo enquanto
+  // esta segurava o botão, a resposta continua sim, e o desmarcar apagaria a
+  // marca NOVA. Por isso, quando o cliente diz qual carimbo ele viu, a condição
+  // vira igualdade — comparação-e-troca de verdade, e quem chegou atrasado não
+  // faz nada.
+  //
+  // O `.not(...)` fica como piso pra quem chama sem informar o carimbo (a régia,
+  // hoje): pior que comparar, melhor que passar sempre.
+  else if (esperadoDoneAt) query = query.eq("done_at", esperadoDoneAt);
+  else query = query.not("done_at", "is", null);
   const { error } = await query;
   if (error) return fail(error.message);
   // `/control` também — e a falta dela era o grosso dos ~2s que a Produção
@@ -4165,22 +4193,42 @@ export async function recusarSubstituicao(swapId: string): Promise<ActionResult>
 // CHAT INTERNO (avisos / equipe / evento) — texto puro
 // =============================================================================
 
-/** Título + url do push do canal (best-effort — busca o nome pelo channelRef). */
+/**
+ * Título + url do push do canal (best-effort — busca o nome pelo channelRef).
+ *
+ * A url carrega o canal (`?chat=<tipo>&ref=<uuid>`) pro balão do chat abrir JÁ na
+ * conversa certa — quem toca no aviso de uma mensagem quer a mensagem, e até
+ * aqui caía na Home com o chat fechado. Quem lê o parâmetro é o ChatBubble
+ * (src/components/chat/chat-bubble.tsx), que resolve o canal contra a lista da
+ * pessoa e limpa a query em seguida.
+ *
+ * Os TRÊS tipos vão pra /inicio, inclusive `evento`. O balão mora no layout de
+ * (app), então /inicio já basta; mandar pra /escalas/<id> custaria caro e sem
+ * ganho — a rota abriria o modal da ESCALA por baixo do modal do chat (modal
+ * sobre modal, o que o DESIGN.md proíbe e as fases 4.1/4.2 desfizeram) e o
+ * `router.replace("/escalas")` hardcoded do EscalasView apagaria a query no
+ * caminho, o mesmo pisoteio que comeu o `?via=` na 0052.
+ *
+ * O `avisos` não leva ref: o ref dele é o id da igreja e o canal se acha pelo
+ * tipo. O sw.js repassa `data.url` cru, então o aparelho que já tem o service
+ * worker instalado entende a url nova sem precisar atualizar nada.
+ */
 async function chatPushTitulo(
   supabase: Awaited<ReturnType<typeof createClient>>,
   channelType: string,
   channelRef: string,
 ): Promise<{ title: string; url: string }> {
+  const deepLink = `/inicio?chat=${channelType}&ref=${encodeURIComponent(channelRef)}`;
   if (channelType === "equipe") {
     const { data } = await supabase.from("teams").select("name").eq("id", channelRef).maybeSingle();
-    return { title: `💬 ${data?.name ?? "Equipe"}`, url: "/inicio" };
+    return { title: `💬 ${data?.name ?? "Equipe"}`, url: deepLink };
   }
   if (channelType === "evento") {
     const { data } = await supabase.from("events").select("title").eq("id", channelRef).maybeSingle();
-    return { title: `💬 ${data?.title ?? "Evento"}`, url: `/escalas/${channelRef}` };
+    return { title: `💬 ${data?.title ?? "Evento"}`, url: deepLink };
   }
   // avisos (ou qualquer outro) → mural geral
-  return { title: "📢 Avisos gerais", url: "/inicio" };
+  return { title: "📢 Avisos gerais", url: "/inicio?chat=avisos" };
 }
 
 /** Envia uma mensagem no canal. A RLS bloqueia quem não pode postar (→ erro). */

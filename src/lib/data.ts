@@ -137,7 +137,20 @@ export type TeamMember = {
 
 export type ManageableTeam = TeamWithPositions & { members: TeamMember[] };
 
-/** Equipes que o usuário pode gerenciar (admin: todas; líder: as que lidera) + membros. */
+/** Equipes que o usuário pode gerenciar (admin: todas; líder: as que lidera) + membros.
+ *
+ * ESTA LISTA AUTORIZA. Ela alimenta o TeamManager, e o TeamManager desenha, POR
+ * CARD, o "adicionar membro", os controles de posição e o menu de cada pessoa —
+ * além de virar `manageTeamOpts` pro PessoaConfigModal. Toda equipe que entrar
+ * aqui vem com poder junto.
+ *
+ * Já existiu aqui um `incluirOndeSoParticipa` pra resolver o caso do líder do Som
+ * que também serve no Louvor e não via o Louvor em lugar nenhum. Foi revertido: a
+ * revisão mostrou que blindar só o `approvalTeamOpts` não bastava — sobravam pelo
+ * menos duas outras superfícies de gestão saindo da mesma lista. Quem só serve numa
+ * equipe agora é atendido por `getMyTeamsRoster`, que é SÓ LEITURA por construção,
+ * numa seção própria da página. Ver equipes/page.tsx.
+ */
 export async function getManageableTeams(session: Session): Promise<ManageableTeam[]> {
   const withPos = await listTeamsWithPositions();
   const manageable =
@@ -390,12 +403,32 @@ export async function getCultoAoVivo(
 ): Promise<{ eventId: string; title: string; startedAt: string } | null> {
   if (!session.profile.church_id) return null;
   const supabase = await createClient();
+  // JANELA DE 12h — sem ela este card não tinha como acabar.
+  //
+  // A consulta pergunta "tem roteiro iniciado e não encerrado?", e essa condição
+  // é PERMANENTE quando alguém esquece de encerrar. A vinte linhas daqui,
+  // `listLiveRundownEvents` existe declaradamente por causa desse esquecimento
+  // ("o culto começou, o líder esqueceu de encerrar") — as mesmas linhas que ela
+  // pesca satisfaziam esta aqui pra sempre.
+  //
+  // O sintoma era um card "Culto ao vivo" na Home da igreja inteira, com o
+  // contador marcando 30, 50, 100 horas, e um link que leva ao roteiro do
+  // domingo passado. É a mesma família do incidente de 09/ago, em que a equipe
+  // rodou o culto no roteiro do domingo seguinte.
+  //
+  // 12h e não 3h: um culto longo com ceia e ministração passa fácil de 4h, e
+  // errar pra menos apagaria o card COM O CULTO NO AR, que é pior que deixá-lo
+  // meia manhã a mais. O filtro é sobre `rundown_started_at` (quando o roteiro
+  // começou de fato), não sobre `starts_at` — o que importa é há quanto tempo
+  // ele está rolando, não a que horas estava marcado.
+  const limite = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString();
   const { data } = await supabase
     .from("events")
     .select("id, title, rundown_started_at")
     .eq("church_id", session.profile.church_id)
     .is("archived_at", null)
     .not("rundown_started_at", "is", null)
+    .gte("rundown_started_at", limite)
     .is("rundown_ended_at", null)
     .order("rundown_started_at", { ascending: false })
     .limit(1)

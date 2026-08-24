@@ -45,13 +45,19 @@ export default async function EquipesPage() {
   // Admin gerencia tudo; líder gerencia as equipes que lidera.
   const isAdmin = session.role === "admin";
   const isLeader = session.role === "leader";
+  const lideraIds = new Set(
+    session.profile.teams.filter((t) => t.role === "leader").map((t) => t.id),
+  );
   const canApprove = isAdmin || isLeader;
 
-  const [teams, members, profiles, resolvedInterests] = await Promise.all([
+  const [teams, members, profiles, resolvedInterests, meuRoster] = await Promise.all([
     getManageableTeams(session),
     listMembers(),
     listChurchProfiles(),
     getResolvedInterests(session),
+    // O roster de TODAS as equipes da pessoa, inclusive as que ela só serve.
+    // Só leitura por construção — é o mesmo dado que o ramo do voluntário usa.
+    getMyTeamsRoster(session),
   ]);
 
   // Aprovações: admin vê tudo; líder só o que pediu a equipe dele. Convites
@@ -64,6 +70,22 @@ export default async function EquipesPage() {
     isAdmin ? listTeams() : Promise.resolve([]),
   ]);
   const teamOpts: TeamOpt[] = allTeams.map((t) => ({ id: t.id, name: t.name, color: t.color }));
+  // AS EQUIPES ONDE ELE SÓ SERVE — o caso do Felipe, líder do Som e voluntário
+  // no Louvor. Ele é `role === "leader"`, então não entra no ramo do voluntário
+  // lá em cima; cai neste, que só mostra o que ele GERENCIA. O Louvor sumia da
+  // tela dele em silêncio, sem nem um estado vazio dizendo que ele está numa
+  // segunda equipe. A raiz é a assimetria: `session.role` é global, participação
+  // é POR EQUIPE.
+  //
+  // Vem por `getMyTeamsRoster` e vai pro `VolunteerTeamsView`, numa seção à
+  // parte — NÃO misturado no TeamManager. A primeira tentativa foi misturar, e a
+  // revisão derrubou: o TeamManager desenha "adicionar membro", controles de
+  // posição e o menu de cada pessoa POR CARD, e ainda deriva `manageTeamOpts`
+  // pro PessoaConfigModal. Toda equipe que entra naquela lista vem com poder
+  // junto, e blindar só a lista de aprovação deixava as outras abertas. Separar
+  // é mais simples E mais seguro que gatear permissão card a card.
+  const soServe = meuRoster.filter((t) => !lideraIds.has(t.id));
+
   const approvalTeamOpts: TeamOpt[] = isAdmin
     ? teamOpts
     : teams.map((t) => ({ id: t.id, name: t.name, color: t.color }));
@@ -192,6 +214,13 @@ export default async function EquipesPage() {
           meId={session.userId}
           canCreateTeam={isAdmin}
         />
+
+        {soServe.length > 0 ? (
+          <section>
+            <h3 className="mb-2 px-1 text-base font-semibold">Você também serve em</h3>
+            <VolunteerTeamsView teams={soServe} meId={session.userId} />
+          </section>
+        ) : null}
 
         {resolvedInterests.length > 0 ? (
           <details className="rounded-2xl border border-border bg-card">

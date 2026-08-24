@@ -122,8 +122,18 @@ export default async function InicioPage({
       !p.birth_date ? "a data de nascimento" : null,
     ].filter((x): x is string => x !== null);
     return (
-      <VolunteerHome title={`${greeting()}, ${first}`} subtitle={roleLabel} userName={userName} assignments={mine}>
-        {cardAoVivo}
+      // `aoVivo` vai como DADO e o `cardAoVivo` sai dos children: quem decide se
+      // ele aparece é a VolunteerHome, que é a única que sabe se aquele culto já
+      // está desenhado como "é hoje" ou como próxima escala. A variável
+      // `cardAoVivo` continua viva de propósito — os ramos de admin e de líder,
+      // abaixo, seguem usando ela como primeiro filho da HomeShell.
+      <VolunteerHome
+        title={`${greeting()}, ${first}`}
+        subtitle={roleLabel}
+        userName={userName}
+        assignments={mine}
+        aoVivo={aoVivo}
+      >
         <ProfilePrompt meId={session.userId} missing={missingProfile} semCanal={semCanal} />
         {respHero}
         <SwapInbox items={swaps} />

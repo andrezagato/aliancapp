@@ -15,11 +15,16 @@ export function TodayCard({
   onConfirm,
   onCancel,
   onCheckin,
+  checkinEmVoo = false,
 }: {
   a: MyAssignment;
   onConfirm: () => void;
   onCancel: () => void;
   onCheckin: () => void;
+  /** O check-in desta escala está no ar (GPS + servidor). Trava o botão e diz
+   *  na letra que ALGO está acontecendo — sem isto a tela ficava idêntica por
+   *  até 6s e a pessoa tocava de novo. Opcional pra não quebrar chamador antigo. */
+  checkinEmVoo?: boolean;
 }) {
   const pending = a.status === "convidado";
   const canCheckin = (a.status === "confirmado" || a.status === "presente") && !a.checkedIn;
@@ -52,9 +57,18 @@ export function TodayCard({
           <div className="space-y-2">
             <button
               onClick={onCheckin}
-              className="press flex h-[46px] w-full items-center justify-center gap-2 rounded-[14px] bg-primary text-[15px] font-extrabold text-primary-foreground"
+              disabled={checkinEmVoo}
+              aria-busy={checkinEmVoo}
+              className="press flex h-[46px] w-full items-center justify-center gap-2 rounded-[14px] bg-primary text-[15px] font-extrabold text-primary-foreground disabled:opacity-60"
             >
-              <CheckCheck className="size-[18px]" strokeWidth={2.2} /> Fazer check-in
+              <CheckCheck className="size-[18px]" strokeWidth={2.2} />
+              {/* O texto muda junto com o `disabled`: alvo apagado sem palavra
+                  nova lê como "travou", e quem acha que travou toca de novo —
+                  que é justamente o que a trava veio impedir. E "Buscando sua
+                  localização" nomeia a espera REAL: na primeira vez o iOS ainda
+                  vai abrir o alerta de permissão por cima, e sem esse texto o
+                  alerta chega sem contexto nenhum. */}
+              {checkinEmVoo ? "Buscando sua localização…" : "Fazer check-in"}
             </button>
             {a.status === "confirmado" ? (
               <button
