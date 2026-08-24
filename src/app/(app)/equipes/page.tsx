@@ -45,18 +45,19 @@ export default async function EquipesPage() {
   // Admin gerencia tudo; líder gerencia as equipes que lidera.
   const isAdmin = session.role === "admin";
   const isLeader = session.role === "leader";
+  const lideraIds = new Set(
+    session.profile.teams.filter((t) => t.role === "leader").map((t) => t.id),
+  );
   const canApprove = isAdmin || isLeader;
 
-  const [teams, members, profiles, resolvedInterests] = await Promise.all([
-    // Alargado pra INCLUIR as equipes em que a pessoa só serve. Quem lidera o Som
-    // e é voluntário no Louvor cai neste ramo (o de líder) e não no ramo do
-    // voluntário lá em cima — e sem isto o Louvor sumia da tela dele em silêncio.
-    // Só pra EXIBIR: quem decide permissão continua sendo `teamsQueLidera`, logo
-    // abaixo. Ver a nota em `getManageableTeams`.
-    getManageableTeams(session, { incluirOndeSoParticipa: true }),
+  const [teams, members, profiles, resolvedInterests, meuRoster] = await Promise.all([
+    getManageableTeams(session),
     listMembers(),
     listChurchProfiles(),
     getResolvedInterests(session),
+    // O roster de TODAS as equipes da pessoa, inclusive as que ela só serve.
+    // Só leitura por construção — é o mesmo dado que o ramo do voluntário usa.
+    getMyTeamsRoster(session),
   ]);
 
   // Aprovações: admin vê tudo; líder só o que pediu a equipe dele. Convites
@@ -69,19 +70,25 @@ export default async function EquipesPage() {
     isAdmin ? listTeams() : Promise.resolve([]),
   ]);
   const teamOpts: TeamOpt[] = allTeams.map((t) => ({ id: t.id, name: t.name, color: t.color }));
-  // A LISTA QUE EXIBE E A LISTA QUE AUTORIZA SÃO DUAS, E ISSO É O PONTO.
-  // `teams` agora traz também equipe em que a pessoa só serve — ótimo pro
-  // TeamManager, veneno pra aprovação: derivar `approvalTeamOpts` dela daria ao
-  // líder do Som a opção de aprovar alguém no Louvor, e a action recusaria
-  // depois ("líder só o que pediu a equipe dele"). Botão que a RLS recusa é o
-  // defeito das migrations 0029/0049 — aqui ele é evitado na origem.
-  const lidera = new Set(
-    session.profile.teams.filter((t) => t.role === "leader").map((t) => t.id),
-  );
-  const teamsQueLidera = isAdmin ? teams : teams.filter((t) => lidera.has(t.id));
+  // AS EQUIPES ONDE ELE SÓ SERVE — o caso do Felipe, líder do Som e voluntário
+  // no Louvor. Ele é `role === "leader"`, então não entra no ramo do voluntário
+  // lá em cima; cai neste, que só mostra o que ele GERENCIA. O Louvor sumia da
+  // tela dele em silêncio, sem nem um estado vazio dizendo que ele está numa
+  // segunda equipe. A raiz é a assimetria: `session.role` é global, participação
+  // é POR EQUIPE.
+  //
+  // Vem por `getMyTeamsRoster` e vai pro `VolunteerTeamsView`, numa seção à
+  // parte — NÃO misturado no TeamManager. A primeira tentativa foi misturar, e a
+  // revisão derrubou: o TeamManager desenha "adicionar membro", controles de
+  // posição e o menu de cada pessoa POR CARD, e ainda deriva `manageTeamOpts`
+  // pro PessoaConfigModal. Toda equipe que entra naquela lista vem com poder
+  // junto, e blindar só a lista de aprovação deixava as outras abertas. Separar
+  // é mais simples E mais seguro que gatear permissão card a card.
+  const soServe = meuRoster.filter((t) => !lideraIds.has(t.id));
+
   const approvalTeamOpts: TeamOpt[] = isAdmin
     ? teamOpts
-    : teamsQueLidera.map((t) => ({ id: t.id, name: t.name, color: t.color }));
+    : teams.map((t) => ({ id: t.id, name: t.name, color: t.color }));
   const teamById = new Map(approvalTeamOpts.map((t) => [t.id, t]));
   // A LINHA MORTA VOLTA, ROTULADA. Eu tinha escondido convite pendente de quem
   // já é membro ("fila com linha morta dentro deixa de ser lida") — e esconder
@@ -207,6 +214,13 @@ export default async function EquipesPage() {
           meId={session.userId}
           canCreateTeam={isAdmin}
         />
+
+        {soServe.length > 0 ? (
+          <section>
+            <h3 className="mb-2 px-1 text-base font-semibold">Você também serve em</h3>
+            <VolunteerTeamsView teams={soServe} meId={session.userId} />
+          </section>
+        ) : null}
 
         {resolvedInterests.length > 0 ? (
           <details className="rounded-2xl border border-border bg-card">
