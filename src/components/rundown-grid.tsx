@@ -1114,7 +1114,21 @@ export function RundownGrid({
                     {it.responsible ? (
                       <p className="text-[12.5px] text-muted-foreground">{it.responsible}</p>
                     ) : null}
-                    {it.note ? <p className="mt-0.5 text-[13px] text-muted-foreground">{it.note}</p> : null}
+                    {/* A OBSERVAÇÃO JÁ ERA UMA LISTA — o celular é que a lia como frase.
+                        Dado de produção: 10 das 13 observações têm quebra de linha, e o
+                        conteúdo é exatamente lista — setlist ("Praise / Profetizo vida /
+                        Nunca pare de lutar"), passagens ("Dt 1:21-33 / Nm 13:26-33"),
+                        avisos. Sem `whitespace-pre-wrap` o HTML colapsa 
+ em espaço, então
+                        aqui saía "Praise Profetizo vida Nunca pare de lutar" numa linha só.
+                        A régia já renderiza O MESMO CAMPO certo (rundown-columns.tsx:439);
+                        era só o celular que não. O clamp segura a linha do bloco: uma
+                        observação de seis linhas não pode empurrar o roteiro inteiro. */}
+                    {it.note ? (
+                      <p className="mt-0.5 line-clamp-3 whitespace-pre-wrap break-words text-[13px] text-muted-foreground">
+                        {it.note}
+                      </p>
+                    ) : null}
                     {it.link ? (
                       <a
                         href={it.link}
