@@ -28,7 +28,7 @@ import { notify, notifyMany, teamLeaderIds, avisoPrefs, quemAceitaEmail } from "
 import { comVia, registrarEntrega } from "@/lib/delivery";
 import { sendPushToSubs } from "@/lib/push";
 import {
-  sendEmail, conviteEmail, escaladoEmail, lembreteEmail,
+  sendEmail, conviteEmail, acessoLiberadoEmail, escaladoEmail, lembreteEmail,
   siteUrl, linkDeEntrada, DIAS_LINK_ENTRADA,
 } from "@/lib/email";
 import { registrarFalha } from "@/lib/failure-log";
@@ -3269,11 +3269,34 @@ export async function aprovarProfilePendente(input: AprovarProfileInput): Promis
     }
   }
 
-  const { error } = await supabase
+  // A RLS RECUSA SEM ERRO, e é o defeito que já mordeu esta igreja duas vezes
+  // (0029 e 0049): `update` que não casa nenhuma linha devolve `error: null`, a
+  // action responde `ok`, e o líder sai achando que aprovou.
+  // `profiles_leader_activate` exige `status='pendente'` E um `desired_team_id`
+  // de equipe dele — se qualquer um dos dois mudou entre a lista carregar e o
+  // clique, o update acerta zero. `.select()` é a ÚNICA forma de saber, e é
+  // pré-requisito de tudo que vem depois: sem ele o e-mail de "acesso liberado"
+  // sairia pra quem continua pendente, que é a mentira piorada.
+  const { data: ativados, error } = await supabase
     .from("profiles")
     .update({ status: "ativo", church_id: session.profile.church_id })
-    .eq("id", input.profileId);
+    .eq("id", input.profileId)
+    .select("id, full_name, email");
   if (error) return fail(error.message);
+  if (!ativados || ativados.length === 0) {
+    await registrarFalha({
+      kind: "convite_link",
+      detail: "aprovarProfilePendente: update de 0 linhas — a RLS recusou a ativação",
+      subject: input.profileId,
+      origem: "aprovarProfilePendente",
+    });
+    // A instrução aponta pro que resolve: recarregar. As duas causas reais são
+    // lista velha e alguém ter chegado antes — as duas somem com um F5.
+    return fail(
+      "Não consegui liberar essa pessoa. Recarregue a lista — ela pode ter trocado de equipe ou já ter sido liberada por outra pessoa.",
+    );
+  }
+  const pessoa = ativados[0];
 
   const teams = (input.teams ?? []).filter((t) => t.teamId && (session.role === "admin" || canManageTeam(session, t.teamId)));
   if (teams.length > 0) {
@@ -3283,6 +3306,44 @@ export async function aprovarProfilePendente(input: AprovarProfileInput): Promis
     if (mErr) return fail(mErr.message);
   }
 
+  // O PEDIDO PELO FORMULÁRIO, SE EXISTIR, MORRE AQUI.
+  //
+  // Sem isto ele fica `pendente` pra sempre e o digest cobra "pediu entrada há
+  // N dias e ninguém respondeu" — eternamente, sobre alguém que já está
+  // servindo. Quem pede pelo formulário E depois loga vira DUAS linhas na fila;
+  // aprovar pela linha do perfil resolvia só metade.
+  //
+  // POR QUE SERVICE-ROLE, e não a sessão: `join_resolve` é
+  // `is_admin() OR (desired_team_id IS NOT NULL AND is_team_leader(...))` — um
+  // LÍDER não resolve pedido sem equipe (2 dos 9 em produção têm equipe nula)
+  // nem de outra equipe, e a recusa chega como 0 LINHAS, SEM ERRO. A permissão
+  // já foi conferida no topo desta action e a ativação já passou pela RLS;
+  // pendurar a limpeza numa segunda policy só reintroduziria a mentira, calada.
+  //
+  // `.eq("status", "pendente")` NÃO é detalhe: sem ele um pedido RECUSADO
+  // (há 2 em produção) ressuscitaria como aprovado.
+  if (pessoa.email) {
+    const adminPedido = createAdminClient();
+    const clientePedido = adminPedido ?? supabase;
+    const { error: erroPedido } = await clientePedido
+      .from("join_requests")
+      .update({ status: "aprovado", resolved_by: session.userId })
+      .eq("church_id", session.profile.church_id)
+      .eq("status", "pendente")
+      .ilike("email", comoTexto(pessoa.email));
+    // Best-effort de propósito: o acesso JÁ foi dado, que é o que a pessoa
+    // esperava. Derrubar a action agora trocaria uma fila suja por um líder
+    // achando que não aprovou — pior dos dois. Mas não some.
+    if (erroPedido) {
+      await registrarFalha({
+        kind: "convite_link",
+        detail: `aprovarProfilePendente: resolver join_request: ${erroPedido.message}`,
+        subject: pessoa.email,
+        origem: "aprovarProfilePendente",
+      });
+    }
+  }
+
   await notify({
     recipientId: input.profileId,
     kind: "cadastro_aprovado",
@@ -3290,6 +3351,36 @@ export async function aprovarProfilePendente(input: AprovarProfileInput): Promis
     body: "Você já pode ver suas escalas e servir.",
     link: "/inicio",
   });
+
+  // O E-MAIL, QUE NESTE CAMINHO NUNCA EXISTIU.
+  //
+  // `notify()` não manda e-mail pra kind nenhum — ele faz o sino e, só pros
+  // kinds de escala, push. Então quem era aprovado por aqui recebia SÓ o sino,
+  // e sino só existe se a pessoa ABRIR o app, que é exatamente o que ela não
+  // está fazendo enquanto espera. Como esta é a porta dominante (quem entra
+  // pelo Google), "avisamos quando liberar" não valia pra maioria.
+  //
+  // E não é push: quem está pendente nunca teve como se inscrever (o PushSetup
+  // mora em /perfil, dentro do `(app)`, e aquele layout manda todo não-ativo
+  // pra /aguardando). Enquanto isso não mudar, e-mail é o único canal que chega.
+  //
+  // BEST-EFFORT, ao contrário do `aprovarJoinRequest`: lá o e-mail É a chave —
+  // sem ele a pessoa não tem como entrar — e por isso a action falha se ele não
+  // sai. Aqui ela JÁ TEM acesso; o e-mail só avisa. Derrubar a aprovação porque
+  // o Resend caiu trocaria "não foi avisada" por "não foi liberada", que é pior.
+  //
+  // Sem `registrarFalha` aqui de propósito: os quatro ramos de falha do
+  // `sendEmail` já registram sozinhos, e um segundo registro duplicaria a linha
+  // no digest.
+  if (pessoa.email && (await avisoPrefs(input.profileId, "cadastro_aprovado")).email) {
+    const aviso = acessoLiberadoEmail({ nome: pessoa.full_name || "" });
+    await sendEmail({
+      to: pessoa.email,
+      subject: aviso.subject,
+      html: aviso.html,
+      text: aviso.text,
+    });
+  }
 
   revalidatePath("/equipes");
   revalidatePath("/inicio");

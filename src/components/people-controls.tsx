@@ -431,11 +431,26 @@ export function PendingProfileActions({
   teams,
   allowReject = true,
   desiredTeamId,
+  joinId,
 }: {
   profileId: string;
   teams: TeamOpt[];
   allowReject?: boolean;
   desiredTeamId?: string | null;
+  /**
+   * LINHA FUNDIDA: a mesma pessoa pediu pelo formulário E logou, então existia
+   * um `join_request` além do perfil pendente. Antes eram duas linhas na fila
+   * com dois botões Aprovar — e tocar no do FORMULÁRIO criava um convite cujo
+   * link é recusado com `ja_tem_conta`, porque a conta dela já existe. É o bug
+   * da Rayane por caminho novo. Agora é uma linha só, e o Aprovar é sempre o do
+   * perfil (que dá acesso imediato e resolve o pedido junto).
+   *
+   * O `joinId` sobrevive por causa do RECUSAR: hoje o líder pode recusar um
+   * pedido (`recusarJoinRequest`) mas não pode excluir um perfil — só admin. Se
+   * a fusão usasse o recusar do perfil, o líder PERDERIA um poder que já tem.
+   * Com o `joinId` em mãos ele recusa o pedido, exatamente como antes da fusão.
+   */
+  joinId?: string | null;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -457,7 +472,12 @@ export function PendingProfileActions({
   function reject() {
     setError(null);
     start(async () => {
-      const r = await excluirPessoa(profileId);
+      // Com `joinId`, recusar é recusar O PEDIDO — não excluir a pessoa.
+      // São coisas diferentes e o líder só pode a primeira. Recusar o pedido
+      // deixa o perfil pendente de pé, que é EXATAMENTE o que já acontecia
+      // quando as duas linhas eram separadas: o Recusar do formulário nunca
+      // encostou no perfil. A fusão não pode mudar isso por tabela.
+      const r = joinId ? await recusarJoinRequest(joinId) : await excluirPessoa(profileId);
       if (!r.ok) setError(r.error ?? "Erro");
       else router.refresh();
     });

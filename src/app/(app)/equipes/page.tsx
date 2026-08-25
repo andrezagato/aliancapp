@@ -109,6 +109,25 @@ export default async function EquipesPage() {
   // são "você já decidiu e não chegou nela". Enterrar isso no fim da lista
   // repetiria o defeito que ela conserta — o problema estava visível, só que
   // longe demais pra alguém tropeçar nele.
+  // A MESMA REGRA DE CASAMENTO QUE O RESTO DO APP usa pra parear pessoa por
+  // e-mail (`trim` + `lower`). Vale a pena ser chata aqui: o pareamento errado
+  // funde duas pessoas DIFERENTES numa linha só, que é bem pior que o problema
+  // que a fusão veio resolver.
+  //
+  // Devolve `null`, e não `""`, para e-mail ausente — e isso NÃO é preciosismo:
+  // `join_requests.email` é nullable e `profiles.full_name` nasce vazio. Com
+  // string vazia, dois registros SEM e-mail casariam entre si (`"" === ""`) e a
+  // fila fundiria duas pessoas diferentes numa linha só, com os botões de uma
+  // agindo sobre a outra. `null` nunca é igual a `null` nesta comparação.
+  const chaveEmail = (e?: string | null) => {
+    const k = (e ?? "").trim().toLowerCase();
+    return k.length > 0 ? k : null;
+  };
+  const mesmaPessoa = (a?: string | null, b?: string | null) => {
+    const ka = chaveEmail(a);
+    return ka !== null && ka === chaveEmail(b);
+  };
+
   const entradaRows = [
     ...stuck.map((s) => {
       const team = s.desiredTeamId ? teamById.get(s.desiredTeamId) : null;
@@ -134,32 +153,61 @@ export default async function EquipesPage() {
         actions: <ReconvidarButton alvo={s.alvo} />,
       };
     }),
-    ...joins.map((j) => {
-      const team = j.desiredTeamId ? teamById.get(j.desiredTeamId) : null;
-      return {
-        id: `j-${j.id}`,
-        fullName: j.fullName,
-        email: j.email,
-        phone: j.phone,
-        message: j.message,
-        teamDot: team?.color ?? null,
-        line2: [team ? `Quer ${team.name}` : null, "pelo formulário"].filter(Boolean).join(" · "),
-        actions: <JoinRequestActions joinId={j.id} teams={approvalTeamOpts} desiredTeamId={j.desiredTeamId} />,
-      };
-    }),
+    // UMA PESSOA, UMA LINHA. Quem pede pelo formulário e DEPOIS loga produzia
+    // duas linhas aqui — "pelo formulário" e "já logou · aguardando" — com dois
+    // botões Aprovar que fazem coisas diferentes. Tocar no do formulário chama
+    // `aprovarJoinRequest`, que cria um convite e manda um e-mail cujo link é
+    // RECUSADO com `ja_tem_conta`, porque a conta dela já existe. É o bug da
+    // Rayane (aprovar dava dever de casa em vez de acesso) por caminho novo, e
+    // a fila era quem armava.
+    //
+    // Casar por e-mail, não por nome: o nome pode vir vazio (`full_name` é
+    // `text not null default ''` e o signup por link não traz nome).
+    ...joins
+      .filter((j) => !pendingProfiles.some((m) => mesmaPessoa(m.email, j.email)))
+      .map((j) => {
+        const team = j.desiredTeamId ? teamById.get(j.desiredTeamId) : null;
+        return {
+          id: `j-${j.id}`,
+          fullName: j.fullName,
+          email: j.email,
+          phone: j.phone,
+          message: j.message,
+          teamDot: team?.color ?? null,
+          line2: [team ? `Quer ${team.name}` : null, "pelo formulário"].filter(Boolean).join(" · "),
+          actions: <JoinRequestActions joinId={j.id} teams={approvalTeamOpts} desiredTeamId={j.desiredTeamId} />,
+        };
+      }),
     ...pendingProfiles.map((m) => {
-      const team = m.desiredTeamId ? teamById.get(m.desiredTeamId) : null;
+      // O pedido casado, quando existe: ele carrega telefone e observação que o
+      // perfil não tem, e some da lista de cima. Fundir é juntar os DOIS lados,
+      // não escolher um — o líder perderia justamente o que a pessoa escreveu.
+      const pedido = joins.find((j) => mesmaPessoa(j.email, m.email)) ?? null;
+      const team = (m.desiredTeamId ?? pedido?.desiredTeamId)
+        ? teamById.get((m.desiredTeamId ?? pedido?.desiredTeamId) as string)
+        : null;
       return {
         id: `p-${m.id}`,
-        fullName: m.fullName,
+        fullName: m.fullName || pedido?.fullName || "",
         avatarUrl: m.avatarUrl,
         email: m.email,
-        phone: null as string | null,
-        message: null as string | null,
+        phone: pedido?.phone ?? null,
+        message: pedido?.message ?? null,
         teamDot: team?.color ?? null,
-        line2: [team ? `Quer ${team.name}` : null, "já logou · aguardando"].filter(Boolean).join(" · "),
+        line2: [team ? `Quer ${team.name}` : null, pedido ? "pelo formulário · já logou" : "já logou · aguardando"]
+          .filter(Boolean)
+          .join(" · "),
         actions: (
-          <PendingProfileActions profileId={m.id} teams={approvalTeamOpts} allowReject={isAdmin} desiredTeamId={m.desiredTeamId} />
+          <PendingProfileActions
+            profileId={m.id}
+            teams={approvalTeamOpts}
+            // Com pedido casado o líder mantém o Recusar que ele JÁ TINHA na
+            // linha do formulário; sem pedido, recusar é excluir pessoa, que
+            // continua sendo só de admin.
+            allowReject={isAdmin || !!pedido}
+            desiredTeamId={m.desiredTeamId ?? pedido?.desiredTeamId ?? null}
+            joinId={pedido?.id ?? null}
+          />
         ),
       };
     }),

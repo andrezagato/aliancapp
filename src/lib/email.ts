@@ -312,6 +312,66 @@ ${opts.href}
   };
 }
 
+/**
+ * "Sua entrada foi liberada" — o gêmeo do `conviteEmail` para quem JÁ TEM CONTA.
+ *
+ * POR QUE NÃO DÁ PRA REUSAR O `conviteEmail`: os dois modos dele carregam uma
+ * promessa que aqui seria falsa. O modo normal manda `linkDeEntrada(token)`, que
+ * só existe em cima de um `invites.token` — e quem chega por aqui entrou sozinho
+ * (Google ou código do e-mail) e nunca teve convite. O modo `semLinkDireto` diz
+ * "informe este mesmo e-mail pra receber seu link de acesso", o que é pedir que
+ * ela faça de novo o que já fez: ela tem sessão, é só abrir.
+ *
+ * POR QUE ELE PRECISA EXISTIR: até aqui, quem era aprovado por
+ * `aprovarProfilePendente` — o caminho de QUEM ENTRA PELO GOOGLE, que é a porta
+ * dominante (47 perfis pendentes contra 9 pedidos pelo formulário) — recebia
+ * SÓ o sino. E sino só existe se ela abrir o app, que é exatamente o que ela não
+ * está fazendo enquanto espera. Na prática "avisamos quando liberar" não existia
+ * pra maioria das pessoas.
+ *
+ * E não é push: quem está pendente nunca teve como se inscrever pra push (o
+ * `PushSetup` mora em /perfil, dentro do `(app)`, e o layout de lá manda todo
+ * não-ativo pra /aguardando). Enquanto isso não mudar, o e-mail é o único canal
+ * que alcança essa pessoa.
+ */
+export function acessoLiberadoEmail(opts: { nome: string }): {
+  subject: string;
+  html: string;
+  text: string;
+} {
+  const nome = opts.nome?.trim() ? esc(opts.nome.trim()) : "Olá";
+  const nomeCru = opts.nome?.trim() || "Olá";
+  const href = `${siteUrl()}/inicio`;
+  return {
+    subject: `${BRAND} — sua entrada foi liberada`,
+    html: layout({
+      title: `${nome}, você está dentro`,
+      intro:
+        `A liderança liberou sua entrada no <strong>${BRAND}</strong>. ` +
+        `Suas escalas já aparecem quando você abrir — você não precisa pedir nada de novo.`,
+      cta: { label: "Abrir o Sirvo", href },
+      secondary: {
+        label: "Primeira vez? Veja como funciona",
+        href: demoUrl(),
+        note: "1 minuto: entrar, confirmar sua escala e acompanhar o culto",
+      },
+      // Sem prazo e sem link de acesso de propósito: não há nada expirando aqui.
+      // A conta dela já existe, e prometer validade criaria uma urgência falsa.
+      note: "Sua conta já está criada — é só abrir, sem link novo e sem senha.",
+    }),
+    text: `${nomeCru}, sua entrada no ${BRAND} foi liberada.
+
+` +
+      `Suas escalas já aparecem quando você abrir: ${href}
+
+` +
+      `Sua conta já está criada — sem link novo e sem senha.
+
+` +
+      `Primeira vez? Veja como funciona: ${demoUrl()}`,
+  };
+}
+
 /** Aviso de escalação (canal garantido no iPhone, complementa o sino). */
 export function escaladoEmail(opts: {
   evento: string;
