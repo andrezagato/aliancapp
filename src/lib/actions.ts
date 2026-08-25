@@ -26,7 +26,7 @@ import { TOPIC_BY_ID, type TopicId, type TopicChannel } from "@/lib/notification
 import { logActivity } from "@/lib/activity";
 import { notify, notifyMany, teamLeaderIds, avisoPrefs, quemAceitaEmail } from "@/lib/notify";
 import { comVia, registrarEntrega } from "@/lib/delivery";
-import { sendPushToSubs } from "@/lib/push";
+import { sendPushToSubs, sendPushToUserAsAdmin } from "@/lib/push";
 import {
   sendEmail, conviteEmail, acessoLiberadoEmail, escaladoEmail, lembreteEmail,
   siteUrl, linkDeEntrada, DIAS_LINK_ENTRADA,
@@ -300,6 +300,134 @@ export type SolicitarEntradaResult =
   | { ok: true; estado: "novo" | "ja_pendente" | "ja_aprovado" }
   | { ok: false; error: string };
 
+/**
+ * AVISA QUEM CONSEGUE AGIR — o aviso de "tem gente chegando".
+ *
+ * A REGRA (decisão do André, 25/08): o líder é quem deve ser avisado. O admin só
+ * entra quando não existe líder possível — e existe um caso em que isso é
+ * obrigatório, não cortesia: a policy `profiles_leader_activate` exige
+ * `desired_team_id IS NOT NULL`, então **sem equipe escolhida nenhum líder
+ * consegue aprovar**. Avisar só o líder ali deixaria a pessoa invisível pra
+ * quem pode liberá-la. Mesmo motivo pro fallback quando a equipe existe mas não
+ * tem líder cadastrado: o insert acertaria zero linhas e ninguém saberia.
+ *
+ * POR QUE TUDO POR SERVICE-ROLE, e não pelo `notify()` de sempre:
+ *   • `get_push_subs` (0034) exige `is_admin() OR is_any_leader()` DO CHAMADOR,
+ *     e quem chama aqui é anônimo (pedido pelo formulário) ou um perfil PENDENTE
+ *     (escolha de equipe no /aguardando). Os dois recebem lista vazia — sem
+ *     erro. É por isso que o aviso ao líder nunca funcionou;
+ *   • `memberships_read` exige `is_active()`, então a pendente lê ZERO líderes.
+ *     `teamLeaderIds` devolvia `[]` e `notifyMany` não fazia nada, calado;
+ *   • a RPC `notificar` (0044) abre com `if not is_active() then raise` — o
+ *     mesmo chamador pendente derrubava a exceção dentro do catch mudo.
+ *
+ * POR QUE NÃO ENTRA NO `notify()`/PUSH_KINDS: lá push e telemetria são o mesmo
+ * interruptor, e a `canais_eficacia` (0052) soma `enviados` sem filtrar kind
+ * enquanto a resposta só vem de `assignments` — cadastro entraria no denominador
+ * e derrubaria a taxa por canal. `delivery.ts` já documenta que cadastro fica
+ * fora da medição; isto respeita aquele escopo em vez de furá-lo por tabela.
+ */
+async function avisarQuemDecide(input: {
+  churchId: string | null;
+  desiredTeamId: string | null;
+  titulo: string;
+  corpo: string;
+  /** Identifica o SUJEITO no link — é o que permite deduplicar sem confundir
+   *  duas pessoas que querem a mesma equipe no mesmo dia. */
+  sujeito?: string | null;
+  /** `false` quando quem chamou já inseriu o sino (a RPC `solicitar_entrada`
+   *  insere por dentro). Sem isto o aviso apareceria duplicado no sino. */
+  criarSino: boolean;
+}): Promise<void> {
+  const admin = createAdminClient();
+  if (!admin) {
+    console.error("[onboarding] sem service-role — o aviso de pedido de entrada não sai.");
+    return;
+  }
+  const link = input.sujeito ? `/equipes?pessoa=${input.sujeito}` : "/equipes";
+
+  let ids: string[] = [];
+  if (input.desiredTeamId) {
+    const { data } = await admin
+      .from("memberships")
+      .select("profile_id")
+      .eq("team_id", input.desiredTeamId)
+      .eq("role", "leader");
+    ids = (data ?? []).map((m) => m.profile_id);
+  }
+  if (ids.length === 0) {
+    // FALLBACK PRO ADMIN — e o filtro de igreja é condicional de propósito.
+    // `handle_new_user` cria o perfil pendente com `church_id = null` (ramo sem
+    // convite), e em SQL `null = null` é NULL, não `true`: filtrar por uma
+    // igreja nula casaria ZERO admins e o aviso sumiria exatamente no caso que
+    // este fallback existe pra cobrir.
+    const base = admin.from("profiles").select("id").eq("system_role", "admin").eq("status", "ativo");
+    const { data } = input.churchId ? await base.eq("church_id", input.churchId) : await base;
+    ids = (data ?? []).map((p) => p.id);
+  }
+  if (ids.length === 0) return;
+
+  // DEDUPE. Trocar de equipe é legítimo (a primeira escolha pode estar errada),
+  // então a trava não pode ser "só a primeira vez" nem cooldown por pessoa — é
+  // por (quem recebe + quem é o assunto), que é o que o `link` carrega. Sem o
+  // sujeito no link, duas pessoas querendo a mesma equipe no mesmo dia
+  // colapsariam numa só e a segunda nunca seria anunciada.
+  if (input.sujeito) {
+    const desde = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    // `like`, não `eq`: o que fica GRAVADO é `comVia(link, "in_app")`, ou seja
+    // o link com `&via=in_app` grudado no fim (delivery.ts:66-70). Um `eq` no
+    // link cru não casaria nunca, e o dedupe seria um bloco morto que parece
+    // funcionar. O prefixo termina no uuid do sujeito, que tem tamanho fixo —
+    // não há como um sujeito ser prefixo de outro.
+    const { data: repetidos } = await admin
+      .from("notifications")
+      .select("recipient_id")
+      .eq("kind", "cadastro_pendente")
+      .like("link", `${link}%`)
+      .gt("created_at", desde);
+    const jaAvisados = new Set((repetidos ?? []).map((n) => n.recipient_id));
+    ids = ids.filter((id) => !jaAvisados.has(id));
+    if (ids.length === 0) return;
+  }
+
+  if (input.criarSino) {
+    await admin.from("notifications").insert(
+      ids.map((id) => ({
+        recipient_id: id,
+        kind: "cadastro_pendente" as const,
+        title: input.titulo,
+        body: input.corpo,
+        link: comVia(link, "in_app"),
+        team_id: input.desiredTeamId,
+      })),
+    );
+  }
+
+  // A PREFERÊNCIA DO DESTINATÁRIO VALE AQUI TAMBÉM. `sendPushToUserAsAdmin` não
+  // consulta nada — quem consultava era o `notify()`, que este caminho não usa.
+  // Sem esta leitura, a 0044 ("notification_prefs valendo") seria furada
+  // justamente pelo aviso mais interruptivo do app. Linha ausente = ligado, que
+  // é o mesmo `coalesce(..., true)` da RPC `aviso_prefs`.
+  const { data: prefs } = await admin
+    .from("notification_prefs")
+    .select("profile_id, push")
+    .eq("kind", "cadastro_pendente")
+    .in("profile_id", ids);
+  const desligou = new Set((prefs ?? []).filter((p) => p.push === false).map((p) => p.profile_id));
+
+  await Promise.all(
+    ids
+      .filter((id) => !desligou.has(id))
+      .map((id) =>
+        sendPushToUserAsAdmin(admin, id, {
+          title: input.titulo,
+          body: input.corpo,
+          url: comVia(link, "push"),
+        }),
+      ),
+  );
+}
+
 export async function solicitarEntrada(input: {
   fullName: string;
   email: string;
@@ -344,6 +472,21 @@ export async function solicitarEntrada(input: {
   });
   if (error) return { ok: false, error: error.message };
 
+  // O SINO JÁ SAIU DENTRO DA RPC — falta o push, que é o que faz alguém OLHAR.
+  // `churchId: null` porque a própria RPC resolve a igreja sozinha ("MVP: uma
+  // igreja", 0040:47) e este chamador é anônimo: não tem sessão de onde tirar.
+  // Com uma igreja o resultado é idêntico; com várias, isto é o primeiro lugar
+  // a apertar.
+  // Sem `sujeito`: aqui não existe perfil ainda, e a guarda de pedido duplicado
+  // logo acima já garante um pedido por e-mail — não há o que deduplicar.
+  await avisarQuemDecide({
+    churchId: null,
+    desiredTeamId: input.desiredTeamId || null,
+    titulo: input.desiredTeamId ? "Alguém quer entrar na sua equipe" : "Nova solicitação de entrada",
+    corpo: input.desiredTeamId ? `${nome} pediu pra servir na sua equipe.` : `${nome} pediu pra entrar.`,
+    criarSino: false,
+  });
+
   return { ok: true, estado: "novo" };
 }
 
@@ -364,13 +507,25 @@ export async function definirEquipeDesejada(teamId: string): Promise<ActionResul
   const supabase = await createClient();
   const { error } = await supabase.from("profiles").update({ desired_team_id: teamId }).eq("id", session.userId);
   if (error) return fail(error.message);
-  await notifyMany(await teamLeaderIds(teamId), {
-    kind: "cadastro_pendente",
-    title: "Alguém quer entrar na sua equipe",
-    body: `${session.profile.full_name || "Alguém"} pediu pra servir na sua equipe.`,
-    link: "/equipes",
-    teamId,
+
+  // ESTE AVISO NUNCA SAIU — e ele é o caminho INTEIRO da regra "só o líder é
+  // avisado", porque escolher a equipe é o que destrava o líder na policy
+  // `profiles_leader_activate`. O que estava aqui antes era
+  // `notifyMany(await teamLeaderIds(teamId), ...)`, e falhava em silêncio duas
+  // vezes: `teamLeaderIds` lê `memberships`, cuja policy exige `is_active()`, e
+  // quem chama aqui é PENDENTE por construção (a guarda logo acima recusa quem
+  // não é) — a lista voltava vazia; e mesmo com destinatários, a RPC
+  // `notificar` abre com `if not is_active() then raise` e a exceção morria no
+  // catch mudo do `notify`. Nenhum erro, nenhum log, nenhum líder avisado.
+  await avisarQuemDecide({
+    churchId: session.profile.church_id,
+    desiredTeamId: teamId,
+    titulo: "Alguém quer entrar na sua equipe",
+    corpo: `${session.profile.full_name || "Alguém"} pediu pra servir na sua equipe.`,
+    sujeito: session.userId,
+    criarSino: true,
   });
+
   revalidatePath("/aguardando");
   return ok;
 }
