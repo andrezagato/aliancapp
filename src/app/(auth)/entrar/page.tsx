@@ -16,6 +16,21 @@ const inputClass =
   "w-full rounded-2xl border border-input bg-card px-4 py-3 text-sm outline-none transition focus-visible:border-primary/40 focus-visible:ring-2 focus-visible:ring-ring";
 
 /**
+ * O TAMANHO DO CÓDIGO NÃO É NOSSO — é do painel.
+ *
+ * Supabase → Authentication → Email OTP Length. MEDIDO em 25/08 neste projeto:
+ * **8 dígitos** (o padrão da doc é 6, e foi nele que este campo nasceu errado).
+ * O GoTrue aceita de 6 a 10, então:
+ *   - `MAX` é 10 pra nunca CORTAR um código maior se alguém mexer no painel;
+ *   - `MIN` é 6 pra nunca TRAVAR o botão se alguém diminuir.
+ * Errar por excesso custa uma tentativa recusada, com o link intacto na tela.
+ * Errar por escassez trancaria o login e ninguém descobriria por que.
+ */
+const CODIGO_MIN = 6;
+const CODIGO_MAX = 10;
+const CODIGO_PLACEHOLDER = "00000000";
+
+/**
  * UMA TELA, UM BOTÃO.
  *
  * Antes daqui havia duas chamadas concorrentes — "Receber link de acesso" e, no
@@ -44,8 +59,9 @@ const RECADOS: Record<string, string> = {
 
 export default function EntrarPage() {
   const router = useRouter();
-  const [loading, setLoading] = useState<null | "google" | "email" | "dev" | "reenvio">(null);
+  const [loading, setLoading] = useState<null | "google" | "email" | "dev" | "reenvio" | "codigo">(null);
   const [reenviado, setReenviado] = useState(false);
+  const [codigo, setCodigo] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [etapa, setEtapa] = useState<Etapa>("inicio");
@@ -154,6 +170,9 @@ export default function EntrarPage() {
     setEtapa("inicio");
     setError(null);
     setReenviado(false);
+    // Sem isto, trocar de e-mail deixa o código do e-mail ANTERIOR no campo — e
+    // ele não vale mais nada, porque cada pedido gera um código novo.
+    setCodigo("");
   }
 
   /**
@@ -184,6 +203,51 @@ export default function EntrarPage() {
     setReenviado(true);
   }
 
+  /**
+   * ENTRAR PELO CÓDIGO — e por que ele tenta dois `type`.
+   *
+   * O `{{ .Token }}` do e-mail é a MESMA credencial do `{{ .TokenHash }}` que
+   * viaja no link; muda a forma, não o segredo. Quem sempre tocou no botão
+   * continua tocando — este caminho é adicional, nunca substituto.
+   *
+   * POR QUE ELE EXISTE: o botão do e-mail abre no navegador que o app de e-mail
+   * escolher, e Gmail/Outlook abrem no webview deles (o mesmo que
+   * `/auth/confirm/route.ts` já documenta). A sessão nasce LÁ, não na aba de
+   * onde ela pediu o acesso. Digitando, a sessão nasce AQUI — e é isso que vai
+   * fazer diferença quando o Sirvo estiver salvo como app na tela de início,
+   * porque o app tem jarro de cookie próprio.
+   *
+   * O `type` NÃO pode ser literal fixo, pela mesma razão que
+   * `/auth/entrar/[token]/route.ts` documenta: o GoTrue guarda o token de
+   * magiclink em `recovery_token` e o de signup em `confirmation_token`, e
+   * escolhe sozinho qual e-mail manda (Magic Link se o e-mail já tem conta,
+   * Confirm signup se não tem). Do cliente não dá pra ler qual foi. Então
+   * tentamos o de conta existente e, só se ele recusar, o de conta nova.
+   */
+  async function verificarCodigo(e: React.FormEvent) {
+    e.preventDefault();
+    const token = codigo.trim();
+    if (token.length < CODIGO_MIN) return;
+    setError(null);
+    setLoading("codigo");
+
+    const supabase = createClient();
+    const alvo = email.trim();
+    let erro = (await supabase.auth.verifyOtp({ email: alvo, token, type: "email" })).error;
+    if (erro) erro = (await supabase.auth.verifyOtp({ email: alvo, token, type: "signup" })).error;
+
+    setLoading(null);
+    if (erro) {
+      // A mensagem crua do GoTrue é "Token has expired or is invalid" — inglês,
+      // e sem dizer o que fazer. Estes são os dois desfechos reais, e a saída
+      // (o link) continua na mesma tela.
+      setError("Código inválido ou vencido. Confira os números — ou use o botão do e-mail.");
+      return;
+    }
+    router.push("/inicio");
+    router.refresh();
+  }
+
   if (etapa === "link_enviado") {
     return (
       <main className="mx-auto flex min-h-dvh max-w-[460px] flex-col justify-center px-6 py-10">
@@ -193,9 +257,46 @@ export default function EntrarPage() {
           </span>
           <h1 className="text-3xl">Confira seu email</h1>
           <p className="text-balance text-muted-foreground">
-            Enviamos um link de acesso para <span className="font-semibold text-foreground">{email}</span>.
-            Abra no seu celular ou computador para entrar — o link vale por 1 hora.
+            Mandamos um código e um link para{" "}
+            <span className="font-semibold text-foreground">{email}</span>. Digitar o código te faz
+            entrar aqui mesmo, sem pular pra outro navegador — o botão do e-mail também funciona. Os
+            dois valem 1 hora.
           </p>
+
+          {/* O CAMPO VEM ANTES do link de primeiros passos de propósito: é a ação,
+              e a pessoa está com o e-mail aberto na outra mão. `one-time-code` é
+              o que faz o iOS oferecer o código no teclado em vez de ela decorar. */}
+          <form onSubmit={verificarCodigo} className="w-full space-y-2">
+            <input
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={CODIGO_MAX}
+              placeholder={CODIGO_PLACEHOLDER}
+              aria-label="Código do e-mail"
+              // `tracking` folgado o bastante pra ler dígito a dígito, mas menor
+              // do que caberia em 6: com os 8 deste projeto o texto encostava na
+              // borda do campo num iPhone estreito.
+              className={`${inputClass} text-center text-2xl font-bold tracking-[0.25em]`}
+              value={codigo}
+              // Só dígitos: colar do e-mail costuma trazer espaço junto, e o
+              // GoTrue recusa o token com qualquer sujeira.
+              onChange={(ev) => setCodigo(ev.target.value.replace(/\D/g, "").slice(0, CODIGO_MAX))}
+            />
+            <Button
+              type="submit"
+              size="lg"
+              className="w-full"
+              disabled={codigo.length < CODIGO_MIN || loading !== null}
+            >
+              {loading === "codigo" ? "Entrando…" : "Entrar com o código"}
+            </Button>
+          </form>
+
+          {error ? (
+            <p className="w-full rounded-2xl bg-destructive/10 px-4 py-3 text-sm text-destructive-ink">{error}</p>
+          ) : null}
+
           <div className="mt-2 w-full space-y-2">
             <p className="text-sm text-muted-foreground">
               Enquanto o link não chega, veja como o Sirvo funciona:

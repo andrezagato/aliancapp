@@ -55,6 +55,45 @@ Supabase → **Authentication** → **Emails** → aba **Templates** → escolhe
 template → em **Message body**, apagar o conteúdo e colar o HTML. Salvar e testar
 pedindo um link em `/entrar`.
 
+### Os dois templates agora trazem TAMBÉM o código digitável
+
+Cada template imprime `{{ .Token }}` num bloco abaixo do botão. **Não é um
+segredo novo**: `{{ .Token }}` e o `{{ .TokenHash }}` do link são a mesma
+credencial em duas formas — um vai na URL, o outro vai nos olhos. Quem sempre
+tocou no botão continua tocando; o código é caminho adicional, nunca substituto.
+
+Por que ele existe: o botão abre no navegador que o app de e-mail escolher, e a
+sessão nasce **lá**. Digitando o código em `/entrar`, a sessão nasce **na aba de
+onde a pessoa pediu** — que é o único jeito de ela cair no lugar certo quando o
+Sirvo estiver salvo como app na tela de início (o app tem jarro de cookie
+próprio, separado do Safari).
+
+**Tem que ser nos DOIS templates.** Quem ainda não tem conta recebe o *Confirm
+signup*, não o *Magic Link* — e é justamente quem mais precisa do código.
+
+Do lado do app, `/entrar` tenta `verifyOtp` com `type: "email"` e, se recusar,
+com `type: "signup"` — porque daqui não dá pra saber qual dos dois e-mails o
+GoTrue mandou, e o token de cada um mora numa coluna diferente.
+
+**Quantos dígitos:** quem manda é **Authentication → Email OTP Length**, não o
+código do app. Medido em 25/08 neste projeto: **8 dígitos** — e não 6, que é o
+padrão da documentação e onde o campo do `/entrar` nasceu errado. Por isso o
+campo aceita de 6 a 10 em vez de travar num número: mexer nessa configuração do
+painel não pode derrubar o login. Se você mudar lá, não precisa mexer aqui.
+
+### ⚠️ Rate Limits: são DOIS campos, e o segundo quase ninguém olha
+
+**Authentication → Rate Limits**:
+
+| Campo | Padrão | Por que importa |
+| --- | --- | --- |
+| *Rate limit for sending emails* | 30/hora | baixo pra um mutirão de convites |
+| *Rate limit for sending OTPs* (`/auth/v1/otp`) | **30/hora, soma do PROJETO** | é o teto de quantas pessoas conseguem pedir link por hora — **no total**, não por pessoa. E não há limite por IP nem captcha |
+
+O segundo é o que trava o login por e-mail de todo mundo se estourar. Vale
+conferir o valor efetivo antes de qualquer mudança que aumente o número de
+pedidos de link.
+
 ### ⚠️ Não volte o botão pra `{{ .ConfirmationURL }}`
 
 É o padrão do Supabase e é uma armadilha aqui. Aquele link carrega um `code`

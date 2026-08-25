@@ -12,6 +12,26 @@
         <h1 style="margin:0 0 12px;font-size:22px;line-height:1.1;font-weight:800;color:#372725;font-family:Alegreya,Georgia,serif;">Bem-vindo ao Sirvo &#128273;</h1>
         <p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#372725;">Toque no bot&atilde;o abaixo para entrar no <strong>Sirvo</strong> pela primeira vez. O link vale por 1 hora e s&oacute; funciona uma vez.</p>
         <a href="https://sirvo.ministerioalianca.com/auth/confirm?token_hash={{ .TokenHash }}&amp;type=signup" style="display:inline-block;background:#711425;color:#FCF4E8;text-decoration:none;font-size:15px;font-weight:600;padding:12px 20px;border-radius:999px;">Entrar no Sirvo</a>
+        <!-- O CODIGO, e por que ele existe AO LADO do botao (nunca no lugar).
+             `{{ .Token }}` e o `{{ .TokenHash }}` do link acima sao a MESMA
+             credencial em duas formas: o hash viaja na URL, o codigo vai nos
+             olhos. Quem digita nao perde nada de quem toca, e quem sempre tocou
+             continua tocando -- por isso este bloco ENTRA, e o botao fica.
+
+             POR QUE ELE EXISTE: o botao abre no navegador que o app de e-mail
+             escolher, e Gmail/Outlook abrem no webview deles (a mesma coisa que
+             src/app/auth/confirm/route.ts ja documenta). A sessao nasce la, nao
+             na aba de onde a pessoa pediu o acesso. Digitando o codigo ela volta
+             pra ONDE ESTAVA -- que e o unico jeito de a sessao cair no lugar
+             certo quando o Sirvo estiver salvo como app na tela de inicio. -->
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:20px 0 0;width:100%;">
+          <tr>
+            <td style="padding:14px 18px;background:#F9F6EB;border:1px solid #E8DEC9;border-radius:12px;">
+              <p style="margin:0 0 6px;font-size:13px;line-height:1.5;color:#736559;">Ou digite este c&oacute;digo na tela onde voc&ecirc; pediu o acesso:</p>
+              <p style="margin:0;font-size:28px;line-height:1.2;font-weight:800;letter-spacing:0.18em;color:#711425;font-family:'SF Mono',SFMono-Regular,Menlo,Consolas,monospace;">{{ .Token }}</p>
+            </td>
+          </tr>
+        </table>
         <p style="margin:18px 0 0;font-size:14px;line-height:1.6;color:#736559;">
           <a href="https://sirvo.ministerioalianca.com/primeiros-passos.html" style="color:#711425;font-weight:600;text-decoration:underline;">Primeira vez? Veja como funciona</a> &mdash; 1 minuto: entrar, confirmar sua escala e acompanhar o culto
         </p>
